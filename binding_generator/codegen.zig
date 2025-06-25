@@ -423,21 +423,49 @@ fn generateGlobalEnums(ctx: *Context) !void {
     var buf = bufferedWriter(file.writer());
     var writer = codeWriter(buf.writer().any());
 
-    for (ctx.api.global_enums) |@"enum"| {
+    for (ctx.enums.items) |@"enum"| {
         // TODO: shouldSkip functions
         if (std.mem.startsWith(u8, @"enum".name, "Variant.")) continue;
         try generateGlobalEnum(&writer, @"enum");
+    }
+
+    for (ctx.flags.items) |flag| {
+        // TODO: shouldSkip functions
+        if (std.mem.startsWith(u8, flag.name, "Variant.")) continue;
+        try generateGlobalFlag(&writer, flag);
     }
 
     try buf.flush();
     try file.sync();
 }
 
-fn generateGlobalEnum(w: *Writer, @"enum": GodotApi.GlobalEnum) !void {
-    try w.printLine("pub const {s} = i64;", .{@"enum".name});
+fn generateGlobalEnum(w: *Writer, @"enum": CodeApi.Enum) !void {
+    try w.printLine("pub const {s} = enum(u32) {{", .{@"enum".name});
+    w.indent += 1;
     for (@"enum".values) |value| {
-        try w.printLine("pub const {s}: i64 = {d};", .{ value.name, value.value });
+        try generateDocBlock(w, value.doc);
+        try w.printLine("{s} = {d},", .{ value.name, value.value });
     }
+    w.indent -= 1;
+    try w.writeLine("};");
+}
+
+fn generateGlobalFlag(w: *Writer, flag: CodeApi.Flag) !void {
+    try w.printLine("pub const {s} = packed struct(u32) {{", .{flag.name});
+    w.indent += 1;
+    for (flag.fields) |field| {
+        try generateDocBlock(w, field.doc);
+        try w.printLine("{s}: bool = {s},", .{ field.name, if (field.default) "true" else "false" });
+    }
+    if (flag.padding > 0) {
+        try w.printLine("_: u{d} = 0,", .{flag.padding});
+    }
+    for (flag.consts) |@"const"| {
+        try generateDocBlock(w, @"const".doc);
+        try w.printLine("pub const {s}: {s} = @bitCast(@as(u32, {d}));", .{ @"const".name, flag.name, @"const".value });
+    }
+    w.indent -= 1;
+    try w.writeLine("};");
 }
 
 fn generateDocBlock(w: *Writer, docs: ?[]const u8) !void {
@@ -864,6 +892,7 @@ const fs = std.fs;
 const case = @import("case");
 const gdextension = @import("gdextension");
 
+const CodeApi = @import("CodeApi.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("GodotApi.zig");

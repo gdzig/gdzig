@@ -20,6 +20,9 @@ class_index: StringHashMap(usize) = .empty,
 class_imports: StringHashMap(Imports) = .empty,
 function_imports: StringHashMap(Imports) = .empty,
 
+enums: ArrayList(CodeApi.Enum) = .empty,
+flags: ArrayList(CodeApi.Flag) = .empty,
+
 const func_case: case.Case = .camel;
 
 const base_type_map = std.StaticStringMap([]const u8).initComptime(.{
@@ -50,6 +53,16 @@ pub fn deinit(self: *Context) void {
     self.class_index.deinit(self.allocator);
     self.class_imports.deinit(self.allocator);
     self.function_imports.deinit(self.allocator);
+
+    for (self.enums.items) |@"enum"| {
+        @"enum".deinit(self.allocator);
+    }
+    self.enums.deinit(self.allocator);
+
+    for (self.flags.items) |flag| {
+        flag.deinit(self.allocator);
+    }
+    self.flags.deinit(self.allocator);
 }
 
 pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
@@ -65,6 +78,9 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
     try self.parseClassSizes();
     try self.parseSingletons();
     try self.parseClasses();
+
+    try self.castEnums(allocator);
+    try self.castFlags(allocator);
 
     try self.collectImports(allocator);
 
@@ -326,6 +342,24 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     }
 }
 
+fn castEnums(self: *Context, allocator: Allocator) !void {
+    for (self.api.global_enums) |@"enum"| {
+        if (@"enum".is_bitfield) {
+            continue;
+        }
+        try self.enums.append(allocator, try .fromGlobalEnum(allocator, @"enum"));
+    }
+}
+
+fn castFlags(self: *Context, allocator: Allocator) !void {
+    for (self.api.global_enums) |@"enum"| {
+        if (!@"enum".is_bitfield) {
+            continue;
+        }
+        try self.flags.append(allocator, try .fromGlobalEnum(allocator, @"enum"));
+    }
+}
+
 pub fn correctName(self: *const Context, name: []const u8) []const u8 {
     if (std.zig.Token.keywords.has(name)) {
         return std.fmt.allocPrint(self.allocator, "@\"{s}\"", .{name}) catch unreachable;
@@ -441,8 +475,8 @@ const StringHashMap = std.StringHashMapUnmanaged;
 
 const case = @import("case");
 
+const CodeApi = @import("CodeApi.zig");
 const GodotApi = @import("GodotApi.zig");
 const util = @import("util.zig");
-
 const Config = @import("Config.zig");
 const Imports = @import("Imports.zig");

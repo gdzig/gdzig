@@ -537,9 +537,9 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
         .type = @intCast(Variant.getVariantType(MethodBinder.ReturnType.?)),
         .name = @ptrCast(@constCast(&core.StringName.init())),
         .class_name = @ptrCast(@constCast(&core.StringName.init())),
-        .hint = global.PROPERTY_HINT_NONE,
+        .hint = @intFromEnum(global.PropertyHint.property_hint_none),
         .hint_string = @ptrCast(@constCast(&core.String.init())),
-        .usage = global.PROPERTY_USAGE_NONE,
+        .usage = @bitCast(global.PropertyUsage.property_usage_none),
     };
 
     inline for (1..MethodBinder.ArgCount) |i| {
@@ -547,9 +547,9 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
             .type = @intCast(Variant.getVariantType(MethodBinder.ArgsTuple[i].type)),
             .name = @ptrCast(@constCast(&core.StringName.init())),
             .class_name = getClassName(MethodBinder.ArgsTuple[i].type),
-            .hint = global.PROPERTY_HINT_NONE,
+            .hint = @intFromEnum(global.PropertyHint.property_hint_none),
             .hint_string = @ptrCast(@constCast(&core.String.init())),
-            .usage = global.PROPERTY_USAGE_NONE,
+            .usage = @bitCast(global.PropertyUsage.property_usage_none),
         };
 
         MethodBinder.arg_metadata[i] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
@@ -646,9 +646,9 @@ pub const PropertyInfo = struct {
     type: c.GDExtensionVariantType = c.GDEXTENSION_VARIANT_TYPE_NIL,
     name: core.StringName,
     class_name: core.StringName,
-    hint: u32 = global.PROPERTY_HINT_NONE,
+    hint: u32 = @intFromEnum(global.PropertyHint.property_hint_none),
     hint_string: core.String,
-    usage: u32 = global.PROPERTY_USAGE_DEFAULT,
+    usage: u32 = @bitCast(global.PropertyUsage.property_usage_default),
     const Self = @This();
 
     pub fn init(@"type": c.GDExtensionVariantType, name: core.StringName) Self {
@@ -657,19 +657,19 @@ pub const PropertyInfo = struct {
             .name = name,
             .hint_string = core.String.initFromUtf8Chars("test property"),
             .class_name = core.StringName.initFromLatin1Chars(""),
-            .hint = global.PROPERTY_HINT_NONE,
-            .usage = global.PROPERTY_USAGE_DEFAULT,
+            .hint = @intFromEnum(global.PropertyHint.property_hint_none),
+            .usage = @bitCast(global.PropertyUsage.property_usage_default),
         };
     }
 
-    pub fn initFull(@"type": c.GDExtensionVariantType, name: core.StringName, class_name: core.StringName, hint: u32, hint_string: core.String, usage: u32) Self {
+    pub fn initFull(@"type": c.GDExtensionVariantType, name: core.StringName, class_name: core.StringName, hint: global.PropertHint, hint_string: core.String, usage: global.PropertyUsage) Self {
         return .{
             .type = @"type",
             .name = name,
             .class_name = class_name,
             .hint_string = hint_string,
-            .hint = hint,
-            .usage = usage,
+            .hint = @bitCast(hint),
+            .usage = @bitCast(usage),
         };
     }
 };
