@@ -2,7 +2,7 @@ pub fn generate(ctx: *Context) !void {
     try generateBuiltins(ctx);
     try generateClasses(ctx);
     try generateGlobalEnums(ctx);
-    // try generateModules(ctx);
+    try generateModules(ctx);
     try generateUtilityFunctions(ctx);
 
     try generateCore(ctx);
@@ -442,7 +442,7 @@ fn generateGlobalEnums(ctx: *Context) !void {
 }
 
 fn generateGlobalEnum(w: *Writer, @"enum": Context.Enum) !void {
-    try w.printLine("pub const {s} = enum(u32) {{", .{@"enum".name});
+    try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
     for (@"enum".values) |value| {
         try generateDocBlock(w, value.doc);
@@ -453,7 +453,7 @@ fn generateGlobalEnum(w: *Writer, @"enum": Context.Enum) !void {
 }
 
 fn generateGlobalFlag(w: *Writer, flag: Context.Flag) !void {
-    try w.printLine("pub const {s} = packed struct(u32) {{", .{flag.name});
+    try w.printLine("pub const {s} = packed struct(i32) {{", .{flag.name});
     w.indent += 1;
     for (flag.fields) |field| {
         try generateDocBlock(w, field.doc);
@@ -874,7 +874,7 @@ fn generateUtilityFunctions(ctx: *Context) !void {
 }
 
 fn generateModules(ctx: *Context) !void {
-    for (ctx.modules.items) |*module| {
+    for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{module.name});
         defer ctx.allocator.free(filename);
 
@@ -918,8 +918,12 @@ fn generateModuleFunction(w: *Writer, function: *const Context.Function) !void {
 
     try w.printLine(
         \\const function = godot.support.bindFunction("{s}", {d});
-        \\function(@ptrCast(&out), @ptrCast(&args), args.len);
-    , .{ function.name, function.hash });
+        \\function({s}, @ptrCast(&args), args.len);
+    , .{
+        function.name,
+        function.hash,
+        if (function.return_type != null) "@ptrCast(&out)" else "null",
+    });
 
     try generateFunctionFooter(w, function);
 }
@@ -991,22 +995,18 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     w.indent += 1;
 
     // Parameter comptime type checking
-    try w.writeLine("comptime {");
-    w.indent += 1;
-    for (function.parameters) |param| {
-        try generateFunctionParameterTypeCheck(w, param);
+    for (function.parameters) |_| {
+        // try generateFunctionParameterTypeCheck(w, param);
     }
 
     // Variadic argument type checking
     if (function.is_vararg) {
-        try w.writeLine(
-            \\inline for (0..@"...".len) |i| {
-            \\    godot.debug.assertVariantLike(@field(@"...", i));
-            \\}
-        );
+        // try w.writeLine(
+        //     \\inline for (0..@"...".len) |i| {
+        //     \\    godot.debug.assertVariantLike(@field(@"...", i));
+        //     \\}
+        // );
     }
-    w.indent -= 1;
-    try w.writeLine("}");
 
     // Fixed argument slice variable
     if (!function.is_vararg) {
@@ -1024,14 +1024,14 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     if (function.is_vararg) {
         try w.printLine("var args: [@\"...\".len + {d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.len});
         for (function.parameters[0..opt], 0..) |param, i| {
-            try w.printLine("args[{d}] = &godot.Variant.initFrom(&{s});", .{ i, param.name });
+            try w.printLine("args[{d}] = &godot.Variant.init(&{s});", .{ i, param.name });
         }
         for (function.parameters[opt..], opt..) |param, i| {
-            try w.printLine("args[{d}] = &godot.Variant.initFrom(&opt.{s});", .{ i, param.name });
+            try w.printLine("args[{d}] = &godot.Variant.init(&opt.{s});", .{ i, param.name });
         }
         try w.printLine(
             \\inline for (0..@"...".len) |i| {{
-            \\  args[{d} + i] = &godot.Variant.initFrom(@field(@"...", i));
+            \\  args[{d} + i] = &godot.Variant.init(@field(@"...", i));
             \\}}
         , .{function.parameters.len});
     }

@@ -56,7 +56,7 @@ pub inline fn bindFunction(
 ) Function {
     const callback = struct {
         fn callback(string_name: core.StringName) Function {
-            return core.variantGetPtrUtilityFunction(@ptrCast(@constCast(&string_name)), hash);
+            return core.variantGetPtrUtilityFunction(@ptrCast(@constCast(&string_name)), hash).?;
         }
     }.callback;
 

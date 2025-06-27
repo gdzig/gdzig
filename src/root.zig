@@ -4,6 +4,9 @@ pub const c = @import("gdextension");
 pub const core = @import("bindings/core.zig");
 pub const global = @import("bindings/core.zig").global;
 
+pub const debug = @import("debug.zig");
+pub const heap = @import("heap.zig");
+pub const meta = @import("meta.zig");
 pub const support = @import("support.zig");
 pub const Variant = @import("Variant.zig").Variant;
 
@@ -674,3 +677,7 @@ pub const PropertyInfo = struct {
         };
     }
 };
+
+comptime {
+    _ = Variant;
+}

@@ -54,8 +54,6 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
         .config = config,
     };
 
-    try self.collectExports(allocator);
-
     try self.parseGdExtensionHeaders();
     try self.parseClassSizes();
     try self.parseSingletons();
@@ -65,6 +63,7 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
     try self.castFlags(allocator);
     try self.castModules(allocator);
 
+    try self.collectExports(allocator);
     try self.collectImports(allocator);
 
     return self;
@@ -129,6 +128,14 @@ fn collectExports(self: *Context, allocator: Allocator) !void {
             .path = class.name,
         });
         try self.all_engine_classes.append(allocator, class.name);
+    }
+
+    for (self.modules.values()) |module| {
+        try self.core_exports.append(allocator, .{
+            .ident = module.name,
+            .file = module.name,
+            .path = null,
+        });
     }
 }
 

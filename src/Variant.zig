@@ -22,8 +22,8 @@ pub const Variant = extern struct {
         return result;
     }
 
-    pub fn deinit(self: *Variant) void {
-        variantDestroy(@ptrCast(&self));
+    pub fn deinit(self: Variant) void {
+        godot.core.variantDestroy(@ptrCast(@constCast(&self)));
     }
 
     pub fn as(self: Variant, comptime T: type) T {
@@ -36,16 +36,16 @@ pub const Variant = extern struct {
             variantTo(@ptrCast(&ptr), @ptrCast(@constCast(&self)));
 
             // TODO: GDExtensionInstanceBindingCallbacks?
-            const instance: *Object = @ptrCast(@alignCast(objectGetInstanceBinding(ptr, p_library, null)));
+            const instance: *Object = @ptrCast(@alignCast(godot.coreobjectGetInstanceBinding(ptr, godot.core.p_library, null)));
 
             if (meta.Child(T) == Object) {
                 return instance;
             } else {
                 const class_name = godot.getClassName(meta.Child(T));
-                const class_tag = classdbGetClassTag(@ptrCast(class_name));
+                const class_tag = godot.core.classdbGetClassTag(@ptrCast(class_name));
                 // TODO: this can return null if its not the right type; return type should be optional depending on T, right? or return error?
-                const casted = objectCastTo(instance.godot_object, class_tag);
-                const binding = objectGetInstanceBinding(casted, p_library, null);
+                const casted = godot.core.objectCastTo(instance.godot_object, class_tag);
+                const binding = godot.core.objectGetInstanceBinding(casted, godot.core.p_library, null);
 
                 return @ptrCast(@alignCast(binding));
             }
@@ -102,7 +102,7 @@ pub const Variant = extern struct {
         }
 
         pub fn forType(comptime T: type) Variant.Tag {
-            return switch (T) {
+            return switch (@import("meta.zig").Deref(T)) {
                 AABB => .aabb,
                 Array => .array,
                 Basis => .basis,
@@ -142,7 +142,7 @@ pub const Variant = extern struct {
                     .bool => .bool,
                     .int, .@"enum", .comptime_int => .int,
                     .float, .comptime_float => .float,
-                    .@"struct" => |i| if (i.backing_integer) .int else .object,
+                    .@"struct" => |i| if (i.backing_integer != null) .int else .object,
                     else => @compileError("Cannot construct variant from " ++ @typeName(T)),
                 },
             };
@@ -245,14 +245,10 @@ const Basis = godot.core.Basis;
 const bindVariantFrom = godot.support.bindVariantFrom;
 const bindVariantTo = godot.support.bindVariantTo;
 const Callable = godot.core.Callable;
-const classdbGetClassTag = godot.core.classdbGetClassTag;
 const Color = godot.core.Color;
 const Dictionary = godot.core.Dictionary;
 const NodePath = godot.core.NodePath;
 const Object = godot.core.Object;
-const objectCastTo = godot.core.objectCastTo;
-const objectGetInstanceBinding = godot.core.objectGetInstanceBinding;
-const p_library = godot.core.p_library;
 const PackedByteArray = godot.core.PackedByteArray;
 const PackedColorArray = godot.core.PackedColorArray;
 const PackedFloat32Array = godot.core.PackedFloat32Array;
@@ -273,5 +269,74 @@ const String = godot.core.String;
 const StringName = godot.core.StringName;
 const Transform2D = godot.core.Transform2D;
 const Transform3D = godot.core.Transform3D;
-const variantDestroy = godot.core.variantDestroy;
-const variantNewNil = godot.core.variantNewNil;
+
+const tests = struct {
+    const Tag = Variant.Tag;
+    const testing = std.testing;
+
+    test "forType" {
+        const pairs = .{
+            .{ .aabb, AABB },
+            .{ .array, Array },
+            .{ .basis, Basis },
+            .{ .callable, Callable },
+            .{ .color, Color },
+            .{ .dictionary, Dictionary },
+            .{ .node_path, NodePath },
+            .{ .object, Object },
+            .{ .packed_byte_array, PackedByteArray },
+            .{ .packed_color_array, PackedColorArray },
+            .{ .packed_float32_array, PackedFloat32Array },
+            .{ .packed_float64_array, PackedFloat64Array },
+            .{ .packed_int32_array, PackedInt32Array },
+            .{ .packed_int64_array, PackedInt64Array },
+            .{ .packed_string_array, PackedStringArray },
+            .{ .packed_vector2_array, PackedVector2Array },
+            .{ .packed_vector3_array, PackedVector3Array },
+            .{ .plane, Plane },
+            .{ .projection, Projection },
+            .{ .quaternion, Quaternion },
+            .{ .rid, RID },
+            .{ .rect2, Rect2 },
+            .{ .rect2i, Rect2i },
+            .{ .signal, Signal },
+            .{ .string, String },
+            .{ .string_name, StringName },
+            .{ .transform2d, Transform2D },
+            .{ .transform3d, Transform3D },
+            .{ .vector2, Vector2 },
+            .{ .vector2i, Vector2i },
+            .{ .vector3, Vector3 },
+            .{ .vector3i, Vector3i },
+            .{ .vector4, Vector4 },
+            .{ .vector4i, Vector4i },
+
+            .{ .nil, void },
+            .{ .bool, bool },
+            .{ .int, i32 },
+            .{ .int, i64 },
+            .{ .int, u32 },
+            .{ .int, u64 },
+            .{ .float, f32 },
+            .{ .float, f64 },
+            .{ .int, godot.global.JoyAxis },
+            .{ .int, godot.global.KeyModifierMask },
+        };
+
+        inline for (pairs) |pair| {
+            const tag = pair[0];
+            const T = pair[1];
+
+            try testing.expectEqual(tag, Tag.forType(T));
+            try testing.expectEqual(tag, Tag.forType(*T));
+            try testing.expectEqual(tag, Tag.forType(*const T));
+            try testing.expectEqual(tag, Tag.forType(?T));
+            try testing.expectEqual(tag, Tag.forType(?*T));
+            try testing.expectEqual(tag, Tag.forType(?*const T));
+        }
+    }
+};
+
+comptime {
+    _ = tests;
+}

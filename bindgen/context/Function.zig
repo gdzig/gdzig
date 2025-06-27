@@ -28,7 +28,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     }
 
     const return_type = if (function.return_type.len == 0) null else try allocator.dupe(u8, function.return_type);
-    errdefer allocator.free(return_type orelse &.{});
+    errdefer allocator.free(return_type orelse "");
 
     return Function{
         .doc = doc,
@@ -50,7 +50,7 @@ pub fn deinit(self: *Function, allocator: Allocator) void {
         param.deinit(allocator);
     }
     self.parameters.deinit(allocator);
-    allocator.free(self.return_type orelse &.{});
+    allocator.free(self.return_type orelse "");
 }
 
 pub const Parameter = struct {
@@ -61,11 +61,8 @@ pub const Parameter = struct {
     pub fn fromFunctionArgument(allocator: Allocator, arg: GodotApi.UtilityFunction.Argument, ctx: *const Context) !Parameter {
         const name = blk: {
             const camel = try case.allocTo(allocator, .camel, arg.name);
-            if (std.zig.Token.keywords.has(camel)) {
-                defer allocator.free(camel);
-                break :blk try std.fmt.allocPrint(allocator, "@\"{s}\"", .{camel});
-            }
-            break :blk camel;
+            defer allocator.free(camel);
+            break :blk try std.fmt.allocPrint(allocator, "{s}_", .{camel});
         };
         errdefer allocator.free(name);
 
@@ -82,7 +79,7 @@ pub const Parameter = struct {
     pub fn deinit(self: *Parameter, allocator: Allocator) void {
         allocator.free(self.name);
         self.type.deinit(allocator);
-        allocator.free(self.default orelse &.{});
+        if (self.default) |default| allocator.free(default);
     }
 };
 
