@@ -1,15 +1,15 @@
 pub fn generate(ctx: *Context) !void {
-    try generateBuiltins(ctx);
-    try generateClasses(ctx);
+    try writeBuiltins(ctx);
     try writeGlobalEnums(ctx);
     try writeModules(ctx);
-    try generateUtilityFunctions(ctx);
 
+    try generateClasses(ctx);
+    try generateUtilityFunctions(ctx);
     try generateCore(ctx);
 }
 
-fn generateBuiltins(ctx: *Context) !void {
-    for (ctx.api.builtin_classes) |builtin| {
+fn writeBuiltins(ctx: *Context) !void {
+    for (ctx.builtins.values()) |*builtin| {
         if (util.shouldSkipClass(builtin.name)) {
             continue;
         }
@@ -23,202 +23,553 @@ fn generateBuiltins(ctx: *Context) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try generateBuiltin(&writer, builtin, ctx);
+        try writeBuiltin(&writer, builtin);
 
         try buf.flush();
         try file.sync();
     }
 }
 
-fn generateBuiltin(w: *Writer, builtin: GodotApi.Builtin, ctx: *Context) !void {
-    try writeDocBlock(w, builtin.description);
+fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin) !void {
+    try writeDocBlock(w, builtin.doc);
 
-    // TODO: remove this
-    var generated_method_map: StringHashMap(void) = .empty;
-
-    try w.printLine("pub const {s} = extern struct {{", .{builtin.name});
+    // Declaration start
+    try w.printLine(
+        \\pub const {0s} = extern struct {{
+    , .{builtin.name});
     w.indent += 1;
-    try w.writeLine("pub const Self = @This();");
-    // TODO: refactor to generate actual members (instead of setters/getters and whatever this is)
-    const size = ctx.class_sizes.get(builtin.name) orelse std.debug.panic("Could not get class size for {x}", .{builtin.name});
-    try w.printLine("value: [{d}]u8,", .{size});
-    // try generateBuiltinConstants(w, builtin, ctx);
-    try generateBuiltinConstructors(w, builtin, ctx);
-    try generateBuiltinMethods(w, builtin, &generated_method_map, ctx);
-    try generateBuiltinMembers(w, builtin, &generated_method_map, ctx);
-    try generateBuiltinEnums(w, builtin);
+
+    // Memory layout assertions
+    try w.printLine(
+        \\comptime {{
+        \\    if (@sizeOf({0s}) != {1d}) @compileError("expected {0s} to be {1d} bytes");
+    , .{ builtin.name, builtin.size });
+    w.indent += 1;
+    for (builtin.fields.values()) |*field| {
+        if (field.offset) |offset| {
+            try w.printLine(
+                \\if (@offsetOf({1s}, "{0s}") != {2d}) @compileError("expected the offset of '{0s}' on '{1s}' to be {2d}");
+            , .{ field.name, builtin.name, offset });
+        }
+    }
     w.indent -= 1;
-    try w.printLine("}};", .{});
+    try w.writeLine(
+        \\}
+        \\
+    );
 
-    if (ctx.builtin_imports.get(builtin.name)) |imports| {
-        try writeImports(w, &imports);
+    // Fields
+    if (builtin.fields.count() == 0) {
+        // TODO: this should probably be handled in Context.Builtin
+        try w.printLine("value: [{d}]u8,", .{builtin.size});
+    } else if (builtin.fields.count() > 0) {
+        for (builtin.fields.values()) |*field| {
+            if (field.offset != null) {
+                try writeField(w, field);
+            }
+        }
     }
-}
 
-fn generateBuiltinEnums(w: *Writer, builtin: GodotApi.Builtin) !void {
-    const enums = builtin.enums orelse return;
-
-    for (enums) |@"enum"| {
-        try generateBuiltinEnum(w, @"enum");
+    // Constants
+    var constants = builtin.constants.valueIterator();
+    while (constants.next()) |constant| {
+        try writeConstant(w, constant);
     }
-}
 
-fn generateBuiltinEnum(w: *Writer, @"enum": GodotApi.Builtin.Enum) !void {
-    try w.printLine("pub const {s} = c_int;", .{@"enum".name});
-    for (@"enum".values) |value| {
-        try w.printLine("pub const {s}: c_int = {d};", .{ value.name, value.value });
-    }
-}
-
-fn generateBuiltinConstants(w: *Writer, builtin: GodotApi.Builtin, ctx: *const Context) !void {
-    const constants = builtin.constants orelse return;
-
-    for (constants) |constant| {
-        try generateBuiltinConstant(w, constant, ctx);
-    }
-}
-
-fn generateBuiltinConstant(w: *Writer, constant: GodotApi.Builtin.Constant, ctx: *const Context) !void {
-    try w.printLine("pub const {s}: {s} = {s};", .{ constant.name, ctx.correctType(constant.type, ""), constant.value });
-}
-
-fn generateBuiltinConstructors(w: *Writer, builtin: GodotApi.Builtin, ctx: *Context) !void {
-    const name = ctx.correctName(builtin.name);
-
-    if (std.mem.eql(u8, name, "String")) {
+    // Hardcoded constructors
+    // TODO: move the hardcoding of these overrides to an overrides module
+    if (std.mem.eql(u8, builtin.name, "String")) {
         try w.writeLine(
-            \\pub fn initFromLatin1Chars(chars:[]const u8) Self{
-            \\    var self: Self = undefined;
+            \\pub fn fromLatin1(chars: []const u8) String {
+            \\    var self: String = undefined;
             \\    godot.core.stringNewWithLatin1CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
-            \\pub fn initFromUtf8Chars(chars:[]const u8) Self{
-            \\    var self: Self = undefined;
+            \\pub fn fromUtf8(chars: []const u8) String {
+            \\    var self: String = undefined;
             \\    godot.core.stringNewWithUtf8CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
-            \\pub fn initFromUtf16Chars(chars:[]const godot.char16_t) Self{
-            \\    var self: Self = undefined;
+            \\pub fn fromUtf16(chars: []const godot.char16_t) String {
+            \\    var self: String = undefined;
             \\    godot.core.stringNewWithUtf16CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
-            \\pub fn initFromUtf32Chars(chars:[]const godot.char32_t) Self{
-            \\    var self: Self = undefined;
+            \\pub fn fromUtf32(chars: []const godot.char32_t) String {
+            \\    var self: String = undefined;
             \\    godot.core.stringNewWithUtf32CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
-            \\pub fn initFromWideChars(chars:[]const godot.wchar_t) Self{
-            \\    var self: Self = undefined;
+            \\pub fn fromWide(chars: []const godot.wchar_t) String {
+            \\    var self: String = undefined;
             \\    godot.core.stringNewWithWideCharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
         );
     }
-    if (std.mem.eql(u8, name, "StringName")) {
+    if (std.mem.eql(u8, builtin.name, "StringName")) {
         try w.writeLine(
-            \\pub fn initStaticFromLatin1Chars(chars:[:0]const u8) Self {
-            \\    var self: Self = undefined;
+            \\pub fn fromComptimeLatin1(comptime chars: [:0]const u8) StringName {
+            \\    var self: StringName = undefined;
             \\    godot.core.stringNameNewWithLatin1Chars(@ptrCast(&self.value), chars.ptr, 1);
             \\    return self;
             \\}
-            \\pub fn initFromLatin1Chars(chars:[:0]const u8) Self {
-            \\    var self: Self = undefined;
+            \\pub fn fromLatin1(chars: [:0]const u8) StringName {
+            \\    var self: StringName = undefined;
             \\    godot.core.stringNameNewWithLatin1Chars(@ptrCast(&self.value), chars.ptr, 0);
             \\    return self;
             \\}
-            \\pub fn initFromUtf8Chars(chars:[]const u8) Self {
-            \\    var self: Self = undefined;
+            \\pub fn fromUtf8(chars: []const u8) StringName {
+            \\    var self: StringName = undefined;
             \\    godot.core.stringNameNewWithUtf8CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
         );
     }
 
-    for (builtin.constructors) |constructor| {
-        // TODO: remove generateProc and replace with generateBuiltinConstructor
-        try generateProc(w, constructor, name, "init", "Self", .Constructor, ctx);
+    // Constructors
+    for (builtin.constructors.items) |*constructor| {
+        try writeBuiltinConstructor(w, builtin.name, constructor);
     }
 
+    // Destructor
     if (builtin.has_destructor) {
-        // TODO: remove generateProc and replace with generateBuiltinDestructor
-        try generateProc(w, null, name, "deinit", "void", .Destructor, ctx);
+        try writeBuiltinDestructor(w, builtin);
+    }
+
+    // Methods
+    var methods = builtin.methods.valueIterator();
+    while (methods.next()) |method| {
+        try writeBuiltinMethod(w, builtin.name, method);
+    }
+
+    // Enums
+    var enums = builtin.enums.valueIterator();
+    while (enums.next()) |@"enum"| {
+        try writeEnum(w, @"enum");
+    }
+
+    // Declaration end
+    w.indent -= 1;
+    try w.writeLine("};");
+
+    // Imports
+    try writeImports(w, &builtin.imports);
+}
+
+fn writeBuiltinConstructor(w: *Writer, self: []const u8, constructor: *const Context.Function) !void {
+    try writeFunctionHeader(w, self, constructor);
+    try w.printLine(
+        \\const constructor = godot.support.bindConstructor({s}, {d});
+        \\constructor(@ptrCast(&out), @ptrCast(&args));
+    , .{
+        self,
+        constructor.index.?,
+    });
+    try writeFunctionFooter(w, constructor);
+}
+
+fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
+    try w.printLine(
+        \\pub fn deinit(self: *{0s}) void {{
+        \\    const method = godot.support.bindDestructor({0s});
+        \\    method(@ptrCast(self));
+        \\}}
+        \\
+    , .{
+        builtin.name,
+    });
+}
+
+fn writeBuiltinMethod(w: *Writer, self: []const u8, method: *const Context.Function) !void {
+    try writeFunctionHeader(w, self, method);
+    try w.printLine(
+        \\const method = godot.support.bindBuiltinMethod({s}, "{s}", {d});
+        \\method({s}, @ptrCast(&args), @ptrCast(&out), args.len);
+    , .{
+        self,
+        method.api_name.?,
+        method.hash.?,
+        if (method.is_static)
+            "null"
+        else if (method.is_const)
+            "@ptrCast(@constCast(self))"
+        else
+            "@ptrCast(self)",
+    });
+    try writeFunctionFooter(w, method);
+}
+
+fn writeConstant(w: *Writer, constant: *const Context.Constant) !void {
+    try w.print("pub const {s}: ", .{constant.name});
+    try writeTypeAtField(w, &constant.type);
+    try w.printLine(" = {s};", .{constant.value});
+}
+
+fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
+    if (docs) |d| {
+        w.comment = .doc;
+        try w.writeLine(d);
+        w.comment = .off;
     }
 }
 
-fn generateBuiltinMethods(w: *Writer, builtin: GodotApi.Builtin, generated_method_map: *StringHashMap(void), ctx: *Context) !void {
-    const class_name = ctx.correctName(builtin.name);
-    const is_builtin_class = true;
-    const proc_type = ProcType.BuiltinMethod;
+fn writeGlobalEnums(ctx: *Context) !void {
+    const file = try ctx.config.output.createFile("global.zig", .{});
+    defer file.close();
 
-    const methods = builtin.methods orelse return;
+    var buf = bufferedWriter(file.writer());
+    var writer = codeWriter(buf.writer().any());
 
-    for (methods) |method| {
-        const func_name = method.name;
-        const zig_func_name = ctx.getZigFuncName(func_name);
+    for (ctx.enums.values()) |*@"enum"| {
+        // TODO: shouldSkip functions
+        if (std.mem.startsWith(u8, @"enum".name, "Variant.")) continue;
+        try writeEnum(&writer, @"enum");
+    }
 
-        const return_type =
-            if (is_builtin_class)
-                ctx.correctType(method.return_type, "")
-            else if (method.return_value) |ret|
-                ctx.correctType(ret.type, ret.meta)
-            else
-                "void";
+    for (ctx.flags.values()) |flag| {
+        // TODO: shouldSkip functions
+        if (std.mem.startsWith(u8, flag.name, "Variant.")) continue;
+        try writeFlag(&writer, flag);
+    }
 
-        if (!generated_method_map.contains(zig_func_name)) {
-            try generated_method_map.putNoClobber(ctx.allocator, zig_func_name, {});
-            try generateProc(w, method, class_name, func_name, return_type, proc_type, ctx);
+    try buf.flush();
+    try file.sync();
+}
+
+fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
+    try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
+    w.indent += 1;
+    var values = @"enum".values.valueIterator();
+    while (values.next()) |value| {
+        try writeDocBlock(w, value.doc);
+        try w.printLine("{s} = {d},", .{ value.name, value.value });
+    }
+    w.indent -= 1;
+    try w.writeLine("};");
+}
+
+fn writeField(w: *Writer, field: *const Context.Field) !void {
+    try writeDocBlock(w, field.doc);
+    try w.print("{s}: ", .{field.name});
+    try writeTypeAtField(w, &field.type);
+    try w.writeLine(
+        \\,
+        \\
+    );
+}
+
+fn writeFlag(w: *Writer, flag: Context.Flag) !void {
+    try w.printLine("pub const {s} = packed struct(i32) {{", .{flag.name});
+    w.indent += 1;
+    for (flag.fields) |field| {
+        try writeDocBlock(w, field.doc);
+        try w.printLine("{s}: bool = {s},", .{ field.name, if (field.default) "true" else "false" });
+    }
+    if (flag.padding > 0) {
+        try w.printLine("_: u{d} = 0,", .{flag.padding});
+    }
+    for (flag.consts) |@"const"| {
+        try writeDocBlock(w, @"const".doc);
+        try w.printLine("pub const {s}: {s} = @bitCast(@as(u32, {d}));", .{ @"const".name, flag.name, @"const".value });
+    }
+    w.indent -= 1;
+    try w.writeLine("};");
+}
+
+fn writeFunctionHeader(w: *Writer, self: ?[]const u8, function: *const Context.Function) !void {
+    try writeDocBlock(w, function.doc);
+
+    // Declaration
+    try w.print("pub fn {s}(", .{function.name});
+
+    var is_first = true;
+
+    // Self
+    if (!function.is_static) {
+        try w.writeAll("self: *");
+        if (function.is_const) {
+            try w.writeAll("const ");
+        }
+        try w.writeAll(self orelse "@This()");
+        is_first = false;
+    }
+
+    // Standard parameters
+    var opt: usize = function.parameters.count();
+    for (function.parameters.values(), 0..) |param, i| {
+        if (param.default != null) {
+            opt = i;
+            break;
+        }
+        if (!is_first) {
+            try w.writeAll(", ");
+        }
+        try w.print("{s}: ", .{param.name});
+        try writeTypeAtParameter(w, param.type);
+        is_first = false;
+    }
+
+    // Variadic parameters
+    if (function.is_vararg) {
+        if (!is_first) {
+            try w.writeAll(", ");
+        }
+        try w.print("@\"...\": anytype", .{});
+        is_first = false;
+    }
+
+    // Optional parameters
+    if (opt < function.parameters.count()) {
+        if (!is_first) {
+            try w.writeAll(", ");
+        }
+        try w.writeAll("opt: struct { ");
+        is_first = true;
+        for (function.parameters.values()[opt..]) |param| {
+            if (!is_first) {
+                try w.writeAll(", ");
+            }
+            try w.print("{s}: ", .{param.name});
+            try writeTypeAtField(w, &param.type);
+            try w.print(" = {s}", .{param.default.?});
+            is_first = false;
+        }
+        try w.writeAll(" }");
+        is_first = false;
+    }
+
+    // Return type
+    try w.writeAll(") ");
+    try writeTypeAtReturn(w, &function.return_type);
+    try w.writeLine(" {");
+    w.indent += 1;
+
+    // Parameter comptime type checking
+    for (function.parameters.values()) |_| {
+        // try generateFunctionParameterTypeCheck(w, param);
+    }
+
+    // Variadic argument type checking
+    if (function.is_vararg) {
+        // try w.writeLine(
+        //     \\inline for (0..@"...".len) |i| {
+        //     \\    godot.debug.assertVariantLike(@field(@"...", i));
+        //     \\}
+        // );
+    }
+
+    // Fixed argument slice variable
+    if (!function.is_vararg) {
+        // todo: parameter comptime coercisions
+        try w.printLine("var args: [{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
+        for (function.parameters.values()[0..opt], 0..) |param, i| {
+            try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
+        }
+        for (function.parameters.values()[opt..], opt..) |param, i| {
+            try w.printLine("args[{d}] = @ptrCast(&opt.{s});", .{ i, param.name });
+        }
+    }
+
+    // Variadic argument slice variable
+    if (function.is_vararg) {
+        try w.printLine("var args: [@\"...\".len + {d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
+        for (function.parameters.values()[0..opt], 0..) |param, i| {
+            try w.printLine("args[{d}] = &godot.Variant.init(&{s});", .{ i, param.name });
+        }
+        for (function.parameters.values()[opt..], opt..) |param, i| {
+            try w.printLine("args[{d}] = &godot.Variant.init(&opt.{s});", .{ i, param.name });
+        }
+        try w.printLine(
+            \\inline for (0..@"...".len) |i| {{
+            \\  args[{d} + i] = &godot.Variant.init(@field(@"...", i));
+            \\}}
+        , .{function.parameters.count()});
+    }
+
+    // Return variable
+    if (function.return_type != .void) {
+        if (function.is_vararg) {
+            try w.writeLine("var out: godot.Variant = undefined;");
+        } else {
+            try w.writeAll("var out: ");
+            try writeTypeAtReturn(w, &function.return_type);
+            try w.writeLine(" = undefined;");
         }
     }
 }
 
-fn generateBuiltinMembers(w: *Writer, builtin: GodotApi.Builtin, generated_method_map: *StringHashMap(void), ctx: *Context) !void {
-    const name = ctx.correctName(builtin.name);
-    const enum_type_name = ctx.getVariantTypeName(name);
-    const members = builtin.members orelse return;
+fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
+    // Return the value
+    if (function.return_type != .void) {
+        // Fixed arity functions
+        if (!function.is_vararg) {
+            try w.writeLine(
+                \\return out;
+            );
+        }
 
-    for (members) |member| {
-        try generateBuiltinMember(w, member, enum_type_name, generated_method_map, ctx);
+        // Variadic functions
+        if (function.is_vararg) {
+            try w.writeAll("return out.as(");
+            try writeTypeAtReturn(w, &function.return_type);
+            try w.writeLine(");");
+        }
+    }
+
+    // Return for variable argument funtions
+    if (function.is_vararg and function.return_type != .void) {
+        // @panic("todo");
+    }
+
+    // End function
+    w.indent -= 1;
+    try w.writeLine(
+        \\}
+        \\
+    );
+}
+
+fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
+    try w.writeLine(
+        \\const godot = @import("../root.zig");
+    );
+
+    var iter = imports.iterator();
+    while (iter.next()) |import| {
+        if (util.isBuiltinType(import.*)) continue;
+
+        if (std.mem.startsWith(u8, import.*, "Vector")) {
+            try w.printLine("const {0s} = @import(\"vector\").{0s};", .{import.*});
+        } else if (std.mem.eql(u8, import.*, "Variant")) {
+            try w.writeLine("const Variant = @import(\"../Variant.zig\").Variant;");
+        } else if (std.mem.eql(u8, import.*, "global")) {
+            try w.writeLine("const global = @import(\"global.zig\");");
+        } else {
+            try w.printLine("const {0s} = @import(\"core.zig\").{0s};", .{import.*});
+        }
     }
 }
 
-fn generateBuiltinMember(w: *Writer, member: GodotApi.Builtin.Member, enum_type_name: []const u8, generated_method_map: *StringHashMap(void), ctx: *Context) !void {
-    const member_type = ctx.correctType(member.type, "");
+fn writeModules(ctx: *Context) !void {
+    for (ctx.modules.values()) |*module| {
+        const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{module.name});
+        defer ctx.allocator.free(filename);
 
-    const temp_getter_name = try std.fmt.allocPrint(ctx.allocator, "get_{s}", .{member.name});
-    const getter_name = ctx.getZigFuncName(temp_getter_name);
+        const file = try ctx.config.output.createFile(filename, .{});
+        defer file.close();
 
-    if (!generated_method_map.contains(getter_name)) {
-        try generated_method_map.putNoClobber(ctx.allocator, getter_name, {});
-        try w.printLine(
-            \\pub fn {s}(self: Self) {s} {{
-            \\    var result: {s} = undefined;
-            \\    const Binding = struct {{ pub var method: godot.c.GDExtensionPtrGetter = null; }};
-            \\    if (Binding.method == null) {{
-            \\        const func_name = godot.core.StringName.initFromLatin1Chars("{s}");
-            \\        Binding.method = godot.core.variantGetPtrGetter({s}, @ptrCast(&func_name));
-            \\    }}
-            \\    Binding.method.?(@ptrCast(&self.value), @ptrCast(&result));
-            \\    return result;
-            \\}}
-        , .{ getter_name, member_type, member_type, member.name, enum_type_name });
+        var buf = bufferedWriter(file.writer());
+        var writer = codeWriter(buf.writer().any());
+
+        try writeModule(&writer, module);
+
+        try buf.flush();
+        try file.sync();
     }
+}
 
-    const temp_setter_name = try std.fmt.allocPrint(ctx.allocator, "set_{s}", .{member.name});
-    const setter_name = ctx.getZigFuncName(temp_setter_name);
+fn writeModule(w: *Writer, module: *const Context.Module) !void {
+    for (module.functions) |*function| {
+        try writeModuleFunction(w, function);
+    }
+    try writeImports(w, &module.imports);
+}
 
-    if (!generated_method_map.contains(setter_name)) {
-        try generated_method_map.putNoClobber(ctx.allocator, setter_name, {});
+// TO DO IN CONTEXT
+// 2. Transform return type (add optional '?' prefix for pointer types)
+// 9. Generate function arguments with underscore postfix:
+//    - Handle engine class types as 'anytype'
+//    - Handle string types as 'anytype' (with exceptions)
+//    - Regular types use their actual type
+//
+// TO DO IN CODEGEN
+// 8. Generate self parameter based on proc type:
+//    - ClassMethod: 'self: anytype' ????
+// 14. Generate argument array setup:
+//     - Handle string type conversion with Latin1 chars
+// 16. Handle special return value processing:
+//     - Engine class returns: convert godot_object pointer to struct
+//     - Vararg returns: handle Variant conversion
+fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
+    try writeFunctionHeader(w, null, function);
 
-        try w.printLine(
-            \\pub fn {s}(self: *Self, v: {s}) void {{
-            \\    const Binding = struct{{ pub var method:godot.c.GDExtensionPtrSetter = null; }};
-            \\    if( Binding.method == null ) {{
-            \\        const func_name = godot.core.StringName.initFromLatin1Chars("{s}");
-            \\        Binding.method = godot.core.variantGetPtrSetter({s}, @ptrCast(&func_name));
-            \\    }}
-            \\    Binding.method.?(@ptrCast(&self.value), @ptrCast(&v));
-            \\}}
-        , .{ setter_name, member_type, member.name, enum_type_name });
+    try w.printLine(
+        \\const function = godot.support.bindFunction("{s}", {d});
+        \\function({s}, @ptrCast(&args), args.len);
+    , .{
+        function.name,
+        function.hash.?,
+        if (function.return_type != .void) "@ptrCast(&out)" else "null",
+    });
+
+    try writeFunctionFooter(w, function);
+}
+
+fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
+    switch (@"type".*) {
+        .void => try w.writeAll("void"),
+        .string => try w.writeAll("String"),
+        .string_name => try w.writeAll("StringName"),
+        .node_path => try w.writeAll("NodePath"),
+        .variant => try w.writeAll("Variant"),
+        .many => @panic("cannot format a union types in a struct field position"),
+        inline else => |s| try w.writeAll(s),
+    }
+}
+
+fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
+    switch (@"type".*) {
+        .void => try w.writeAll("void"),
+        .string => try w.writeAll("String"),
+        .string_name => try w.writeAll("StringName"),
+        .node_path => try w.writeAll("NodePath"),
+        .variant => try w.writeAll("Variant"),
+        .many => @panic("cannot format a union type in a struct field position"),
+        inline else => |s| try w.writeAll(s),
+    }
+}
+
+/// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
+/// checks and coercions.
+fn writeTypeAtParameter(w: *Writer, @"type": Context.Type) !void {
+    switch (@"type") {
+        .void => try w.writeAll("void"),
+        .string => try w.writeAll("String"),
+        .string_name => try w.writeAll("StringName"),
+        .node_path => try w.writeAll("NodePath"),
+        .variant => try w.writeAll("Variant"),
+        .many => @panic("cannot format a union type in a function parameter position"),
+        .basic => |name| try w.writeAll(name),
+        .class => |name| try w.writeAll(name),
+    }
+}
+
+/// Writes out code necessary to both assert that arguments are the right type, and coerce them
+/// into the form necessary to pass to the Godot function.
+fn writeTypeCheck(w: *Writer, parameter: Context.Function.Parameter) !void {
+    switch (parameter.type) {
+        .class => |class| {
+            try w.printLine(
+                \\godot.debug.assertIs(godot.core.{1s}, {0s});
+            , .{ parameter.name, class });
+        },
+        .node_path => {
+            try w.printLine(
+                \\godot.debug.assertPathLike({0s});
+            , .{parameter.name});
+        },
+        .string, .string_name => {
+            try w.printLine(
+                \\godot.debug.assertStringLike({0s});
+            , .{parameter.name});
+        },
+        .variant => {
+            try w.printLine(
+                \\godot.debug.assertVariantLike({0s});
+            , .{parameter.name});
+        },
+        else => return,
     }
 }
 
@@ -374,14 +725,18 @@ fn generateClassVirtualDispatch(w: *Writer, class: GodotApi.Class, ctx: *Context
         }
 
         try w.printLine(
-            \\if (@as(*StringName, @ptrCast(@constCast(p_name))).{1s}("{0s}") == 0 and @hasDecl(T, "{0s}")) {{
-            \\    const MethodBinder = struct {{
-            \\        pub fn {0s}(p_instance: godot.c.GDExtensionClassInstancePtr, p_args: [*c]const godot.c.GDExtensionConstTypePtr, p_ret: godot.c.GDExtensionTypePtr) callconv(.C) void {{
-            \\            const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
-            \\            MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
-            \\        }}
-            \\    }};
-            \\    return MethodBinder.{0s};
+            \\{{
+            \\    var name = String.fromLatin1("{0s}");
+            \\    defer name.deinit();
+            \\    if (@as(*StringName, @ptrCast(@constCast(p_name))).{1s}(name) == 0 and @hasDecl(T, "{0s}")) {{
+            \\        const MethodBinder = struct {{
+            \\            pub fn {0s}(p_instance: godot.c.GDExtensionClassInstancePtr, p_args: [*c]const godot.c.GDExtensionConstTypePtr, p_ret: godot.c.GDExtensionTypePtr) callconv(.C) void {{
+            \\                const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
+            \\                MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
+            \\            }}
+            \\        }};
+            \\        return MethodBinder.{0s};
+            \\    }}
             \\}}
         , .{ func_name, casecmp_to_func_name });
     }
@@ -416,66 +771,6 @@ fn generateClassSingleton(w: *Writer, name: []const u8, generated_method_map: *S
 
     // TODO: why?
     try generated_method_map.putNoClobber(ctx.allocator, "getSingleton", {});
-}
-
-fn writeGlobalEnums(ctx: *Context) !void {
-    const file = try ctx.config.output.createFile("global.zig", .{});
-    defer file.close();
-
-    var buf = bufferedWriter(file.writer());
-    var writer = codeWriter(buf.writer().any());
-
-    for (ctx.enums.values()) |@"enum"| {
-        // TODO: shouldSkip functions
-        if (std.mem.startsWith(u8, @"enum".name, "Variant.")) continue;
-        try writeEnum(&writer, @"enum");
-    }
-
-    for (ctx.flags.values()) |flag| {
-        // TODO: shouldSkip functions
-        if (std.mem.startsWith(u8, flag.name, "Variant.")) continue;
-        try writeFlag(&writer, flag);
-    }
-
-    try buf.flush();
-    try file.sync();
-}
-
-fn writeEnum(w: *Writer, @"enum": Context.Enum) !void {
-    try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
-    w.indent += 1;
-    for (@"enum".values) |value| {
-        try writeDocBlock(w, value.doc);
-        try w.printLine("{s} = {d},", .{ value.name, value.value });
-    }
-    w.indent -= 1;
-    try w.writeLine("};");
-}
-
-fn writeFlag(w: *Writer, flag: Context.Flag) !void {
-    try w.printLine("pub const {s} = packed struct(i32) {{", .{flag.name});
-    w.indent += 1;
-    for (flag.fields) |field| {
-        try writeDocBlock(w, field.doc);
-        try w.printLine("{s}: bool = {s},", .{ field.name, if (field.default) "true" else "false" });
-    }
-    if (flag.padding > 0) {
-        try w.printLine("_: u{d} = 0,", .{flag.padding});
-    }
-    for (flag.consts) |@"const"| {
-        try writeDocBlock(w, @"const".doc);
-        try w.printLine("pub const {s}: {s} = @bitCast(@as(u32, {d}));", .{ @"const".name, flag.name, @"const".value });
-    }
-    w.indent -= 1;
-    try w.writeLine("};");
-}
-
-fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
-    if (docs) |d| {
-        w.comment = .doc;
-        try w.writeLine(d);
-        w.comment = .off;
-    }
 }
 
 fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name: []const u8, return_type_orig: []const u8, comptime proc_type: ProcType, ctx: *Context) !void {
@@ -595,7 +890,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
         , .{args.items.len - 1});
         for (0..args.items.len - 1) |i| {
             if (util.isStringType(arg_types.items[i])) {
-                try w.printLine("args[{d}] = &godot.Variant.init(godot.core.String.initFromLatin1Chars({s}));", .{ i, args.items[i] });
+                try w.printLine("args[{d}] = &godot.Variant.init(godot.core.String.fromLatin1({s}));", .{ i, args.items[i] });
             } else {
                 try w.printLine("args[{d}] = &godot.Variant.init({s});", .{ i, args.items[i] });
             }
@@ -620,7 +915,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
                 , .{ i, arg });
             } else {
                 if ((proc_type != .Constructor or !util.isStringType(class_name)) and (util.isStringType(arg_type))) {
-                    try w.printLine("if(@TypeOf({2s}) == {1s}) {{ args[{0d}] = @ptrCast(&{2s}); }} else {{ args[{0d}] = @ptrCast(&{1s}.initFromLatin1Chars({2s})); }}", .{ i, arg_type, arg });
+                    try w.printLine("if(@TypeOf({2s}) == {1s}) {{ args[{0d}] = @ptrCast(&{2s}); }} else {{ args[{0d}] = @ptrCast(&{1s}.fromLatin1({2s})); }}", .{ i, arg_type, arg });
                 } else {
                     try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, arg });
                 }
@@ -791,7 +1086,7 @@ fn generateCore(ctx: *Context) !void {
         }
 
         for (ctx.all_engine_classes.items) |cls| {
-            try w.printLine("godot.getClassName({0s}).* = godot.core.StringName.initFromLatin1Chars(\"{0s}\");", .{cls});
+            try w.printLine("godot.getClassName({0s}).* = godot.core.StringName.fromLatin1(\"{0s}\");", .{cls});
         }
 
         w.indent -= 1;
@@ -852,262 +1147,6 @@ fn generateUtilityFunctions(ctx: *Context) !void {
     try file.sync();
 }
 
-fn writeModules(ctx: *Context) !void {
-    for (ctx.modules.values()) |*module| {
-        const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{module.name});
-        defer ctx.allocator.free(filename);
-
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
-
-        var buf = bufferedWriter(file.writer());
-        var writer = codeWriter(buf.writer().any());
-
-        try writeModule(&writer, module);
-
-        try buf.flush();
-        try file.sync();
-    }
-}
-
-fn writeModule(w: *Writer, module: *const Context.Module) !void {
-    for (module.functions) |*function| {
-        try writeModuleFunction(w, function);
-    }
-    try writeImports(w, &module.imports);
-}
-
-// TO DO IN CONTEXT
-// 2. Transform return type (add optional '?' prefix for pointer types)
-// 9. Generate function arguments with underscore postfix:
-//    - Handle engine class types as 'anytype'
-//    - Handle string types as 'anytype' (with exceptions)
-//    - Regular types use their actual type
-//
-// TO DO IN CODEGEN
-// 8. Generate self parameter based on proc type:
-//    - ClassMethod: 'self: anytype' ????
-// 14. Generate argument array setup:
-//     - Handle string type conversion with Latin1 chars
-// 16. Handle special return value processing:
-//     - Engine class returns: convert godot_object pointer to struct
-//     - Vararg returns: handle Variant conversion
-fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
-    try writeFunctionHeader(w, function);
-
-    try w.printLine(
-        \\const function = godot.support.bindFunction("{s}", {d});
-        \\function({s}, @ptrCast(&args), args.len);
-    , .{
-        function.name,
-        function.hash,
-        if (function.return_type != null) "@ptrCast(&out)" else "null",
-    });
-
-    try writeFunctionFooter(w, function);
-}
-
-fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
-    try writeDocBlock(w, function.doc);
-
-    // Declaration
-    try w.print("pub fn {s}(", .{function.name});
-
-    var is_first = true;
-
-    // Self
-    if (!function.is_static) {
-        try w.writeAll("self: *");
-        if (function.is_const) {
-            try w.writeAll("const ");
-        }
-        try w.writeAll("@This()");
-        is_first = false;
-    }
-
-    // Standard parameters
-    var opt: usize = function.parameters.len;
-    for (function.parameters, 0..) |param, i| {
-        if (param.default != null) {
-            opt = i;
-            break;
-        }
-        if (!is_first) {
-            try w.writeAll(", ");
-        }
-        try w.print("{s}: ", .{param.name});
-        try writeFunctionParameterType(w, param.type);
-        is_first = false;
-    }
-
-    // Variadic parameters
-    if (function.is_vararg) {
-        if (!is_first) {
-            try w.writeAll(", ");
-        }
-        try w.print("@\"...\": anytype", .{});
-        is_first = false;
-    }
-
-    // Optional parameters
-    if (opt < function.parameters.len) {
-        if (!is_first) {
-            try w.writeAll(", ");
-        }
-        try w.writeAll("opt: struct {");
-        is_first = true;
-        for (function.parameters[opt..]) |param| {
-            if (!is_first) {
-                try w.writeAll(", ");
-            }
-            try w.print("{s}: ", .{param.name});
-            try writeFunctionParameterType(w, param.type);
-            try w.print(" = {s}", .{param.default.?});
-            is_first = false;
-        }
-        try w.writeAll(" }");
-        is_first = false;
-    }
-
-    // Return type
-    try w.printLine(") {s} {{", .{function.return_type orelse "void"});
-    w.indent += 1;
-
-    // Parameter comptime type checking
-    for (function.parameters) |_| {
-        // try generateFunctionParameterTypeCheck(w, param);
-    }
-
-    // Variadic argument type checking
-    if (function.is_vararg) {
-        // try w.writeLine(
-        //     \\inline for (0..@"...".len) |i| {
-        //     \\    godot.debug.assertVariantLike(@field(@"...", i));
-        //     \\}
-        // );
-    }
-
-    // Fixed argument slice variable
-    if (!function.is_vararg) {
-        // todo: parameter comptime coercisions
-        try w.printLine("var args: [{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.len});
-        for (function.parameters[0..opt], 0..) |param, i| {
-            try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
-        }
-        for (function.parameters[opt..], opt..) |param, i| {
-            try w.printLine("args[{d}] @ptrCast(&opt.{s});", .{ i, param.name });
-        }
-    }
-
-    // Variadic argument slice variable
-    if (function.is_vararg) {
-        try w.printLine("var args: [@\"...\".len + {d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.len});
-        for (function.parameters[0..opt], 0..) |param, i| {
-            try w.printLine("args[{d}] = &godot.Variant.init(&{s});", .{ i, param.name });
-        }
-        for (function.parameters[opt..], opt..) |param, i| {
-            try w.printLine("args[{d}] = &godot.Variant.init(&opt.{s});", .{ i, param.name });
-        }
-        try w.printLine(
-            \\inline for (0..@"...".len) |i| {{
-            \\  args[{d} + i] = &godot.Variant.init(@field(@"...", i));
-            \\}}
-        , .{function.parameters.len});
-    }
-
-    // Return variable
-    if (function.return_type) |return_type| {
-        try w.printLine("var out: {s} = undefined;", .{
-            if (function.is_vararg) "godot.Variant" else return_type,
-        });
-    }
-}
-
-fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
-    // Return the value
-    if (function.return_type) |return_type| {
-        // Fixed arity functions
-        if (function.is_vararg) {
-            try w.writeLine(
-                \\return out;
-            );
-        }
-        // Variadic functions
-        if (!function.is_vararg) {
-            try w.printLine(
-                \\return out.as({s});
-            , .{return_type});
-        }
-    }
-
-    // Return for variable argument funtions
-    if (function.is_vararg and function.return_type != null) {
-        // @panic("todo");
-    }
-
-    // End function
-    w.indent -= 1;
-    try w.writeLine("}");
-}
-
-/// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
-/// checks and coercions.
-fn writeFunctionParameterType(w: *Writer, @"type": Context.Type) !void {
-    switch (@"type") {
-        .basic => |name| try w.writeAll(name),
-        else => try w.writeAll("anytype"),
-    }
-}
-
-/// Writes out code necessary to both assert that arguments are the right type, and coerce them
-/// into the form necessary to pass to the Godot function.
-fn writeFunctionParameterTypeCheck(w: *Writer, parameter: Context.Function.Parameter) !void {
-    switch (parameter.type) {
-        .class => |class| {
-            try w.printLine(
-                \\godot.debug.assertIs(godot.core.{1s}, {0s});
-            , .{ parameter.name, class });
-        },
-        .node_path => {
-            try w.printLine(
-                \\godot.debug.assertPathLike({0s});
-            , .{parameter.name});
-        },
-        .string, .string_name => {
-            try w.printLine(
-                \\godot.debug.assertStringLike({0s});
-            , .{parameter.name});
-        },
-        .variant => {
-            try w.printLine(
-                \\godot.debug.assertVariantLike({0s});
-            , .{parameter.name});
-        },
-        else => return,
-    }
-}
-
-fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
-    try w.writeLine(
-        \\const godot = @import("../root.zig");
-    );
-
-    var iter = imports.iterator();
-    while (iter.next()) |import| {
-        if (util.isBuiltinType(import.*)) continue;
-
-        if (std.mem.startsWith(u8, import.*, "Vector")) {
-            try w.printLine("const {0s} = @import(\"vector\").{0s};", .{import.*});
-        } else if (std.mem.eql(u8, import.*, "Variant")) {
-            try w.writeLine("const Variant = @import(\"../Variant.zig\").Variant;");
-        } else if (std.mem.eql(u8, import.*, "global")) {
-            try w.writeLine("const global = @import(\"global.zig\");");
-        } else {
-            try w.printLine("const {0s} = @import(\"core.zig\").{0s};", .{import.*});
-        }
-    }
-}
-
 pub const ProcType = enum {
     UtilityFunction,
     BuiltinMethod,
@@ -1121,6 +1160,8 @@ const Allocator = std.mem.Allocator;
 const bufferedWriter = std.io.bufferedWriter;
 const StringHashMap = std.StringHashMapUnmanaged;
 const fs = std.fs;
+
+const precision = @import("build_options").precision;
 
 const case = @import("case");
 const gdextension = @import("gdextension");

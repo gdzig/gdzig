@@ -9,6 +9,7 @@ pub const Iterator = StringHashMap(void).KeyIterator;
 
 pub fn deinit(self: *Imports, allocator: Allocator) void {
     self.map.deinit(allocator);
+    if (self.skip) |skip| allocator.free(skip);
 }
 
 pub fn put(self: *Imports, allocator: Allocator, name: []const u8) !void {

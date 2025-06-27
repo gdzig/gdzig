@@ -1,11 +1,11 @@
 pub inline fn bindBuiltinMethod(
-    comptime variant_type: ?comptime_int,
+    comptime T: type,
     comptime name: []const u8,
     comptime hash: comptime_int,
 ) BuiltinMethod {
     const callback = struct {
         fn callback(string_name: core.StringName) BuiltinMethod {
-            return core.variantGetPtrBuiltinMethod(variant_type orelse null, @ptrCast(&string_name.value), hash).?;
+            return core.variantGetPtrBuiltinMethod(@intFromEnum(godot.Variant.Tag.forType(T)), @ptrCast(&string_name.value), hash).?;
         }
     }.callback;
 
@@ -28,22 +28,24 @@ pub inline fn bindClassMethod(
 }
 
 pub inline fn bindConstructor(
-    comptime variant_type: comptime_int,
+    comptime T: type,
     comptime index: comptime_int,
 ) Constructor {
     const callback = struct {
         fn callback() Constructor {
-            return core.variantGetPtrConstructor(variant_type, index).?;
+            return core.variantGetPtrConstructor(@intFromEnum(godot.Variant.Tag.forType(T)), index).?;
         }
     }.callback;
 
     return bind(null, callback);
 }
 
-pub inline fn bindDestructor(variant_type: comptime_int) Destructor {
+pub inline fn bindDestructor(
+    comptime T: type,
+) Destructor {
     const callback = struct {
         fn callback() Destructor {
-            return core.variantGetPtrDestructor(variant_type).?;
+            return core.variantGetPtrDestructor(@intFromEnum(godot.Variant.Tag.forType(T))).?;
         }
     }.callback;
 
@@ -97,7 +99,7 @@ inline fn bind(
 
     if (Binding.function == null) {
         if (name) |name_| {
-            var string_name = core.StringName.initFromLatin1Chars(@ptrCast(name_));
+            var string_name = core.StringName.fromLatin1(@ptrCast(name_));
             defer string_name.deinit();
             Binding.function = callback(string_name);
         } else {

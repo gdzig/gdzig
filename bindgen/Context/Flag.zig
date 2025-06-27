@@ -62,7 +62,7 @@ pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum) !Flag {
 }
 
 pub fn deinit(self: *Flag, allocator: Allocator) void {
-    allocator.free(self.doc);
+    if (self.doc) |doc| allocator.free(doc);
     allocator.free(self.name);
     for (self.fields) |value| {
         value.deinit(allocator);

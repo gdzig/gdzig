@@ -60,7 +60,7 @@ pub fn _physics_process(self: *Self, delta: f64) void {
 
     for (self.sprites.items) |*spr| {
         const pos = spr.pos.add(spr.vel.scale(@floatCast(delta)));
-        const spr_size = spr.gd_sprite.getRect().getSize().mul(spr.gd_sprite.getScale());
+        const spr_size = spr.gd_sprite.getRect().size.mul(spr.gd_sprite.getScale());
 
         if (pos.x <= spr_size.x / 2) {
             spr.vel.x = @abs(spr.vel.x);

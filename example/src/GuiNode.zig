@@ -22,7 +22,7 @@ pub fn _enter_tree(self: *Self) void {
     godot.connect(normal_btn, "pressed", self, "on_pressed");
 
     const resource_loader = ResourceLoader.getSingleton();
-    const res_name = String.initFromLatin1Chars("res://textures/logo.png");
+    const res_name = String.fromLatin1("res://textures/logo.png");
     const texture = resource_loader.load(res_name, "", ResourceLoader.CACHE_MODE_REUSE);
     if (texture) |tex| {
         defer _ = godot.unreference(tex);
