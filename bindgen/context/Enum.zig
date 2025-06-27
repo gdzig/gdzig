@@ -38,7 +38,7 @@ pub const Value = struct {
     value: i64,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value) !Value {
-        const doc = if (api.description) |desc| try allocator.dupe(u8, desc) else null;
+        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);
@@ -64,3 +64,4 @@ const Allocator = std.mem.Allocator;
 const case = @import("case");
 
 const GodotApi = @import("../GodotApi.zig");
+const docs = @import("docs.zig");

@@ -28,6 +28,7 @@ pub fn build(b: *Build) !void {
     const mvzr = buildMvzr(b);
     const vector_z = buildVectorZ(b, opt);
     const zimdjson = buildZimdjson(b);
+    const bbcodez = buildBbcodez(b);
 
     const headers = installHeaders(b, opt);
 
@@ -44,6 +45,7 @@ pub fn build(b: *Build) !void {
     bindgen.mod.addImport("case", case.mod);
     bindgen.mod.addImport("mvzr", mvzr.mod);
     bindgen.mod.addImport("zimdjson", zimdjson.mod);
+    bindgen.mod.addImport("bbcodez", bbcodez.mod);
 
     gdzig.mod.addImport("gdextension", gdextension.mod);
     gdzig.mod.addImport("vector", vector_z.mod);
@@ -78,13 +80,15 @@ const Options = struct {
     headers: HeadersSource,
 };
 
+const GdzDependency = struct {
+    dep: *Dependency,
+    mod: *Module,
+};
+
 // Dependency: case
 fn buildCase(
     b: *Build,
-) struct {
-    dep: *Dependency,
-    mod: *Module,
-} {
+) GdzDependency {
     const dep = b.dependency("case", .{});
     const mod = dep.module("case");
 
@@ -95,10 +99,7 @@ fn buildCase(
 fn buildVectorZ(
     b: *Build,
     opt: Options,
-) struct {
-    dep: *Dependency,
-    mod: *Module,
-} {
+) GdzDependency {
     const dep = b.dependency("vector_z", .{ .precision = opt.precision });
     const mod = dep.module("vector_z");
 
@@ -108,10 +109,7 @@ fn buildVectorZ(
 // Dependency: mvzr
 fn buildMvzr(
     b: *Build,
-) struct {
-    dep: *Dependency,
-    mod: *Module,
-} {
+) GdzDependency {
     const dep = b.dependency("mvzr", .{});
     const mod = dep.module("mvzr");
 
@@ -121,12 +119,19 @@ fn buildMvzr(
 // Dependency: zimdjson
 fn buildZimdjson(
     b: *Build,
-) struct {
-    dep: *Dependency,
-    mod: *Module,
-} {
+) GdzDependency {
     const dep = b.dependency("zimdjson", .{});
     const mod = dep.module("zimdjson");
+
+    return .{ .dep = dep, .mod = mod };
+}
+
+// Dependency: bbcodez
+fn buildBbcodez(
+    b: *Build,
+) GdzDependency {
+    const dep = b.dependency("bbcodez", .{});
+    const mod = dep.module("bbcodez");
 
     return .{ .dep = dep, .mod = mod };
 }

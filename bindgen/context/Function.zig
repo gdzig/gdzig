@@ -14,7 +14,7 @@ is_const: bool,
 is_vararg: bool,
 
 pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunction) !Function {
-    const doc = if (function.description) |desc| try allocator.dupe(u8, desc) else null;
+    const doc = if (function.description) |desc| try docs.convertDocsToMarkdown(allocator, desc) else null;
     errdefer allocator.free(doc orelse "");
 
     const name = try case.allocTo(allocator, .camel, function.name);
@@ -76,3 +76,4 @@ const ArrayList = std.ArrayListUnmanaged;
 const case = @import("case");
 
 const GodotApi = @import("../GodotApi.zig");
+const docs = @import("docs.zig");

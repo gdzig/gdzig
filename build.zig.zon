@@ -27,6 +27,10 @@
             .url = "git+https://github.com/travisstaloch/simdjzon#62ca9484520a088315f3b123605d2cf108b6abf1",
             .hash = "simdjzon-0.0.1-7uNSgGddBQBshResiWQfzBc8Mt2w6WUDlsrF3HDJpWwL",
         },
+        .bbcodez = .{
+            .url = "git+https://github.com/DoubleWord-Labs/bbcodez.git#c31af9fd07a4df62c543b33874f6d0c18a78a86a",
+            .hash = "bbcodez-0.0.0-YlrOBvreAACVqcVlGADJgyXCOnDkyB1FMtqRaY4Pw8NM",
+        },
     },
     .minimum_zig_version = "0.14.0",
 
