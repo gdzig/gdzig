@@ -1,8 +1,8 @@
 pub fn generate(ctx: *Context) !void {
     try generateBuiltins(ctx);
     try generateClasses(ctx);
-    try generateGlobalEnums(ctx);
-    try generateModules(ctx);
+    try writeGlobalEnums(ctx);
+    try writeModules(ctx);
     try generateUtilityFunctions(ctx);
 
     try generateCore(ctx);
@@ -31,7 +31,7 @@ fn generateBuiltins(ctx: *Context) !void {
 }
 
 fn generateBuiltin(w: *Writer, builtin: GodotApi.Builtin, ctx: *Context) !void {
-    try generateDocBlock(w, builtin.description);
+    try writeDocBlock(w, builtin.description);
 
     // TODO: remove this
     var generated_method_map: StringHashMap(void) = .empty;
@@ -51,7 +51,7 @@ fn generateBuiltin(w: *Writer, builtin: GodotApi.Builtin, ctx: *Context) !void {
     try w.printLine("}};", .{});
 
     if (ctx.builtin_imports.get(builtin.name)) |imports| {
-        try generateImports(w, &imports);
+        try writeImports(w, &imports);
     }
 }
 
@@ -246,7 +246,7 @@ fn generateClasses(ctx: *Context) !void {
 }
 
 fn generateClass(w: *Writer, class: GodotApi.Class, ctx: *Context) !void {
-    try generateDocBlock(w, class.description);
+    try writeDocBlock(w, class.description);
 
     // TODO: remove this
     var generated_method_map: StringHashMap(void) = .empty;
@@ -272,7 +272,7 @@ fn generateClass(w: *Writer, class: GodotApi.Class, ctx: *Context) !void {
     try w.printLine("}};", .{});
 
     if (ctx.class_imports.get(class.name)) |imports| {
-        try generateImports(w, &imports);
+        try writeImports(w, &imports);
     }
 }
 
@@ -418,7 +418,7 @@ fn generateClassSingleton(w: *Writer, name: []const u8, generated_method_map: *S
     try generated_method_map.putNoClobber(ctx.allocator, "getSingleton", {});
 }
 
-fn generateGlobalEnums(ctx: *Context) !void {
+fn writeGlobalEnums(ctx: *Context) !void {
     const file = try ctx.config.output.createFile("global.zig", .{});
     defer file.close();
 
@@ -428,49 +428,49 @@ fn generateGlobalEnums(ctx: *Context) !void {
     for (ctx.enums.values()) |@"enum"| {
         // TODO: shouldSkip functions
         if (std.mem.startsWith(u8, @"enum".name, "Variant.")) continue;
-        try generateGlobalEnum(&writer, @"enum");
+        try writeEnum(&writer, @"enum");
     }
 
     for (ctx.flags.values()) |flag| {
         // TODO: shouldSkip functions
         if (std.mem.startsWith(u8, flag.name, "Variant.")) continue;
-        try generateGlobalFlag(&writer, flag);
+        try writeFlag(&writer, flag);
     }
 
     try buf.flush();
     try file.sync();
 }
 
-fn generateGlobalEnum(w: *Writer, @"enum": Context.Enum) !void {
+fn writeEnum(w: *Writer, @"enum": Context.Enum) !void {
     try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
     for (@"enum".values) |value| {
-        try generateDocBlock(w, value.doc);
+        try writeDocBlock(w, value.doc);
         try w.printLine("{s} = {d},", .{ value.name, value.value });
     }
     w.indent -= 1;
     try w.writeLine("};");
 }
 
-fn generateGlobalFlag(w: *Writer, flag: Context.Flag) !void {
+fn writeFlag(w: *Writer, flag: Context.Flag) !void {
     try w.printLine("pub const {s} = packed struct(i32) {{", .{flag.name});
     w.indent += 1;
     for (flag.fields) |field| {
-        try generateDocBlock(w, field.doc);
+        try writeDocBlock(w, field.doc);
         try w.printLine("{s}: bool = {s},", .{ field.name, if (field.default) "true" else "false" });
     }
     if (flag.padding > 0) {
         try w.printLine("_: u{d} = 0,", .{flag.padding});
     }
     for (flag.consts) |@"const"| {
-        try generateDocBlock(w, @"const".doc);
+        try writeDocBlock(w, @"const".doc);
         try w.printLine("pub const {s}: {s} = @bitCast(@as(u32, {d}));", .{ @"const".name, flag.name, @"const".value });
     }
     w.indent -= 1;
     try w.writeLine("};");
 }
 
-fn generateDocBlock(w: *Writer, docs: ?[]const u8) !void {
+fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
     if (docs) |d| {
         w.comment = .doc;
         try w.writeLine(d);
@@ -490,7 +490,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
     };
 
     if (@typeInfo(@TypeOf(fn_node)) != .null) {
-        try generateDocBlock(w, fn_node.description);
+        try writeDocBlock(w, fn_node.description);
     }
 
     if (proc_type == .Constructor) {
@@ -826,27 +826,6 @@ fn generateCore(ctx: *Context) !void {
     try file.sync();
 }
 
-fn generateImports(w: *Writer, imports: *const Context.Imports) !void {
-    try w.writeLine(
-        \\const godot = @import("../root.zig");
-    );
-
-    var iter = imports.iterator();
-    while (iter.next()) |import| {
-        if (util.isBuiltinType(import.*)) continue;
-
-        if (std.mem.startsWith(u8, import.*, "Vector")) {
-            try w.printLine("const {0s} = @import(\"vector\").{0s};", .{import.*});
-        } else if (std.mem.eql(u8, import.*, "Variant")) {
-            try w.writeLine("const Variant = @import(\"../Variant.zig\").Variant;");
-        } else if (std.mem.eql(u8, import.*, "global")) {
-            try w.writeLine("const global = @import(\"global.zig\");");
-        } else {
-            try w.printLine("const {0s} = @import(\"core.zig\").{0s};", .{import.*});
-        }
-    }
-}
-
 fn generateUtilityFunctions(ctx: *Context) !void {
     const file = try ctx.config.output.createFile("util.zig", .{});
     defer file.close();
@@ -867,13 +846,13 @@ fn generateUtilityFunctions(ctx: *Context) !void {
         }
     }
 
-    try generateImports(&writer, &imports);
+    try writeImports(&writer, &imports);
 
     try buf.flush();
     try file.sync();
 }
 
-fn generateModules(ctx: *Context) !void {
+fn writeModules(ctx: *Context) !void {
     for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{module.name});
         defer ctx.allocator.free(filename);
@@ -884,18 +863,18 @@ fn generateModules(ctx: *Context) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try generateModule(&writer, module);
+        try writeModule(&writer, module);
 
         try buf.flush();
         try file.sync();
     }
 }
 
-fn generateModule(w: *Writer, module: *const Context.Module) !void {
+fn writeModule(w: *Writer, module: *const Context.Module) !void {
     for (module.functions) |*function| {
-        try generateModuleFunction(w, function);
+        try writeModuleFunction(w, function);
     }
-    try generateImports(w, &module.imports);
+    try writeImports(w, &module.imports);
 }
 
 // TO DO IN CONTEXT
@@ -913,8 +892,8 @@ fn generateModule(w: *Writer, module: *const Context.Module) !void {
 // 16. Handle special return value processing:
 //     - Engine class returns: convert godot_object pointer to struct
 //     - Vararg returns: handle Variant conversion
-fn generateModuleFunction(w: *Writer, function: *const Context.Function) !void {
-    try generateFunctionHeader(w, function);
+fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
+    try writeFunctionHeader(w, function);
 
     try w.printLine(
         \\const function = godot.support.bindFunction("{s}", {d});
@@ -925,11 +904,11 @@ fn generateModuleFunction(w: *Writer, function: *const Context.Function) !void {
         if (function.return_type != null) "@ptrCast(&out)" else "null",
     });
 
-    try generateFunctionFooter(w, function);
+    try writeFunctionFooter(w, function);
 }
 
-fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
-    try generateDocBlock(w, function.doc);
+fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
+    try writeDocBlock(w, function.doc);
 
     // Declaration
     try w.print("pub fn {s}(", .{function.name});
@@ -957,7 +936,7 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
             try w.writeAll(", ");
         }
         try w.print("{s}: ", .{param.name});
-        try generateFunctionParameterType(w, param.type);
+        try writeFunctionParameterType(w, param.type);
         is_first = false;
     }
 
@@ -982,7 +961,7 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
                 try w.writeAll(", ");
             }
             try w.print("{s}: ", .{param.name});
-            try generateFunctionParameterType(w, param.type);
+            try writeFunctionParameterType(w, param.type);
             try w.print(" = {s}", .{param.default.?});
             is_first = false;
         }
@@ -1044,7 +1023,7 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     }
 }
 
-fn generateFunctionFooter(w: *Writer, function: *const Context.Function) !void {
+fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
     // Return the value
     if (function.return_type) |return_type| {
         // Fixed arity functions
@@ -1073,7 +1052,7 @@ fn generateFunctionFooter(w: *Writer, function: *const Context.Function) !void {
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn generateFunctionParameterType(w: *Writer, @"type": Context.Type) !void {
+fn writeFunctionParameterType(w: *Writer, @"type": Context.Type) !void {
     switch (@"type") {
         .basic => |name| try w.writeAll(name),
         else => try w.writeAll("anytype"),
@@ -1082,7 +1061,7 @@ fn generateFunctionParameterType(w: *Writer, @"type": Context.Type) !void {
 
 /// Writes out code necessary to both assert that arguments are the right type, and coerce them
 /// into the form necessary to pass to the Godot function.
-fn generateFunctionParameterTypeCheck(w: *Writer, parameter: Context.Function.Parameter) !void {
+fn writeFunctionParameterTypeCheck(w: *Writer, parameter: Context.Function.Parameter) !void {
     switch (parameter.type) {
         .class => |class| {
             try w.printLine(
@@ -1105,6 +1084,27 @@ fn generateFunctionParameterTypeCheck(w: *Writer, parameter: Context.Function.Pa
             , .{parameter.name});
         },
         else => return,
+    }
+}
+
+fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
+    try w.writeLine(
+        \\const godot = @import("../root.zig");
+    );
+
+    var iter = imports.iterator();
+    while (iter.next()) |import| {
+        if (util.isBuiltinType(import.*)) continue;
+
+        if (std.mem.startsWith(u8, import.*, "Vector")) {
+            try w.printLine("const {0s} = @import(\"vector\").{0s};", .{import.*});
+        } else if (std.mem.eql(u8, import.*, "Variant")) {
+            try w.writeLine("const Variant = @import(\"../Variant.zig\").Variant;");
+        } else if (std.mem.eql(u8, import.*, "global")) {
+            try w.writeLine("const global = @import(\"global.zig\");");
+        } else {
+            try w.printLine("const {0s} = @import(\"core.zig\").{0s};", .{import.*});
+        }
     }
 }
 
