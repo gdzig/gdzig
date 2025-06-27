@@ -897,12 +897,27 @@ fn generateModule(w: *Writer, module: *const Context.Module) !void {
     }
 }
 
+// TO DO IN CONTEXT
+// 2. Transform return type (add optional '?' prefix for pointer types)
+// 9. Generate function arguments with underscore postfix:
+//    - Handle engine class types as 'anytype'
+//    - Handle string types as 'anytype' (with exceptions)
+//    - Regular types use their actual type
+//
+// TO DO IN CODEGEN
+// 8. Generate self parameter based on proc type:
+//    - ClassMethod: 'self: anytype' ????
+// 14. Generate argument array setup:
+//     - Handle string type conversion with Latin1 chars
+// 16. Handle special return value processing:
+//     - Engine class returns: convert godot_object pointer to struct
+//     - Vararg returns: handle Variant conversion
 fn generateModuleFunction(w: *Writer, function: *const Context.Function) !void {
     try generateFunctionHeader(w, function);
 
     try w.printLine(
         \\const function = godot.support.bindFunction("{s}", {d});
-        \\function(&out, &args, args.len);
+        \\function(@ptrCast(&out), @ptrCast(&args), args.len);
     , .{ function.name, function.hash });
 
     try generateFunctionFooter(w, function);
@@ -927,7 +942,7 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     }
 
     // Standard parameters
-    var opt: ?usize = null;
+    var opt: usize = function.parameters.len;
     for (function.parameters, 0..) |param, i| {
         if (param.default != null) {
             opt = i;
@@ -936,7 +951,8 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
         if (!is_first) {
             try w.writeAll(", ");
         }
-        try w.print("{s}: {s}", .{ param.name, param.type });
+        try w.print("{s}: ", .{param.name});
+        try generateFunctionParameterType(w, param.type);
         is_first = false;
     }
 
@@ -945,22 +961,24 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
         if (!is_first) {
             try w.writeAll(", ");
         }
-        try w.print("varargs: anytype", .{});
+        try w.print("@\"...\": anytype", .{});
         is_first = false;
     }
 
     // Optional parameters
-    if (opt) |start| {
+    if (opt < function.parameters.len) {
         if (!is_first) {
             try w.writeAll(", ");
         }
         try w.writeAll("opt: struct {");
         is_first = true;
-        for (function.parameters[start..]) |param| {
+        for (function.parameters[opt..]) |param| {
             if (!is_first) {
                 try w.writeAll(", ");
             }
-            try w.print("{s}: {s} = {s}", .{ param.name, param.type, param.default.? });
+            try w.print("{s}: ", .{param.name});
+            try generateFunctionParameterType(w, param.type);
+            try w.print(" = {s}", .{param.default.?});
             is_first = false;
         }
         try w.writeAll(" }");
@@ -971,35 +989,122 @@ fn generateFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     try w.printLine(") {s} {{", .{function.return_type orelse "void"});
     w.indent += 1;
 
-    // Argument slice variable
-    try w.writeLine("var args: [_]godot.c.GDExtensionConstTypePtr = .{");
+    // Parameter comptime type checking
+    try w.writeLine("comptime {");
     w.indent += 1;
-    for (function.parameters[0..(opt orelse function.parameters.len)]) |param| {
-        try w.printLine("@ptrCast(&{s}),", .{param.name});
+    for (function.parameters) |param| {
+        try generateFunctionParameterTypeCheck(w, param);
     }
-    for (function.parameters[(opt orelse function.parameters.len)..]) |param| {
-        try w.printLine("@ptrCast(&opt.{s}),", .{param.name});
+
+    // Variadic argument type checking
+    if (function.is_vararg) {
+        try w.writeLine(
+            \\inline for (0..@"...".len) |i| {
+            \\    godot.debug.assertVariantLike(@field(@"...", i));
+            \\}
+        );
     }
     w.indent -= 1;
-    try w.writeLine("};");
+    try w.writeLine("}");
+
+    // Fixed argument slice variable
+    if (!function.is_vararg) {
+        // todo: parameter comptime coercisions
+        try w.printLine("var args: [{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.len});
+        for (function.parameters[0..opt], 0..) |param, i| {
+            try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
+        }
+        for (function.parameters[opt..], opt..) |param, i| {
+            try w.printLine("args[{d}] @ptrCast(&opt.{s});", .{ i, param.name });
+        }
+    }
+
+    // Variadic argument slice variable
+    if (function.is_vararg) {
+        try w.printLine("var args: [@\"...\".len + {d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.len});
+        for (function.parameters[0..opt], 0..) |param, i| {
+            try w.printLine("args[{d}] = &godot.Variant.initFrom(&{s});", .{ i, param.name });
+        }
+        for (function.parameters[opt..], opt..) |param, i| {
+            try w.printLine("args[{d}] = &godot.Variant.initFrom(&opt.{s});", .{ i, param.name });
+        }
+        try w.printLine(
+            \\inline for (0..@"...".len) |i| {{
+            \\  args[{d} + i] = &godot.Variant.initFrom(@field(@"...", i));
+            \\}}
+        , .{function.parameters.len});
+    }
 
     // Return variable
     if (function.return_type) |return_type| {
-        try w.printLine("var out: {s} = undefined;", .{return_type});
+        try w.printLine("var out: {s} = undefined;", .{
+            if (function.is_vararg) "godot.Variant" else return_type,
+        });
     }
 }
 
 fn generateFunctionFooter(w: *Writer, function: *const Context.Function) !void {
-    // Return
-    if (function.return_type != null) {
-        try w.writeLine(
-            \\return out;
-        );
+    // Return the value
+    if (function.return_type) |return_type| {
+        // Fixed arity functions
+        if (function.is_vararg) {
+            try w.writeLine(
+                \\return out;
+            );
+        }
+        // Variadic functions
+        if (!function.is_vararg) {
+            try w.printLine(
+                \\return out.as({s});
+            , .{return_type});
+        }
+    }
+
+    // Return for variable argument funtions
+    if (function.is_vararg and function.return_type != null) {
+        // @panic("todo");
     }
 
     // End function
     w.indent -= 1;
     try w.writeLine("}");
+}
+
+/// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
+/// checks and coercions.
+fn generateFunctionParameterType(w: *Writer, @"type": Context.Type) !void {
+    switch (@"type") {
+        .basic => |name| try w.writeAll(name),
+        else => try w.writeAll("anytype"),
+    }
+}
+
+/// Writes out code necessary to both assert that arguments are the right type, and coerce them
+/// into the form necessary to pass to the Godot function.
+fn generateFunctionParameterTypeCheck(w: *Writer, parameter: Context.Function.Parameter) !void {
+    switch (parameter.type) {
+        .class => |class| {
+            try w.printLine(
+                \\godot.debug.assertIs(godot.core.{1s}, {0s});
+            , .{ parameter.name, class });
+        },
+        .node_path => {
+            try w.printLine(
+                \\godot.debug.assertPathLike({0s});
+            , .{parameter.name});
+        },
+        .string, .string_name => {
+            try w.printLine(
+                \\godot.debug.assertStringLike({0s});
+            , .{parameter.name});
+        },
+        .variant => {
+            try w.printLine(
+                \\godot.debug.assertVariantLike({0s});
+            , .{parameter.name});
+        },
+        else => return,
+    }
 }
 
 pub const ProcType = enum {

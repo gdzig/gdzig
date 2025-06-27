@@ -396,7 +396,7 @@ fn castModules(self: *Context, allocator: Allocator) !void {
                 i = j;
                 break;
             }
-            try functions.append(allocator, try .fromUtilityFunction(allocator, function));
+            try functions.append(allocator, try .fromUtilityFunction(allocator, function, self));
         }
         module.*.functions = try functions.toOwnedSlice(allocator);
     }
