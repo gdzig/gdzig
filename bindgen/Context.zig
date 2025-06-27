@@ -3,6 +3,7 @@ const Context = @This();
 pub const Enum = @import("context/Enum.zig");
 pub const Flag = @import("context/Flag.zig");
 pub const Function = @import("context/Function.zig");
+pub const Imports = @import("context/Imports.zig");
 pub const Module = @import("context/Module.zig");
 pub const Type = @import("context/type.zig").Type;
 
@@ -514,4 +515,3 @@ const case = @import("case");
 const GodotApi = @import("GodotApi.zig");
 const util = @import("util.zig");
 const Config = @import("Config.zig");
-const Imports = @import("Imports.zig");

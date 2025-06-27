@@ -826,7 +826,7 @@ fn generateCore(ctx: *Context) !void {
     try file.sync();
 }
 
-fn generateImports(w: *Writer, imports: *const Imports) !void {
+fn generateImports(w: *Writer, imports: *const Context.Imports) !void {
     try w.writeLine(
         \\const godot = @import("../root.zig");
     );
@@ -855,7 +855,7 @@ fn generateUtilityFunctions(ctx: *Context) !void {
     var writer = codeWriter(buf.writer().any());
 
     // TODO: should be managed at a module level in Context and we should generate modules
-    var imports: Imports = .empty;
+    var imports: Context.Imports = .empty;
     defer imports.deinit(ctx.allocator);
 
     for (ctx.api.utility_functions) |function| {
@@ -1022,7 +1022,6 @@ const gdextension = @import("gdextension");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("GodotApi.zig");
-const Imports = @import("Imports.zig");
 const Writer = @import("writer.zig").AnyWriter;
 const codeWriter = @import("writer.zig").codeWriter;
 const packed_array = @import("packed_array.zig");
