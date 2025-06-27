@@ -42,7 +42,7 @@ fn generateBuiltin(w: *Writer, builtin: GodotApi.Builtin, ctx: *Context) !void {
     // TODO: refactor to generate actual members (instead of setters/getters and whatever this is)
     const size = ctx.class_sizes.get(builtin.name) orelse std.debug.panic("Could not get class size for {x}", .{builtin.name});
     try w.printLine("value: [{d}]u8,", .{size});
-    try generateBuiltinConstants(w, builtin, ctx);
+    // try generateBuiltinConstants(w, builtin, ctx);
     try generateBuiltinConstructors(w, builtin, ctx);
     try generateBuiltinMethods(w, builtin, &generated_method_map, ctx);
     try generateBuiltinMembers(w, builtin, &generated_method_map, ctx);
@@ -895,6 +895,7 @@ fn generateModule(w: *Writer, module: *const Context.Module) !void {
     for (module.functions) |*function| {
         try generateModuleFunction(w, function);
     }
+    try generateImports(w, &module.imports);
 }
 
 // TO DO IN CONTEXT
