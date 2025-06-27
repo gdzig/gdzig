@@ -548,7 +548,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
                     _ = try w.write(", ");
                 }
                 is_first_arg = false;
-                if (ctx.isEngineClass(arg_type)) {
+                if (ctx.isClass(arg_type)) {
                     try w.print("{s}: anytype", .{arg_name});
                 } else {
                     if ((proc_type != .Constructor or !util.isStringType(class_name)) and (util.isStringType(arg_type))) {
@@ -611,7 +611,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
     } else if (args.items.len > 0) {
         try w.printLine("var args:[{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{args.items.len});
         for (args.items, arg_types.items, 0..) |arg, arg_type, i| {
-            if (ctx.isEngineClass(arg_types.items[i])) {
+            if (ctx.isClass(arg_types.items[i])) {
                 try w.printLine(
                     \\if(@typeInfo(@TypeOf({1s})) == .@"struct") {{ args[{0d}] = @ptrCast(godot.getGodotObjectPtr(&{1s})); }}
                     \\else if(@typeInfo(@TypeOf({1s})) == .optional) {{ args[{0d}] = @ptrCast(godot.getGodotObjectPtr(&{1s}.?)); }}
@@ -666,7 +666,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
                     }
                 }
             } else {
-                if (ctx.isEngineClass(return_type)) {
+                if (ctx.isClass(return_type)) {
                     try w.writeLine("var godot_object:?*anyopaque = null;");
                     try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, {s}, @ptrCast(&godot_object));", .{ self_ptr, arg_array });
                     try w.printLine("result = {s}{{ .godot_object = godot_object }};", .{util.childType(return_type)});

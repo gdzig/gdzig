@@ -1,7 +1,8 @@
 const Module = @This();
 
 name: []const u8,
-functions: []Function,
+functions: []Context.Function,
+imports: Context.Imports = .empty,
 
 pub fn init(allocator: Allocator, name: []const u8) !Module {
     return Module{
@@ -18,5 +19,5 @@ pub fn deinit(self: *Module, allocator: Allocator) void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Function = @import("Function.zig");
+const Context = @import("../Context.zig");
 const GodotApi = @import("../GodotApi.zig");

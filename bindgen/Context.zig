@@ -223,6 +223,10 @@ fn collectFunctionImports(self: *Context, allocator: Allocator, function: GodotA
         try imports.put(allocator, argument.type);
     }
 
+    // TODO: remove function_imports
+    var module = self.modules.getPtr(function.category).?;
+    try module.imports.merge(allocator, &imports);
+
     try self.function_imports.put(allocator, function.name, imports);
 }
 
@@ -436,7 +440,7 @@ pub fn correctType(self: *const Context, type_name: []const u8, meta: []const u8
 
     if (self.isRefCounted(correct_type)) {
         return std.fmt.allocPrint(self.allocator, "?{s}", .{correct_type}) catch unreachable;
-    } else if (self.isEngineClass(correct_type)) {
+    } else if (self.isClass(correct_type)) {
         return std.fmt.allocPrint(self.allocator, "?{s}", .{correct_type}) catch unreachable;
     } else if (correct_type[correct_type.len - 1] == '*') {
         return std.fmt.allocPrint(self.allocator, "?*{s}", .{correct_type[0 .. correct_type.len - 1]}) catch unreachable;
@@ -497,7 +501,7 @@ pub fn isRefCounted(self: *const Context, type_name: []const u8) bool {
     return false;
 }
 
-pub fn isEngineClass(self: *const Context, type_name: []const u8) bool {
+pub fn isClass(self: *const Context, type_name: []const u8) bool {
     const real_type = util.childType(type_name);
     return std.mem.eql(u8, real_type, "Object") or self.engine_classes.contains(real_type);
 }
