@@ -4,6 +4,7 @@ pub const Enum = @import("context/Enum.zig");
 pub const Flag = @import("context/Flag.zig");
 pub const Function = @import("context/Function.zig");
 pub const Module = @import("context/Module.zig");
+pub const Type = @import("context/type.zig").Type;
 
 /// @deprecated: prefer passing allocator
 allocator: Allocator,
