@@ -3,7 +3,9 @@ const Context = @This();
 pub const Enum = @import("context/Enum.zig");
 pub const Flag = @import("context/Flag.zig");
 pub const Function = @import("context/Function.zig");
+pub const Imports = @import("context/Imports.zig");
 pub const Module = @import("context/Module.zig");
+pub const Type = @import("context/type.zig").Type;
 
 /// @deprecated: prefer passing allocator
 allocator: Allocator,
@@ -25,9 +27,9 @@ class_index: StringHashMap(usize) = .empty,
 class_imports: StringHashMap(Imports) = .empty,
 function_imports: StringHashMap(Imports) = .empty,
 
-enums: ArrayList(Enum) = .empty,
-flags: ArrayList(Flag) = .empty,
-modules: ArrayList(Module) = .empty,
+enums: StringArrayHashMap(Enum) = .empty,
+flags: StringArrayHashMap(Flag) = .empty,
+modules: StringArrayHashMap(Module) = .empty,
 
 const func_case: case.Case = .camel;
 
@@ -221,6 +223,10 @@ fn collectFunctionImports(self: *Context, allocator: Allocator, function: GodotA
         try imports.put(allocator, argument.type);
     }
 
+    // TODO: remove function_imports
+    var module = self.modules.getPtr(function.category).?;
+    try module.imports.merge(allocator, &imports);
+
     try self.function_imports.put(allocator, function.name, imports);
 }
 
@@ -359,7 +365,7 @@ fn castEnums(self: *Context, allocator: Allocator) !void {
         if (@"enum".is_bitfield) {
             continue;
         }
-        try self.enums.append(allocator, try .fromGlobalEnum(allocator, @"enum"));
+        try self.enums.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, @"enum"));
     }
 }
 
@@ -368,7 +374,7 @@ fn castFlags(self: *Context, allocator: Allocator) !void {
         if (!@"enum".is_bitfield) {
             continue;
         }
-        try self.flags.append(allocator, try .fromGlobalEnum(allocator, @"enum"));
+        try self.flags.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, @"enum"));
     }
 }
 
@@ -376,22 +382,23 @@ fn castModules(self: *Context, allocator: Allocator) !void {
     // This logic is a dumb way to group utility functions into modules
     var cur: ?*Module = null;
     for (self.api.utility_functions) |function| {
-        if (cur == null or !std.mem.eql(u8, cur.?.name, function.category)) {
-            cur = try self.modules.addOne(allocator);
+        const entry = try self.modules.getOrPut(allocator, function.category);
+        cur = entry.value_ptr;
+        if (!entry.found_existing) {
             cur.?.* = try .init(allocator, function.category);
         }
     }
     var i: usize = 0;
-    for (self.modules.items) |*module| {
+    for (self.modules.values()) |*module| {
         var functions: ArrayList(Function) = .empty;
-        for (self.api.utility_functions[i..], 1..) |function, j| {
+        for (self.api.utility_functions[i..], i..) |function, j| {
             if (!std.mem.eql(u8, module.name, function.category)) {
                 i = j;
                 break;
             }
-            try functions.append(allocator, try .fromUtilityFunction(allocator, function));
+            try functions.append(allocator, try .fromUtilityFunction(allocator, function, self));
         }
-        module.functions = try functions.toOwnedSlice(allocator);
+        module.*.functions = try functions.toOwnedSlice(allocator);
     }
 }
 
@@ -433,7 +440,7 @@ pub fn correctType(self: *const Context, type_name: []const u8, meta: []const u8
 
     if (self.isRefCounted(correct_type)) {
         return std.fmt.allocPrint(self.allocator, "?{s}", .{correct_type}) catch unreachable;
-    } else if (self.isEngineClass(correct_type)) {
+    } else if (self.isClass(correct_type)) {
         return std.fmt.allocPrint(self.allocator, "?{s}", .{correct_type}) catch unreachable;
     } else if (correct_type[correct_type.len - 1] == '*') {
         return std.fmt.allocPrint(self.allocator, "?*{s}", .{correct_type[0 .. correct_type.len - 1]}) catch unreachable;
@@ -494,7 +501,7 @@ pub fn isRefCounted(self: *const Context, type_name: []const u8) bool {
     return false;
 }
 
-pub fn isEngineClass(self: *const Context, type_name: []const u8) bool {
+pub fn isClass(self: *const Context, type_name: []const u8) bool {
     const real_type = util.childType(type_name);
     return std.mem.eql(u8, real_type, "Object") or self.engine_classes.contains(real_type);
 }
@@ -507,10 +514,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const StringHashMap = std.StringHashMapUnmanaged;
+const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");
 
 const GodotApi = @import("GodotApi.zig");
 const util = @import("util.zig");
 const Config = @import("Config.zig");
-const Imports = @import("Imports.zig");
