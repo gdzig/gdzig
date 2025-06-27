@@ -425,13 +425,13 @@ fn generateGlobalEnums(ctx: *Context) !void {
     var buf = bufferedWriter(file.writer());
     var writer = codeWriter(buf.writer().any());
 
-    for (ctx.enums.items) |@"enum"| {
+    for (ctx.enums.values()) |@"enum"| {
         // TODO: shouldSkip functions
         if (std.mem.startsWith(u8, @"enum".name, "Variant.")) continue;
         try generateGlobalEnum(&writer, @"enum");
     }
 
-    for (ctx.flags.items) |flag| {
+    for (ctx.flags.values()) |flag| {
         // TODO: shouldSkip functions
         if (std.mem.startsWith(u8, flag.name, "Variant.")) continue;
         try generateGlobalFlag(&writer, flag);

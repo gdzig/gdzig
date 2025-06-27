@@ -27,9 +27,9 @@ class_index: StringHashMap(usize) = .empty,
 class_imports: StringHashMap(Imports) = .empty,
 function_imports: StringHashMap(Imports) = .empty,
 
-enums: ArrayList(Enum) = .empty,
-flags: ArrayList(Flag) = .empty,
-modules: ArrayList(Module) = .empty,
+enums: StringArrayHashMap(Enum) = .empty,
+flags: StringArrayHashMap(Flag) = .empty,
+modules: StringArrayHashMap(Module) = .empty,
 
 const func_case: case.Case = .camel;
 
@@ -361,7 +361,7 @@ fn castEnums(self: *Context, allocator: Allocator) !void {
         if (@"enum".is_bitfield) {
             continue;
         }
-        try self.enums.append(allocator, try .fromGlobalEnum(allocator, @"enum"));
+        try self.enums.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, @"enum"));
     }
 }
 
@@ -370,7 +370,7 @@ fn castFlags(self: *Context, allocator: Allocator) !void {
         if (!@"enum".is_bitfield) {
             continue;
         }
-        try self.flags.append(allocator, try .fromGlobalEnum(allocator, @"enum"));
+        try self.flags.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, @"enum"));
     }
 }
 
@@ -378,22 +378,23 @@ fn castModules(self: *Context, allocator: Allocator) !void {
     // This logic is a dumb way to group utility functions into modules
     var cur: ?*Module = null;
     for (self.api.utility_functions) |function| {
-        if (cur == null or !std.mem.eql(u8, cur.?.name, function.category)) {
-            cur = try self.modules.addOne(allocator);
+        const entry = try self.modules.getOrPut(allocator, function.category);
+        cur = entry.value_ptr;
+        if (!entry.found_existing) {
             cur.?.* = try .init(allocator, function.category);
         }
     }
     var i: usize = 0;
-    for (self.modules.items) |*module| {
+    for (self.modules.values()) |*module| {
         var functions: ArrayList(Function) = .empty;
-        for (self.api.utility_functions[i..], 1..) |function, j| {
+        for (self.api.utility_functions[i..], i..) |function, j| {
             if (!std.mem.eql(u8, module.name, function.category)) {
                 i = j;
                 break;
             }
             try functions.append(allocator, try .fromUtilityFunction(allocator, function));
         }
-        module.functions = try functions.toOwnedSlice(allocator);
+        module.*.functions = try functions.toOwnedSlice(allocator);
     }
 }
 
@@ -509,6 +510,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const StringHashMap = std.StringHashMapUnmanaged;
+const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");
 
