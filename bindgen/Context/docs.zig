@@ -73,6 +73,8 @@ fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
 }
 
 var symbol_lookup = StringHashMap([]const u8).empty;
+
+// TODO: add support for setting a configurable base url
 const prefix = "#gdzig.";
 
 fn symbolLookup(key: []const u8, ctx: *const WriteContext) !?[]const u8 {
