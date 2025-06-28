@@ -16,6 +16,18 @@ pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Enum) !Enum {
     return self;
 }
 
+pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Enum) !Enum {
+    var self: Enum = .{};
+    errdefer self.deinit(allocator);
+
+    self.name = try allocator.dupe(u8, api.name);
+    for (api.values) |value| {
+        try self.values.put(allocator, value.name, try .init(allocator, value.description, value.name, value.value));
+    }
+
+    return self;
+}
+
 pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *const Context) !Enum {
     var self: Enum = .{};
     errdefer self.deinit(allocator);
@@ -37,6 +49,8 @@ pub fn deinit(self: *Enum, allocator: Allocator) void {
         value.deinit(allocator);
     }
     self.values.deinit(allocator);
+
+    self.* = .{};
 }
 
 pub const Value = struct {
@@ -58,6 +72,8 @@ pub const Value = struct {
     pub fn deinit(self: *Value, allocator: Allocator) void {
         if (self.doc) |doc| allocator.free(doc);
         allocator.free(self.name);
+
+        self.* = .{};
     }
 };
 

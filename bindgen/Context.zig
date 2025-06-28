@@ -1,6 +1,7 @@
 const Context = @This();
 
 pub const Builtin = @import("Context/Builtin.zig");
+pub const Class = @import("Context/Class.zig");
 pub const Constant = @import("Context/Constant.zig");
 pub const Enum = @import("Context/Enum.zig");
 pub const Flag = @import("Context/Flag.zig");
@@ -8,6 +9,8 @@ pub const Field = @import("Context/Field.zig");
 pub const Function = @import("Context/Function.zig");
 pub const Imports = @import("Context/Imports.zig");
 pub const Module = @import("Context/Module.zig");
+pub const Property = @import("Context/Property.zig");
+pub const Signal = @import("Context/Signal.zig");
 pub const Type = @import("Context/type.zig").Type;
 
 /// @deprecated: prefer passing allocator
@@ -31,6 +34,7 @@ function_imports: StringHashMap(Imports) = .empty,
 
 builtins: StringArrayHashMap(Builtin) = .empty,
 builtin_sizes: StringArrayHashMap(struct { size: usize, members: StringArrayHashMap(struct { offset: usize, meta: []const u8 }) }) = .empty,
+classes: StringArrayHashMap(Class) = .empty,
 enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
 modules: StringArrayHashMap(Module) = .empty,
@@ -65,6 +69,7 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
     try self.collectSizes(allocator);
 
     try self.castBuiltins(allocator);
+    try self.castClasses(allocator);
     try self.castEnums(allocator);
     try self.castFlags(allocator);
     try self.castModules(allocator);
@@ -398,7 +403,13 @@ fn collectSizes(self: *Context, allocator: Allocator) !void {
 
 fn castBuiltins(self: *Context, allocator: Allocator) !void {
     for (self.api.builtin_classes) |builtin| {
-        try self.builtins.put(allocator, builtin.name, try .init(allocator, builtin, self));
+        try self.builtins.put(allocator, builtin.name, try .fromApi(allocator, builtin, self));
+    }
+}
+
+fn castClasses(self: *Context, allocator: Allocator) !void {
+    for (self.api.classes) |class| {
+        try self.classes.put(allocator, class.name, try .fromApi(allocator, class, self));
     }
 }
 

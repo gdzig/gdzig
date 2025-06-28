@@ -1,7 +1,7 @@
 const Flag = @This();
 
 doc: ?[]const u8 = null,
-name: []const u8,
+name: []const u8 = "_",
 fields: []Field = &.{},
 consts: []Const = &.{},
 padding: u8 = 0,
@@ -57,27 +57,29 @@ pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *cons
         .name = name,
         .fields = try fields.toOwnedSlice(allocator),
         .consts = try consts.toOwnedSlice(allocator),
-        .padding = 32 - position,
+        .padding = 64 - position,
     };
 }
 
 pub fn deinit(self: *Flag, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
     allocator.free(self.name);
-    for (self.fields) |value| {
+    for (self.fields) |*value| {
         value.deinit(allocator);
     }
     allocator.free(self.fields);
-    for (self.consts) |@"const"| {
+    for (self.consts) |*@"const"| {
         @"const".deinit(allocator);
     }
     allocator.free(self.consts);
+
+    self.* = .{};
 }
 
 pub const Field = struct {
-    doc: ?[]const u8,
-    name: []const u8,
-    default: bool,
+    doc: ?[]const u8 = null,
+    name: []const u8 = "_",
+    default: bool = false,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, ctx: *const Context, default: i64) !Field {
         const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx) else null;
@@ -94,15 +96,17 @@ pub const Field = struct {
     }
 
     pub fn deinit(self: *Field, allocator: Allocator) void {
-        allocator.free(self.doc);
+        if (self.doc) |doc| allocator.free(doc);
         allocator.free(self.name);
+
+        self.* = .{};
     }
 };
 
 pub const Const = struct {
     doc: ?[]const u8 = null,
-    name: []const u8,
-    value: i64,
+    name: []const u8 = "_",
+    value: i64 = 0,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, ctx: *const Context) !Const {
         const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx) else null;
@@ -119,8 +123,10 @@ pub const Const = struct {
     }
 
     pub fn deinit(self: *Const, allocator: Allocator) void {
-        allocator.free(self.doc);
+        if (self.doc) |doc| allocator.free(doc);
         allocator.free(self.name);
+
+        self.* = .{};
     }
 };
 

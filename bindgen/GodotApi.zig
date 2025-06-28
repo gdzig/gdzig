@@ -131,11 +131,13 @@ pub const Class = struct {
     is_instantiable: bool,
     inherits: []const u8 = "",
     api_type: []const u8,
+
     constants: ?[]Constant = null,
     enums: ?[]Enum = null,
     methods: ?[]Method = null,
-    signals: ?[]Signal = null,
     properties: ?[]Property = null,
+    signals: ?[]Signal = null,
+
     brief_description: ?[]const u8,
     description: ?[]const u8,
 
@@ -163,17 +165,8 @@ pub const Class = struct {
         value: i64,
     };
 
-    pub const Enum = struct {
-        name: []const u8,
-        is_bitfield: bool,
-        values: []Value,
-
-        pub const Value = struct {
-            name: []const u8,
-            value: i64,
-            description: ?[]const u8 = null,
-        };
-    };
+    // The schemas are identical.
+    pub const Enum = GlobalEnum;
 
     pub const Method = struct {
         name: []const u8,
