@@ -4,6 +4,9 @@ pub const c = @import("gdextension");
 pub const core = @import("bindings/core.zig");
 pub const global = @import("bindings/core.zig").global;
 
+pub const debug = @import("debug.zig");
+pub const heap = @import("heap.zig");
+pub const meta = @import("meta.zig");
 pub const support = @import("support.zig");
 pub const Variant = @import("Variant.zig").Variant;
 
@@ -62,7 +65,7 @@ pub fn getParentClassName(comptime T: type) *core.StringName {
 }
 
 pub fn stringNameToAscii(strname: core.StringName, buf: []u8) []const u8 {
-    const str = core.String.initFromStringName(strname);
+    const str = core.String.fromStringName(strname);
     return stringToAscii(str, buf);
 }
 
@@ -214,8 +217,8 @@ pub fn registerClass(comptime T: type) void {
 
     const P = std.meta.FieldType(T, .base);
     const parent_class_name = comptime getBaseName(@typeName(P));
-    getParentClassName(T).* = core.StringName.initFromUtf8Chars(parent_class_name);
-    getClassName(T).* = core.StringName.initFromUtf8Chars(class_name);
+    getParentClassName(T).* = core.StringName.fromUtf8(parent_class_name);
+    getClassName(T).* = core.StringName.fromUtf8(class_name);
 
     const PerClassData = struct {
         pub var class_info = init_blk: {
@@ -532,7 +535,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     const p_method = @field(T, name);
     const MethodBinder = MethodBinderT(@TypeOf(p_method));
 
-    MethodBinder.method_name = core.StringName.initFromLatin1Chars(name);
+    MethodBinder.method_name = core.StringName.fromLatin1(name);
     MethodBinder.arg_metadata[0] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
     MethodBinder.arg_properties[0] = c.GDExtensionPropertyInfo{
         .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ReturnType.?)),
@@ -600,9 +603,9 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 
     if (arguments.len > 0) {
-        core.classdbRegisterExtensionClassSignal(core.p_library, getClassName(T), &core.StringName.initFromLatin1Chars(signal_name), &propertyies[0], @intCast(arguments.len));
+        core.classdbRegisterExtensionClassSignal(core.p_library, getClassName(T), &core.StringName.fromLatin1(signal_name), &propertyies[0], @intCast(arguments.len));
     } else {
-        core.classdbRegisterExtensionClassSignal(core.p_library, getClassName(T), &core.StringName.initFromLatin1Chars(signal_name), null, 0);
+        core.classdbRegisterExtensionClassSignal(core.p_library, getClassName(T), &core.StringName.fromLatin1(signal_name), null, 0);
     }
 }
 
@@ -610,8 +613,9 @@ pub fn connect(godot_object: anytype, signal_name: [:0]const u8, instance: anyty
     if (@typeInfo(@TypeOf(instance)) != .pointer) {
         @compileError("pointer type expected for parameter 'instance'");
     }
+    // TODO: I think this is a memory leak??
     registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = core.Callable.initFromObjectStringName(instance, method_name);
+    const callable = core.Callable.initObjectMethod(.{ .godot_object = getGodotObjectPtr(instance).* }, .fromComptimeLatin1(method_name));
     _ = godot_object.connect(signal_name, callable, 0);
 }
 
@@ -624,7 +628,7 @@ pub fn init() void {
 pub fn deinit() void {
     var key_iter = registered_classes.keyIterator();
     while (key_iter.next()) |it| {
-        var class_name = core.StringName.initFromUtf8Chars(it.*);
+        var class_name = core.StringName.fromUtf8(it.*);
         core.classdbUnregisterExtensionClass(core.p_library, @ptrCast(&class_name));
     }
 
@@ -656,8 +660,8 @@ pub const PropertyInfo = struct {
         return .{
             .type = @"type",
             .name = name,
-            .hint_string = core.String.initFromUtf8Chars("test property"),
-            .class_name = core.StringName.initFromLatin1Chars(""),
+            .hint_string = core.String.fromUtf8("test property"),
+            .class_name = core.StringName.fromLatin1(""),
             .hint = @intFromEnum(global.PropertyHint.property_hint_none),
             .usage = @bitCast(global.PropertyUsage.property_usage_default),
         };
@@ -674,3 +678,7 @@ pub const PropertyInfo = struct {
         };
     }
 };
+
+comptime {
+    _ = Variant;
+}

@@ -129,16 +129,22 @@ pub fn _get_property_list(_: *Self) []const PropertyInfo {
         var properties: [32]PropertyInfo = undefined;
     };
 
-    C.properties[0] = PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.initFromLatin1Chars(property1_name));
-    C.properties[1] = PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.initFromLatin1Chars(property2_name));
+    C.properties[0] = PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromLatin1(property1_name));
+    C.properties[1] = PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromLatin1(property2_name));
 
     return C.properties[0..2];
 }
 
 pub fn _property_can_revert(_: *Self, name: StringName) bool {
-    if (name.casecmpTo(property1_name) == 0) {
+    var prop1 = String.fromLatin1(property1_name);
+    defer prop1.deinit();
+
+    var prop2 = String.fromLatin1(property2_name);
+    defer prop2.deinit();
+
+    if (name.casecmpTo(prop1) == 0) {
         return true;
-    } else if (name.casecmpTo(property2_name) == 0) {
+    } else if (name.casecmpTo(prop2) == 0) {
         return true;
     }
 
@@ -146,10 +152,16 @@ pub fn _property_can_revert(_: *Self, name: StringName) bool {
 }
 
 pub fn _property_get_revert(_: *Self, name: StringName, value: *Variant) bool {
-    if (name.casecmpTo(property1_name) == 0) {
+    var prop1 = String.fromLatin1(property1_name);
+    defer prop1.deinit();
+
+    var prop2 = String.fromLatin1(property2_name);
+    defer prop2.deinit();
+
+    if (name.casecmpTo(prop1) == 0) {
         value.* = Variant.init(Vector3.new(42, 42, 42));
         return true;
-    } else if (name.casecmpTo(property2_name) == 0) {
+    } else if (name.casecmpTo(prop2) == 0) {
         value.* = Variant.init(Vector3.new(24, 24, 24));
         return true;
     }
@@ -158,10 +170,16 @@ pub fn _property_get_revert(_: *Self, name: StringName, value: *Variant) bool {
 }
 
 pub fn _set(self: *Self, name: StringName, value: Variant) bool {
-    if (name.casecmpTo(property1_name) == 0) {
+    var prop1 = String.fromLatin1(property1_name);
+    defer prop1.deinit();
+
+    var prop2 = String.fromLatin1(property2_name);
+    defer prop2.deinit();
+
+    if (name.casecmpTo(prop1) == 0) {
         self.property1 = value.as(Vector3);
         return true;
-    } else if (name.casecmpTo(property2_name) == 0) {
+    } else if (name.casecmpTo(prop2) == 0) {
         self.property2 = value.as(Vector3);
         return true;
     }
@@ -170,10 +188,16 @@ pub fn _set(self: *Self, name: StringName, value: Variant) bool {
 }
 
 pub fn _get(self: *Self, name: StringName, value: *Variant) bool {
-    if (name.casecmpTo(property1_name) == 0) {
+    var prop1 = String.fromLatin1(property1_name);
+    defer prop1.deinit();
+
+    var prop2 = String.fromLatin1(property2_name);
+    defer prop2.deinit();
+
+    if (name.casecmpTo(prop1) == 0) {
         value.* = Variant.init(self.property1);
         return true;
-    } else if (name.casecmpTo(property2_name) == 0) {
+    } else if (name.casecmpTo(prop2) == 0) {
         value.* = Variant.init(self.property2);
         return true;
     }
@@ -182,7 +206,7 @@ pub fn _get(self: *Self, name: StringName, value: *Variant) bool {
 }
 
 pub fn _to_string(_: *Self) ?String {
-    return String.initFromLatin1Chars("ExampleNode");
+    return String.fromLatin1("ExampleNode");
 }
 
 const std = @import("std");

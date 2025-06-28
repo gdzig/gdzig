@@ -1,10 +1,8 @@
 [
   {
     "label": "run example",
-    "command": "zig build run",
-    "cwd": "example",
+    "command": "cd example; zig build run",
     "reveal_target": "dock",
-    "hide": "on_success",
     "use_new_terminal": false
   },
   {

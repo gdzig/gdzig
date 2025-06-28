@@ -1,4 +1,6 @@
 pub const Type = union(enum) {
+    void: void,
+
     /// Basic types with no special handling
     basic: []const u8,
     /// Godot Strings, used for string coercion
@@ -14,14 +16,32 @@ pub const Type = union(enum) {
     /// Some properties accept more than one type, like "ParticleProcessMaterial,ShaderMaterial"
     many: []Type,
 
-    const special_types: std.StaticStringMap(Type) = .initComptime(.{
+    const string_map: std.StaticStringMap(Type) = .initComptime(.{
         .{ "String", .string },
         .{ "StringName", .string_name },
         .{ "NodePath", .node_path },
         .{ "Variant", .variant },
+        .{ "float", Type{ .basic = "f64" } },
+        .{ "double", Type{ .basic = "f64" } },
+        .{ "char32", Type{ .basic = "u32" } },
+        .{ "float", Type{ .basic = "f32" } },
+        .{ "double", Type{ .basic = "f64" } },
+        .{ "int", Type{ .basic = "i64" } },
+        .{ "int8", Type{ .basic = "i8" } },
+        .{ "int16", Type{ .basic = "i16" } },
+        .{ "int32", Type{ .basic = "i32" } },
+        .{ "int64", Type{ .basic = "i64" } },
+        .{ "uint8", Type{ .basic = "u8" } },
+        .{ "uint16", Type{ .basic = "u16" } },
+        .{ "uint32", Type{ .basic = "u32" } },
+        .{ "uint64", Type{ .basic = "u64" } },
     });
 
-    pub fn from(allocator: Allocator, name: []const u8, ctx: *const Context) !Type {
+    const meta_overrides: std.StaticStringMap(Type) = .initComptime(.{
+        .{ "float", Type{ .basic = "f32" } },
+    });
+
+    pub fn from(allocator: Allocator, name: []const u8, is_meta: bool, ctx: *const Context) !Type {
         const n = mem.count(u8, name, ",");
         if (n > 0) {
             const types = try allocator.alloc(Type, n);
@@ -29,7 +49,12 @@ pub const Type = union(enum) {
             return .{ .many = types };
         }
 
-        if (special_types.get(name)) |@"type"| {
+        if (is_meta) {
+            if (meta_overrides.get(name)) |@"type"| {
+                return @"type";
+            }
+        }
+        if (string_map.get(name)) |@"type"| {
             return @"type";
         }
 
@@ -63,5 +88,7 @@ pub const Type = union(enum) {
 const std = @import("std");
 const Allocator = mem.Allocator;
 const mem = std.mem;
+
+const precision = @import("build_options").precision;
 
 const Context = @import("../Context.zig");

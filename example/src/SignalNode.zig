@@ -5,8 +5,8 @@ color_rect: ColorRect = undefined,
 
 pub fn _bind_methods() void {
     godot.registerSignal(Self, "signal1", &[_]PropertyInfo{
-        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_STRING, StringName.initFromLatin1Chars("name")),
-        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.initFromLatin1Chars("position")),
+        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_STRING, StringName.fromComptimeLatin1("name")),
+        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromComptimeLatin1("position")),
     });
 
     godot.registerSignal(Self, "signal2", &.{});
@@ -37,7 +37,7 @@ pub fn _enter_tree(self: *Self) void {
     self.color_rect = ColorRect.init();
     self.color_rect.setPosition(Vector2.new(400, 400), false);
     self.color_rect.setSize(Vector2.new(100, 100), false);
-    self.color_rect.setColor(Color.initFromF64F64F64F64(1, 0, 0, 1));
+    self.color_rect.setColor(Color.initRGBA(1, 0, 0, 1));
     self.base.addChild(self.color_rect, false, Node.INTERNAL_MODE_DISABLED);
 
     godot.connect(signal1_btn, "pressed", self, "emitSignal1");
@@ -59,15 +59,16 @@ pub fn onSignal1(_: *Self, name: StringName, position: Vector3) void {
 }
 
 pub fn onSignal2(self: *Self) void {
-    self.color_rect.setColor(Color.initFromF64F64F64F64(0, 1, 0, 1));
+    std.debug.print("{} {}\n", .{ self.color_rect, Color.initRGBA(0, 1, 0, 1) });
+    self.color_rect.setColor(Color.initRGBA(0, 1, 0, 1));
 }
 
 pub fn onSignal3(self: *Self) void {
-    self.color_rect.setColor(Color.initFromF64F64F64F64(1, 0, 0, 1));
+    self.color_rect.setColor(Color.initRGBA(1, 0, 0, 1));
 }
 
 pub fn emitSignal1(self: *Self) void {
-    _ = self.base.emitSignal("signal1", .{ String.initFromLatin1Chars("test_signal_name"), Vector3.new(123, 321, 333) });
+    _ = self.base.emitSignal("signal1", .{ String.fromLatin1("test_signal_name"), Vector3.new(123, 321, 333) });
 }
 pub fn emitSignal2(self: *Self) void {
     _ = self.base.emitSignal("signal2", .{});

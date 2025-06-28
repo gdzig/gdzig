@@ -56,5 +56,5 @@ comptime {
 }
 
 test {
-    _ = @import("context/docs.zig");
+    _ = @import("Context/docs.zig");
 }

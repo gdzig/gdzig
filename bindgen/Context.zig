@@ -1,11 +1,14 @@
 const Context = @This();
 
-pub const Enum = @import("context/Enum.zig");
-pub const Flag = @import("context/Flag.zig");
-pub const Function = @import("context/Function.zig");
-pub const Imports = @import("context/Imports.zig");
-pub const Module = @import("context/Module.zig");
-pub const Type = @import("context/type.zig").Type;
+pub const Builtin = @import("Context/Builtin.zig");
+pub const Constant = @import("Context/Constant.zig");
+pub const Enum = @import("Context/Enum.zig");
+pub const Flag = @import("Context/Flag.zig");
+pub const Field = @import("Context/Field.zig");
+pub const Function = @import("Context/Function.zig");
+pub const Imports = @import("Context/Imports.zig");
+pub const Module = @import("Context/Module.zig");
+pub const Type = @import("Context/type.zig").Type;
 
 /// @deprecated: prefer passing allocator
 allocator: Allocator,
@@ -13,7 +16,6 @@ api: GodotApi,
 config: Config,
 
 all_engine_classes: ArrayList([]const u8) = .empty,
-class_sizes: StringHashMap(i64) = .empty,
 depends: ArrayList([]const u8) = .empty,
 engine_classes: StringHashMap(bool) = .empty,
 func_docs: StringHashMap([]const u8) = .empty,
@@ -27,6 +29,8 @@ class_index: StringHashMap(usize) = .empty,
 class_imports: StringHashMap(Imports) = .empty,
 function_imports: StringHashMap(Imports) = .empty,
 
+builtins: StringArrayHashMap(Builtin) = .empty,
+builtin_sizes: StringArrayHashMap(struct { size: usize, members: StringArrayHashMap(struct { offset: usize, meta: []const u8 }) }) = .empty,
 enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
 modules: StringArrayHashMap(Module) = .empty,
@@ -54,17 +58,18 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
         .config = config,
     };
 
-    try self.collectExports(allocator);
-
     try self.parseGdExtensionHeaders();
-    try self.parseClassSizes();
     try self.parseSingletons();
     try self.parseClasses();
 
+    try self.collectSizes(allocator);
+
+    try self.castBuiltins(allocator);
     try self.castEnums(allocator);
     try self.castFlags(allocator);
     try self.castModules(allocator);
 
+    try self.collectExports(allocator);
     try self.collectImports(allocator);
 
     return self;
@@ -73,7 +78,7 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
 pub fn deinit(self: *Context) void {
     self.all_classes.deinit(self.allocator);
     self.all_engine_classes.deinit(self.allocator);
-    self.class_sizes.deinit(self.allocator);
+    self.builtin_sizes.deinit(self.allocator);
     self.depends.deinit(self.allocator);
     self.engine_classes.deinit(self.allocator);
     self.func_docs.deinit(self.allocator);
@@ -130,6 +135,14 @@ fn collectExports(self: *Context, allocator: Allocator) !void {
         });
         try self.all_engine_classes.append(allocator, class.name);
     }
+
+    for (self.modules.values()) |module| {
+        try self.core_exports.append(allocator, .{
+            .ident = module.name,
+            .file = module.name,
+            .path = null,
+        });
+    }
 }
 
 fn collectImports(self: *Context, allocator: Allocator) !void {
@@ -176,6 +189,10 @@ fn collectBuiltinImports(self: *Context, allocator: Allocator, builtin: GodotApi
     }
 
     try self.builtin_imports.put(allocator, builtin.name, imports);
+
+    if (self.builtins.getPtr(builtin.name)) |context_builtin| {
+        try context_builtin.imports.merge(allocator, &imports);
+    }
 }
 
 fn collectClassImports(self: *Context, allocator: Allocator, class: GodotApi.Class) !void {
@@ -241,18 +258,6 @@ fn parseClasses(self: *Context) !void {
 
     for (self.api.native_structures) |ns| {
         try self.engine_classes.put(self.allocator, ns.name, false);
-    }
-}
-
-fn parseClassSizes(self: *Context) !void {
-    for (self.api.builtin_class_sizes) |bcs| {
-        if (!std.mem.eql(u8, bcs.build_configuration, self.config.buildConfiguration())) {
-            continue;
-        }
-
-        for (bcs.sizes) |sz| {
-            try self.class_sizes.put(self.allocator, sz.name, sz.size);
-        }
     }
 }
 
@@ -357,6 +362,43 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             doc_start = null;
             doc_end = null;
         };
+    }
+}
+
+fn collectSizes(self: *Context, allocator: Allocator) !void {
+    // Update size for all builtins
+    for (self.api.builtin_class_sizes) |config| {
+        if (!std.mem.eql(u8, config.build_configuration, self.config.buildConfiguration())) {
+            continue;
+        }
+        for (config.sizes) |info| {
+            try self.builtin_sizes.put(allocator, info.name, .{
+                .size = @intCast(info.size),
+                .members = .empty,
+            });
+        }
+    }
+
+    // Update member offests and "meta" types for all builtins
+    for (self.api.builtin_class_member_offsets) |config| {
+        if (!std.mem.eql(u8, config.build_configuration, self.config.buildConfiguration())) {
+            continue;
+        }
+        for (config.classes) |builtin_config| {
+            const builtin = self.builtin_sizes.getPtr(builtin_config.name).?;
+            for (builtin_config.members) |member_config| {
+                try builtin.members.put(allocator, member_config.member, .{
+                    .offset = @intCast(member_config.offset),
+                    .meta = member_config.meta,
+                });
+            }
+        }
+    }
+}
+
+fn castBuiltins(self: *Context, allocator: Allocator) !void {
+    for (self.api.builtin_classes) |builtin| {
+        try self.builtins.put(allocator, builtin.name, try .init(allocator, builtin, self));
     }
 }
 
