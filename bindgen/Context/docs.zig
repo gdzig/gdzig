@@ -1,7 +1,37 @@
 const Element = enum {
+    // code blocks
     codeblock,
     codeblocks,
+    gdscript,
+    csharp,
+
+    // links
+    method,
+    member,
+
+    // basic
+    param,
+    bool,
+    int,
+    float,
 };
+
+pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u8 {
+    var doc = try Document.loadFromBuffer(allocator, input, .{
+        .verbatim_tags = verbatim_tags,
+        .tokenizer_options = TokenizerOptions{
+            .equals_required_in_parameters = false,
+        },
+    });
+    defer doc.deinit();
+
+    var output = ArrayList(u8){};
+    try bbcodez.fmt.md.renderDocument(allocator, doc, output.writer(allocator).any(), .{
+        .write_element_fn = writeElement,
+    });
+
+    return output.toOwnedSlice(allocator);
+}
 
 fn writeElement(node: Node, context: ?*anyopaque) anyerror!bool {
     const ctx: *Context = @alignCast(@ptrCast(context));
@@ -9,8 +39,26 @@ fn writeElement(node: Node, context: ?*anyopaque) anyerror!bool {
 
     return switch (el) {
         .codeblocks => try writeCodeblocks(node, ctx),
-        .codeblock => try writeCodeblock(node, ctx),
+        .codeblock, .gdscript, .csharp => try writeCodeblock(node, ctx),
+        .param => try writeParam(node, ctx),
+        .bool, .int, .float => try writeBasicType(node, ctx),
+        .method => try writeMethod(node, ctx),
+        .member => try writeMember(node, ctx),
     };
+}
+
+fn writeMember(node: Node, ctx: *Context) anyerror!bool {
+    // TODO: make it a link
+    const member_name = try node.getValue() orelse return false;
+    try ctx.writer.print("`{s}`", .{member_name});
+    return true;
+}
+
+fn writeMethod(node: Node, ctx: *Context) anyerror!bool {
+    // TODO: make it a link
+    const method_name = try node.getValue() orelse return false;
+    try ctx.writer.print("`{s}`", .{method_name});
+    return true;
 }
 
 fn writeCodeblock(node: Node, ctx: *Context) anyerror!bool {
@@ -35,29 +83,24 @@ fn writeCodeblocks(node: Node, ctx: *Context) anyerror!bool {
     return true;
 }
 
+fn writeParam(node: Node, ctx: *Context) anyerror!bool {
+    const param_name = try node.getValue() orelse return false;
+    try ctx.writer.print("`{s}`", .{param_name});
+    return true;
+}
+
+fn writeBasicType(node: Node, ctx: *Context) anyerror!bool {
+    const type_name = node.getName() catch return false;
+    try ctx.writer.print("`{s}`", .{type_name});
+    return true;
+}
+
 const verbatim_tags = &[_][]const u8{
     "code",
     "gdscript",
     "csharp",
     "codeblock",
 };
-
-pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u8 {
-    var doc = try Document.loadFromBuffer(allocator, input, .{
-        .verbatim_tags = verbatim_tags,
-        .tokenizer_options = TokenizerOptions{
-            .equals_required_in_parameters = false,
-        },
-    });
-    defer doc.deinit();
-
-    var output = ArrayList(u8){};
-    try bbcodez.fmt.md.renderDocument(allocator, doc, output.writer(allocator).any(), .{
-        .write_element_fn = writeElement,
-    });
-
-    return output.toOwnedSlice(allocator);
-}
 
 test "convertDocsToMarkdown" {
     const bbcode =
