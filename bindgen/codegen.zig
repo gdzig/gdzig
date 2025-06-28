@@ -1027,19 +1027,9 @@ fn generateCore(ctx: *Context) !void {
         }
 
         for (ctx.all_engine_classes.items) |cls| {
-            try w.printLine("godot.getClassName({0s}).* = godot.core.StringName.fromLatin1(\"{0s}\");", .{cls});
+            try w.printLine("godot.getClassName({0s}).* = godot.core.StringName.fromComptimeLatin1(\"{0s}\");", .{cls});
         }
 
-        w.indent -= 1;
-        try w.writeLine("}");
-    }
-
-    { // TODO: Separate function generateCoreDeinit
-        try w.writeLine("pub fn deinitCore() void {");
-        w.indent += 1;
-        for (ctx.all_engine_classes.items) |cls| {
-            try w.printLine("godot.getClassName({0s}).deinit();", .{cls});
-        }
         w.indent -= 1;
         try w.writeLine("}");
     }
