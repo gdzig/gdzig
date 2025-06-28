@@ -13,6 +13,8 @@ base: ?[]const u8 = null,
 /// The name of the base type used in `extension_api.json`
 base_api: ?[]const u8 = null,
 
+/// Is this class a singleton (can only have one instant)?
+is_singleton: bool = false,
 /// Can this type be instantiated directly with no arguments
 is_instantiable: bool = false,
 /// Is this a reference counted type
@@ -136,6 +138,10 @@ pub fn deinit(self: *Class, allocator: Allocator) void {
     self.imports.deinit(allocator);
 
     self.* = .{};
+}
+
+pub fn getBase(self: *const Class, ctx: *const Context) ?*Class {
+    return if (self.base) |base| ctx.classes.getPtr(base) else null;
 }
 
 const std = @import("std");
