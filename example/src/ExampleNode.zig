@@ -218,17 +218,17 @@ pub fn _toString(_: *Self) ?String {
 
 const std = @import("std");
 const godot = @import("gdzig");
-const Control = godot.core.Control;
-const Engine = godot.core.Engine;
-const HSplitContainer = godot.core.HSplitContainer;
-const ItemList = godot.core.ItemList;
-const Label = godot.core.Label;
-const Node = godot.core.Node;
-const PanelContainer = godot.core.PanelContainer;
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const HSplitContainer = godot.class.HSplitContainer;
+const ItemList = godot.class.ItemList;
+const Label = godot.class.Label;
+const Node = godot.class.Node;
+const PanelContainer = godot.class.PanelContainer;
 const PropertyInfo = godot.PropertyInfo;
-const String = godot.core.String;
-const StringName = godot.core.StringName;
-const Variant = godot.Variant;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+const Variant = godot.builtin.Variant;
 const Vector3 = godot.Vector3;
 
 const SpritesNode = @import("SpriteNode.zig");

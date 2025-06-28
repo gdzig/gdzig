@@ -71,13 +71,13 @@ pub fn on_toggled(self: *Self, toggled_on: bool) void {
 
 const std = @import("std");
 const godot = @import("gdzig");
-const Base = godot.core.Control;
-const Button = godot.core.Button;
-const CheckBox = godot.core.CheckBox;
-const Engine = godot.core.Engine;
-const ResourceLoader = godot.core.ResourceLoader;
-const Node = godot.core.Node
-const Sprite2D = godot.core.Sprite2D;
-const String = godot.core.String;
-const Vec2 = godot.core.Vector2;
+const Base = godot.class.Control;
+const Button = godot.class.Button;
+const CheckBox = godot.class.CheckBox;
+const Engine = godot.class.Engine;
+const ResourceLoader = godot.class.ResourceLoader;
+const Node = godot.class.Node
+const Sprite2D = godot.class.Sprite2D;
+const String = godot.builtin.String;
+const Vec2 = godot.builtin.Vector2;
 ```

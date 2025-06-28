@@ -3,6 +3,8 @@ const Class = @This();
 /// Markdown formatted docblock
 doc: ?[]const u8 = null,
 
+module: []const u8 = "",
+
 /// The normalized name of the type
 name: []const u8 = "_",
 /// The name of the type used in `extension_api.json`
@@ -61,6 +63,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         break :blk try allocator.dupe(u8, api.name);
     };
     self.name_api = api.name;
+
+    self.module = try case.allocTo(allocator, .snake, self.name);
 
     // Base
     self.base = if (api.inherits) |inherits| blk: {
@@ -136,6 +140,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
 pub fn deinit(self: *Class, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
+    allocator.free(self.module);
     allocator.free(self.name);
     if (self.base) |base| allocator.free(base);
 
@@ -189,6 +194,8 @@ pub fn getNearestSingleton(self: *const Class, ctx: *const Context) ?*const Clas
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
+
+const case = @import("case");
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;

@@ -1,7 +1,9 @@
 const Flag = @This();
 
 doc: ?[]const u8 = null,
+module: []const u8 = "",
 name: []const u8 = "_",
+name_api: []const u8 = "_",
 fields: StringArrayHashMap(Field) = .empty,
 consts: StringArrayHashMap(Const) = .empty,
 padding: u8 = 0,
@@ -12,6 +14,8 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     errdefer self.deinit(allocator);
 
     self.name = try allocator.dupe(u8, api.name);
+    self.name_api = api.name;
+    self.module = try case.allocTo(allocator, .snake, self.name);
 
     var default: i64 = 0;
     var position: u8 = 0;
@@ -59,6 +63,7 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
 
 pub fn deinit(self: *Flag, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
+    allocator.free(self.module);
     allocator.free(self.name);
 
     for (self.fields.values()) |*value| {

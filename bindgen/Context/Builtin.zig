@@ -1,18 +1,19 @@
 const Builtin = @This();
 
 doc: ?[]const u8 = null,
+module: []const u8 = "",
 name: []const u8 = "_",
-api_name: []const u8 = "_",
+name_api: []const u8 = "_",
 
 size: usize = 0,
 
 has_destructor: bool = false,
 
-constants: StringHashMap(Constant) = .empty,
+constants: StringArrayHashMap(Constant) = .empty,
 constructors: ArrayList(Function) = .empty,
-enums: StringHashMap(Enum) = .empty,
+enums: StringArrayHashMap(Enum) = .empty,
 fields: StringArrayHashMap(Field) = .empty,
-methods: StringHashMap(Function) = .empty,
+methods: StringArrayHashMap(Function) = .empty,
 
 imports: Imports = .empty,
 
@@ -27,7 +28,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         // break try case.allocTo(allocator, .pascal, api.name);
         break :blk try allocator.dupe(u8, api.name);
     };
-    self.api_name = api.name;
+    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.name_api = api.name;
     self.size = size_config.size;
     self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
     self.has_destructor = api.has_destructor;
@@ -77,10 +79,10 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
 pub fn deinit(self: *Builtin, allocator: Allocator) void {
     if (self.doc) |d| allocator.free(d);
+    allocator.free(self.module);
     allocator.free(self.name);
 
-    var constants = self.constants.valueIterator();
-    while (constants.next()) |constant| {
+    for (self.constants.values()) |*constant| {
         constant.deinit(allocator);
     }
     self.constants.deinit(allocator);
@@ -90,8 +92,7 @@ pub fn deinit(self: *Builtin, allocator: Allocator) void {
     }
     self.constructors.deinit(allocator);
 
-    var enums = self.enums.valueIterator();
-    while (enums.next()) |@"enum"| {
+    for (self.enums.values()) |*@"enum"| {
         @"enum".deinit(allocator);
     }
     self.enums.deinit(allocator);
@@ -101,8 +102,7 @@ pub fn deinit(self: *Builtin, allocator: Allocator) void {
     }
     self.fields.deinit(allocator);
 
-    var methods = self.methods.valueIterator();
-    while (methods.next()) |method| {
+    for (self.methods.values()) |*method| {
         method.deinit(allocator);
     }
     self.methods.deinit(allocator);
@@ -116,7 +116,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
-const StringHashMap = std.StringHashMapUnmanaged;
+
+const case = @import("case");
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;

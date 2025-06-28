@@ -91,8 +91,8 @@ pub fn downcast(comptime T: type, value: anytype) !T {
 
     // Runtime cast
     const name = getNamePtr(T);
-    const tag = godot.core.classdbGetClassTag(@ptrCast(name));
-    const result = godot.core.objectCastTo(asObjectPtr(value), tag);
+    const tag = godot.interface.classdbGetClassTag(@ptrCast(name));
+    const result = godot.interface.objectCastTo(asObjectPtr(value), tag);
 
     return if (result) |ptr|
         return @bitCast(Object{ .ptr = ptr })
@@ -129,16 +129,16 @@ pub fn asRefCounted(value: anytype) RefCounted {
 }
 
 pub fn isPathLike(comptime T: type) bool {
-    return isAny(.{ godot.core.NodePath, []const u8, [:0]const u8 }, T);
+    return isAny(.{ godot.builtin.NodePath, []const u8, [:0]const u8 }, T);
 }
 
 pub fn isStringLike(comptime T: type) bool {
-    return isAny(.{ godot.core.String, godot.core.StringName, []const u8, [:0]const u8 }, T);
+    return isAny(.{ godot.builtin.String, godot.builtin.StringName, []const u8, [:0]const u8 }, T);
 }
 
 pub fn isVariantLike(comptime T: type) bool {
     // TODO: variant types
-    return isAny(.{godot.core.Variant}, T);
+    return isAny(.{godot.builtin.Variant}, T);
 }
 
 pub fn Deref(comptime T: type) type {
@@ -170,17 +170,17 @@ const std = @import("std");
 const fmt = std.fmt;
 const Tuple = std.meta.Tuple;
 
-const godot = @import("root.zig");
+const godot = @import("gdzig.zig");
 const assertIs = godot.debug.assertIs;
-const Object = godot.core.Object;
-const RefCounted = godot.core.RefCounted;
-const StringName = godot.core.StringName;
+const Object = godot.class.Object;
+const RefCounted = godot.class.RefCounted;
+const StringName = godot.builtin.StringName;
 
 const tests = struct {
     const testing = std.testing;
-    const Node = godot.core.Node;
-    const Node3D = godot.core.Node3D;
-    const Resource = godot.core.Resource;
+    const Node = godot.class.Node;
+    const Node3D = godot.class.Node3D;
+    const Resource = godot.class.Resource;
 
     test "BaseOf" {
         try testing.expectEqual(Object, BaseOf(Node));

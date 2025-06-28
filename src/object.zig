@@ -7,18 +7,18 @@ pub fn create(comptime T: type) !*T {
     const base_name = meta.getNamePtr(meta.BaseOf(T));
 
     // TODO: shouldn't we use Godot's allocator? can this be done without a double allocation?
-    const ptr = core.classdbConstructObject2(@ptrCast(base_name)).?;
-    const self = try godot.general_allocator.create(T);
+    const ptr = godot.interface.classdbConstructObject2(@ptrCast(base_name)).?;
+    const self = try godot.heap.general_allocator.create(T);
 
     // Store the pointer on base type
-    if (T == core.Object) {
+    if (T == godot.class.Object) {
         self.ptr = ptr;
     } else {
-        self.base = @bitCast(core.Object{ .ptr = ptr });
+        self.base = @bitCast(godot.class.Object{ .ptr = ptr });
     }
 
-    core.objectSetInstance(ptr, @ptrCast(class_name), @ptrCast(self));
-    core.objectSetInstanceBinding(ptr, core.p_library, @ptrCast(self), @ptrCast(&godot.dummy_callbacks));
+    godot.interface.objectSetInstance(ptr, @ptrCast(class_name), @ptrCast(self));
+    godot.interface.objectSetInstanceBinding(ptr, godot.interface.library, @ptrCast(self), @ptrCast(&godot.dummy_callbacks));
 
     // TODO: doesn't Godot call `_init`? shouldn't we let `init` call `heap.create()`?
     //       Proper hierarchy of control is not clear here
@@ -41,19 +41,18 @@ pub fn destroy(instance: anytype) void {
     debug.assertIsObject(@TypeOf(instance));
 
     const ptr = meta.asObjectPtr(instance);
-    core.objectFreeInstanceBinding(ptr, core.p_library);
-    core.objectDestroy(ptr);
+    godot.interface.objectFreeInstanceBinding(ptr, godot.interface.library);
+    godot.interface.objectDestroy(ptr);
 }
 
 /// Unreference a Godot object.
 pub fn unreference(instance: anytype) void {
     if (meta.asRefCounted(instance).unreference()) {
-        core.objectDestroy(meta.asObjectPtr(instance));
+        godot.interface.objectDestroy(meta.asObjectPtr(instance));
     }
 }
 
-const godot = @import("root.zig");
-const core = godot.core;
+const godot = @import("gdzig.zig");
 const debug = godot.debug;
 const meta = godot.meta;
-const Object = core.Object;
+const Object = godot.class.Object;

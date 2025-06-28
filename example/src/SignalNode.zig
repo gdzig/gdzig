@@ -79,14 +79,14 @@ pub fn emitSignal3(self: *Self) void {
 
 const std = @import("std");
 const godot = @import("gdzig");
-const Button = godot.core.Button;
-const Color = godot.core.Color;
-const ColorRect = godot.core.ColorRect;
-const Control = godot.core.Control;
-const Engine = godot.core.Engine;
-const Node = godot.core.Node;
+const Button = godot.class.Button;
+const Color = godot.builtin.Color;
+const ColorRect = godot.class.ColorRect;
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const Node = godot.class.Node;
 const PropertyInfo = godot.PropertyInfo;
-const String = godot.core.String;
-const StringName = godot.core.StringName;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
 const Vector2 = godot.Vector2;
 const Vector3 = godot.Vector3;

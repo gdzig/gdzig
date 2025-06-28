@@ -283,11 +283,13 @@ fn buildLibrary(
     mod: *Module,
 } {
     const tmp = b.addWriteFiles();
+    // Copy the bindings first
+    _ = tmp.addCopyDirectory(bindings, "./", .{});
+    // Copy the source code separate -- allows manual overrides
     const src = tmp.addCopyDirectory(b.path("src"), "./", .{});
-    _ = tmp.addCopyDirectory(bindings, "./bindings", .{});
 
     const root = b.addModule("gdzig", .{
-        .root_source_file = src.path(b, "root.zig"),
+        .root_source_file = src.path(b, "gdzig.zig"),
         .target = opt.target,
         .optimize = opt.optimize,
     });

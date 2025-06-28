@@ -1,7 +1,9 @@
 const Enum = @This();
 
 doc: ?[]const u8 = null,
+module: []const u8 = "",
 name: []const u8 = "_",
+name_api: []const u8 = "_",
 values: StringHashMap(Value) = .empty,
 
 pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Enum) !Enum {
@@ -9,6 +11,9 @@ pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Enum) !Enum {
     errdefer self.deinit(allocator);
 
     self.name = try allocator.dupe(u8, api.name);
+    self.name_api = api.name;
+    self.module = try case.allocTo(allocator, .snake, self.name);
+
     for (api.values) |value| {
         try self.values.put(allocator, value.name, try .init(allocator, value.description, value.name, value.value));
     }
@@ -21,6 +26,9 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
     errdefer self.deinit(allocator);
 
     self.name = try allocator.dupe(u8, api.name);
+    self.name_api = api.name;
+    self.module = try case.allocTo(allocator, .snake, self.name);
+
     for (api.values) |value| {
         const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
             .current_class = class_name,
@@ -36,6 +44,9 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     errdefer self.deinit(allocator);
 
     self.name = try allocator.dupe(u8, api.name);
+    self.name_api = api.name;
+    self.module = try case.allocTo(allocator, .snake, self.name);
+
     for (api.values) |value| {
         const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
             .current_class = class_name,
@@ -48,6 +59,7 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
 
 pub fn deinit(self: *Enum, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
+    allocator.free(self.module);
     allocator.free(self.name);
     var values = self.values.valueIterator();
     while (values.next()) |value| {

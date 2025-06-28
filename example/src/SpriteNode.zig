@@ -26,7 +26,7 @@ pub fn _ready(self: *Self) void {
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     self.rng = prng.random();
-    self.sprites = std.ArrayList(Sprite).init(godot.general_allocator);
+    self.sprites = std.ArrayList(Sprite).init(godot.heap.general_allocator);
 
     const tex = ResourceLoader.load(.fromLatin1("res://textures/logo.png"), .{}).?;
     defer _ = tex.unreference();
@@ -77,10 +77,10 @@ pub fn _physicsProcess(self: *Self, delta: f64) void {
 
 const std = @import("std");
 const godot = @import("gdzig");
-const Control = godot.core.Control;
-const Engine = godot.core.Engine;
-const Node = godot.core.Node;
-const ResourceLoader = godot.core.ResourceLoader;
-const Sprite2D = godot.core.Sprite2D;
-const Texture2D = godot.core.Texture2D;
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const Node = godot.class.Node;
+const ResourceLoader = godot.class.ResourceLoader;
+const Sprite2D = godot.class.Sprite2D;
+const Texture2D = godot.class.Texture2D;
 const Vector2 = godot.Vector2;
