@@ -33,8 +33,16 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u
     return output.toOwnedSlice(allocator);
 }
 
-fn writeElement(node: Node, context: ?*anyopaque) anyerror!bool {
-    const ctx: *Context = @alignCast(@ptrCast(context));
+fn getContext(ptr: ?*const anyopaque) *const Context {
+    return @alignCast(@ptrCast(ptr));
+}
+
+fn getUserData(ptr: ?*const anyopaque) *const CodegenContext {
+    return @alignCast(@ptrCast(ptr));
+}
+
+fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
+    const ctx = getContext(ctx_ptr);
     const el: Element = std.meta.stringToEnum(Element, try node.getName()) orelse return false;
 
     return switch (el) {
@@ -47,21 +55,21 @@ fn writeElement(node: Node, context: ?*anyopaque) anyerror!bool {
     };
 }
 
-fn writeMember(node: Node, ctx: *Context) anyerror!bool {
+fn writeMember(node: Node, ctx: *const Context) anyerror!bool {
     // TODO: make it a link
     const member_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{member_name});
     return true;
 }
 
-fn writeMethod(node: Node, ctx: *Context) anyerror!bool {
+fn writeMethod(node: Node, ctx: *const Context) anyerror!bool {
     // TODO: make it a link
     const method_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{method_name});
     return true;
 }
 
-fn writeCodeblock(node: Node, ctx: *Context) anyerror!bool {
+fn writeCodeblock(node: Node, ctx: *const Context) anyerror!bool {
     try ctx.writer.writeAll("```");
     try render(node, ctx);
     try ctx.writer.writeAll("```");
@@ -69,7 +77,7 @@ fn writeCodeblock(node: Node, ctx: *Context) anyerror!bool {
     return true;
 }
 
-fn writeCodeblocks(node: Node, ctx: *Context) anyerror!bool {
+fn writeCodeblocks(node: Node, ctx: *const Context) anyerror!bool {
     var element_list = try node.childrenOfType(ctx.allocator, .element);
     defer element_list.deinit(ctx.allocator);
 
@@ -83,13 +91,13 @@ fn writeCodeblocks(node: Node, ctx: *Context) anyerror!bool {
     return true;
 }
 
-fn writeParam(node: Node, ctx: *Context) anyerror!bool {
+fn writeParam(node: Node, ctx: *const Context) anyerror!bool {
     const param_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{param_name});
     return true;
 }
 
-fn writeBasicType(node: Node, ctx: *Context) anyerror!bool {
+fn writeBasicType(node: Node, ctx: *const Context) anyerror!bool {
     const type_name = node.getName() catch return false;
     try ctx.writer.print("`{s}`", .{type_name});
     return true;
@@ -135,6 +143,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const Context = bbcodez.fmt.md.WriteContext;
 const TokenizerOptions = bbcodez.tokenizer.Options;
+const CodegenContext = @import("../Context.zig");
 
 const std = @import("std");
 const testing = std.testing;
