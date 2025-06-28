@@ -10,6 +10,7 @@ const Element = enum {
     member,
     constant,
     @"enum",
+    annotation,
 
     // basic
     param,
@@ -19,7 +20,7 @@ const Element = enum {
     br,
 };
 
-pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u8 {
+pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext) ![]const u8 {
     var doc = try Document.loadFromBuffer(allocator, input, .{
         .verbatim_tags = verbatim_tags,
         .tokenizer_options = TokenizerOptions{
@@ -31,22 +32,27 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u
     var output = ArrayList(u8){};
     try bbcodez.fmt.md.renderDocument(allocator, doc, output.writer(allocator).any(), .{
         .write_element_fn = writeElement,
-        .user_data = null,
+        .user_data = @constCast(@ptrCast(ctx)),
     });
 
     return output.toOwnedSlice(allocator);
 }
 
-fn getContext(ptr: ?*const anyopaque) *const Context {
+fn getWriteContext(ptr: ?*const anyopaque) *const WriteContext {
     return @alignCast(@ptrCast(ptr));
 }
 
-fn getUserData(ptr: ?*const anyopaque) *const CodegenContext {
+fn getContext(ptr: ?*const anyopaque) *const CodegenContext {
     return @alignCast(@ptrCast(ptr));
 }
 
 fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
-    const ctx = getContext(ctx_ptr);
+    const ctx = getWriteContext(ctx_ptr);
+
+    if (try writeDocLink(node, ctx)) {
+        return true;
+    }
+
     const el: Element = std.meta.stringToEnum(Element, try node.getName()) orelse return false;
 
     return switch (el) {
@@ -59,43 +65,96 @@ fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
         .constant => try writeConstant(node, ctx),
         .@"enum" => try writeEnum(node, ctx),
         .br => try writeLineBreak(node, ctx),
+        .annotation => try writeAnnotation(node, ctx),
     };
 }
 
-fn writeLineBreak(_: Node, ctx: *const Context) anyerror!bool {
+var symbol_lookup = StringHashMap([]const u8).empty;
+const prefix = "#gdzig.";
+
+fn writeDocLink(node: Node, ctx: *const WriteContext) anyerror!bool {
+    const cg = getContext(ctx.user_data);
+    const api = cg.api;
+    const symbol_name = node.getName() catch return false;
+
+    if (symbol_lookup.get(symbol_name)) |link| {
+        try ctx.writer.print("[{s}]({s}{s})", .{ symbol_name, prefix, link });
+        return true;
+    }
+
+    if (std.mem.eql(u8, symbol_name, "Variant")) {
+        try symbol_lookup.putNoClobber(ctx.allocator, "Variant", "Variant");
+        return writeDocLink(node, ctx);
+    }
+
+    for (api.classes) |class| {
+        if (std.mem.eql(u8, class.name, symbol_name)) {
+            const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{class.name});
+            try symbol_lookup.putNoClobber(ctx.allocator, symbol_name, doc_name);
+            return writeDocLink(node, ctx);
+        }
+    }
+
+    for (api.builtin_classes) |builtin| {
+        if (std.mem.eql(u8, builtin.name, symbol_name)) {
+            const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{builtin.name});
+            try symbol_lookup.putNoClobber(ctx.allocator, symbol_name, doc_name);
+            return writeDocLink(node, ctx);
+        }
+    }
+
+    for (api.global_enums) |@"enum"| {
+        if (std.mem.eql(u8, @"enum".name, symbol_name)) {
+            const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.global.{s}", .{@"enum".name});
+            try symbol_lookup.putNoClobber(ctx.allocator, symbol_name, doc_name);
+            return writeDocLink(node, ctx);
+        }
+    }
+
+    return false;
+}
+
+fn writeLineBreak(_: Node, ctx: *const WriteContext) anyerror!bool {
     try ctx.writer.writeByte('\n');
     return true;
 }
 
-fn writeEnum(node: Node, ctx: *const Context) anyerror!bool {
+fn writeAnnotation(node: Node, ctx: *const WriteContext) anyerror!bool {
+    // TODO: make it a link
+    const annotation_name = try node.getValue() orelse return false;
+    try ctx.writer.print("`{s}`", .{annotation_name});
+    return true;
+}
+
+fn writeEnum(node: Node, ctx: *const WriteContext) anyerror!bool {
     // TODO: make it a link
     const enum_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{enum_name});
     return true;
 }
 
-fn writeConstant(node: Node, ctx: *const Context) anyerror!bool {
+fn writeConstant(node: Node, ctx: *const WriteContext) anyerror!bool {
     // TODO: make it a link
     const constant_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{constant_name});
     return true;
 }
 
-fn writeMember(node: Node, ctx: *const Context) anyerror!bool {
+fn writeMember(node: Node, ctx: *const WriteContext) anyerror!bool {
     // TODO: make it a link
     const member_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{member_name});
     return true;
 }
 
-fn writeMethod(node: Node, ctx: *const Context) anyerror!bool {
+fn writeMethod(node: Node, ctx: *const WriteContext) anyerror!bool {
     // TODO: make it a link
     const method_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{method_name});
     return true;
 }
 
-fn writeCodeblock(node: Node, ctx: *const Context) anyerror!bool {
+fn writeCodeblock(node: Node, ctx: *const WriteContext) anyerror!bool {
     try ctx.writer.writeAll("```");
     try render(node, ctx);
     try ctx.writer.writeAll("```");
@@ -103,7 +162,7 @@ fn writeCodeblock(node: Node, ctx: *const Context) anyerror!bool {
     return true;
 }
 
-fn writeCodeblocks(node: Node, ctx: *const Context) anyerror!bool {
+fn writeCodeblocks(node: Node, ctx: *const WriteContext) anyerror!bool {
     var element_list = try node.childrenOfType(ctx.allocator, .element);
     defer element_list.deinit(ctx.allocator);
 
@@ -117,13 +176,13 @@ fn writeCodeblocks(node: Node, ctx: *const Context) anyerror!bool {
     return true;
 }
 
-fn writeParam(node: Node, ctx: *const Context) anyerror!bool {
+fn writeParam(node: Node, ctx: *const WriteContext) anyerror!bool {
     const param_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{param_name});
     return true;
 }
 
-fn writeBasicType(node: Node, ctx: *const Context) anyerror!bool {
+fn writeBasicType(node: Node, ctx: *const WriteContext) anyerror!bool {
     const type_name = node.getName() catch return false;
     try ctx.writer.print("`{s}`", .{type_name});
     return true;
@@ -167,9 +226,10 @@ const Node = bbcodez.Node;
 const Document = bbcodez.Document;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
-const Context = bbcodez.fmt.md.WriteContext;
+const WriteContext = bbcodez.fmt.md.WriteContext;
 const TokenizerOptions = bbcodez.tokenizer.Options;
 const CodegenContext = @import("../Context.zig");
+const StringHashMap = std.StringHashMapUnmanaged;
 
 const std = @import("std");
 const testing = std.testing;

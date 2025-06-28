@@ -16,13 +16,14 @@ pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Enum) !Enum {
     return self;
 }
 
-pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum) !Enum {
+pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *const Context) !Enum {
     var self: Enum = .{};
     errdefer self.deinit(allocator);
 
     self.name = try allocator.dupe(u8, api.name);
     for (api.values) |value| {
-        try self.values.put(allocator, value.name, try .init(allocator, value.description, value.name, value.value));
+        const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx) else null;
+        try self.values.put(allocator, value.name, try .init(allocator, desc, value.name, value.value));
     }
 
     return self;
@@ -47,7 +48,7 @@ pub const Value = struct {
         var self: Value = .{};
         errdefer self.deinit(allocator);
 
-        self.doc = if (doc) |d| try docs.convertDocsToMarkdown(allocator, d) else null;
+        self.doc = if (doc) |d| try allocator.dupe(u8, d) else null;
         self.name = try case.allocTo(allocator, .snake, name);
         self.value = value;
 
@@ -63,6 +64,7 @@ pub const Value = struct {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StringHashMap = std.StringHashMapUnmanaged;
+const Context = @import("../Context.zig");
 
 const case = @import("case");
 

@@ -704,7 +704,6 @@ fn generateClassInheritedMethods(w: *Writer, class: GodotApi.Class, ctx: *Contex
             if (method.isPrivate()) continue;
 
             const return_type = ctx.getReturnType(.{ .class = method });
-            try w.printLine("/// {s} class method: {s}", .{ parent.name, method.name });
             try generateProc(w, method, name, method.name, return_type, .ClassMethod, ctx);
         }
     }
@@ -1057,20 +1056,13 @@ pub const ProcType = enum {
 };
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const bufferedWriter = std.io.bufferedWriter;
 const StringHashMap = std.StringHashMapUnmanaged;
-const fs = std.fs;
 
-const precision = @import("build_options").precision;
-
-const case = @import("case");
 const gdextension = @import("gdextension");
 
-const Config = @import("Config.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("GodotApi.zig");
 const Writer = @import("writer.zig").AnyWriter;
 const codeWriter = @import("writer.zig").codeWriter;
-const packed_array = @import("packed_array.zig");
 const util = @import("util.zig");
