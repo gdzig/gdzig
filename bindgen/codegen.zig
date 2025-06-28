@@ -7,7 +7,7 @@ pub fn generate(ctx: *Context) !void {
     try generateCore(ctx);
 }
 
-fn writeBuiltins(ctx: *Context) !void {
+fn writeBuiltins(ctx: *const Context) !void {
     for (ctx.builtins.values()) |*builtin| {
         if (util.shouldSkipClass(builtin.name)) {
             continue;
@@ -189,7 +189,7 @@ fn writeBuiltinMethod(w: *Writer, self: []const u8, method: *const Context.Funct
         \\method({s}, @ptrCast(&args), @ptrCast(&out), args.len);
     , .{
         self,
-        method.api_name.?,
+        method.name_api,
         method.hash.?,
         if (method.is_static)
             "null"
@@ -215,7 +215,7 @@ fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
     }
 }
 
-fn writeGlobalEnums(ctx: *Context) !void {
+fn writeGlobalEnums(ctx: *const Context) !void {
     const file = try ctx.config.output.createFile("global.zig", .{});
     defer file.close();
 
@@ -451,7 +451,7 @@ fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
     }
 }
 
-fn writeModules(ctx: *Context) !void {
+fn writeModules(ctx: *const Context) !void {
     for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{module.name});
         defer ctx.allocator.free(filename);

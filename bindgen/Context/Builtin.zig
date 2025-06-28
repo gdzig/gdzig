@@ -16,7 +16,7 @@ methods: StringHashMap(Function) = .empty,
 
 imports: Imports = .empty,
 
-pub fn init(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context) !Builtin {
+pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context) !Builtin {
     var self: Builtin = .{};
     errdefer self.deinit(allocator);
 
@@ -108,6 +108,8 @@ pub fn deinit(self: *Builtin, allocator: Allocator) void {
     self.methods.deinit(allocator);
 
     self.imports.deinit(allocator);
+
+    self.* = .{};
 }
 
 const std = @import("std");

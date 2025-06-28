@@ -69,8 +69,8 @@ pub const Type = union(enum) {
         };
     }
 
-    pub fn deinit(self: Type, allocator: Allocator) void {
-        switch (self) {
+    pub fn deinit(self: *Type, allocator: Allocator) void {
+        switch (self.*) {
             .basic => |name| {
                 allocator.free(name);
             },
@@ -82,6 +82,8 @@ pub const Type = union(enum) {
             },
             else => {},
         }
+
+        self.* = .void;
     }
 };
 

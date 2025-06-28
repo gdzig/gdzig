@@ -1,7 +1,7 @@
 const Field = @This();
 
 doc: ?[]const u8 = null,
-name: []const u8 = "",
+name: []const u8 = "_",
 type: Type = .void,
 offset: ?usize = null,
 
@@ -21,6 +21,8 @@ pub fn deinit(self: *Field, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
     allocator.free(self.name);
     self.type.deinit(allocator);
+
+    self.* = .{};
 }
 
 const std = @import("std");
