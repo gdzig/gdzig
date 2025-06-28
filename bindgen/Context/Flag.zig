@@ -80,7 +80,7 @@ pub const Field = struct {
     default: bool,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, default: i64) !Field {
-        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc) else null;
+        const doc = if (api.description) |desc| try allocator.dupe(u8, desc) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);
@@ -105,7 +105,7 @@ pub const Const = struct {
     value: i64,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value) !Const {
-        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc) else null;
+        const doc = if (api.description) |desc| try allocator.dupe(u8, desc) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);
@@ -131,4 +131,3 @@ const ArrayList = std.ArrayListUnmanaged;
 const case = @import("case");
 
 const GodotApi = @import("../GodotApi.zig");
-const docs = @import("docs.zig");

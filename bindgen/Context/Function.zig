@@ -18,7 +18,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     var self = Function{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (constructor.description) |doc| try allocator.dupe(u8, doc) else null;
+    self.doc = if (constructor.description) |doc| try docs.convertDocsToMarkdown(allocator, doc) else null;
     self.name = blk: {
         var buf: ArrayList(u8) = .empty;
         errdefer buf.deinit(allocator);
@@ -63,7 +63,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, method: GodotApi.Builtin.Method, 
     var self = Function{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (method.description) |doc| try allocator.dupe(u8, doc) else null;
+    self.doc = if (method.description) |doc| try docs.convertDocsToMarkdown(allocator, doc) else null;
     self.name = try case.allocTo(allocator, .camel, method.name);
     self.api_name = method.name;
     self.hash = method.hash;
@@ -87,7 +87,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (function.description) |desc| try allocator.dupe(u8, desc) else null;
+    self.doc = if (function.description) |desc| try docs.convertDocsToMarkdown(allocator, desc) else null;
     self.name = try case.allocTo(allocator, .camel, function.name);
     self.api_name = function.name;
     self.hash = function.hash;
@@ -155,6 +155,6 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const case = @import("case");
 
 const Context = @import("../Context.zig");
-const Imports = Context.Imports;
 const Type = Context.Type;
 const GodotApi = @import("../GodotApi.zig");
+const docs = @import("docs.zig");

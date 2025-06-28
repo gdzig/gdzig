@@ -29,7 +29,7 @@ pub fn init(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context) !B
     };
     self.api_name = api.name;
     self.size = size_config.size;
-    self.doc = if (api.description) |desc| try allocator.dupe(u8, desc) else null;
+    self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc) else null;
     self.has_destructor = api.has_destructor;
 
     for (api.constants orelse &.{}) |constant| {
@@ -76,7 +76,7 @@ pub fn init(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context) !B
 }
 
 pub fn deinit(self: *Builtin, allocator: Allocator) void {
-    if (self.doc) |docs| allocator.free(docs);
+    if (self.doc) |d| allocator.free(d);
     allocator.free(self.name);
 
     var constants = self.constants.valueIterator();
@@ -116,14 +116,11 @@ const ArrayList = std.ArrayListUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const StringHashMap = std.StringHashMapUnmanaged;
 
-const case = @import("case");
-
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;
 const Enum = Context.Enum;
-const Flag = Context.Flag;
 const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
-const Type = Context.Type;
 const GodotApi = @import("../GodotApi.zig");
+const docs = @import("docs.zig");

@@ -47,7 +47,7 @@ pub const Value = struct {
         var self: Value = .{};
         errdefer self.deinit(allocator);
 
-        self.doc = if (doc) |d| try allocator.dupe(u8, d) else null;
+        self.doc = if (doc) |d| try docs.convertDocsToMarkdown(allocator, d) else null;
         self.name = try case.allocTo(allocator, .snake, name);
         self.value = value;
 
@@ -66,6 +66,5 @@ const StringHashMap = std.StringHashMapUnmanaged;
 
 const case = @import("case");
 
-const Context = @import("../Context.zig");
-const Imports = Context.Imports;
 const GodotApi = @import("../GodotApi.zig");
+const docs = @import("docs.zig");
