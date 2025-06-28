@@ -25,7 +25,6 @@ fn writeBuiltins(ctx: *Context) !void {
         try writeBuiltin(&writer, builtin);
 
         try buf.flush();
-        try file.sync();
     }
 }
 
@@ -233,7 +232,6 @@ fn writeGlobalEnums(ctx: *Context) !void {
     }
 
     try buf.flush();
-    try file.sync();
 }
 
 fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
@@ -464,7 +462,6 @@ fn writeModules(ctx: *Context) !void {
         try writeModule(&writer, module);
 
         try buf.flush();
-        try file.sync();
     }
 }
 
@@ -591,7 +588,6 @@ fn generateClasses(ctx: *Context) !void {
         try generateClass(&writer, class, ctx);
 
         try buf.flush();
-        try file.sync();
     }
 }
 
@@ -1048,7 +1044,6 @@ fn generateCore(ctx: *Context) !void {
     }
 
     try buf.flush();
-    try file.sync();
 }
 
 pub const ProcType = enum {

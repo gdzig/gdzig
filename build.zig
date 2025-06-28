@@ -214,7 +214,7 @@ fn buildBindgen(
 } {
     const mod = b.addModule("bindgen", .{
         .target = opt.target,
-        .optimize = opt.optimize,
+        .optimize = .ReleaseFast,
         .root_source_file = b.path("bindgen/main.zig"),
         .link_libc = true,
     });

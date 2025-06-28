@@ -17,26 +17,42 @@ pub fn main() !void {
     defer config.deinit();
 
     // Parse the extension_api.json
+    const parser_start = std.time.nanoTimestamp();
     var parser = zimdjson.ondemand.FullParser(.default).init;
     defer parser.deinit(allocator);
     var document = try parser.parseFromReader(allocator, config.extension_api.reader().any());
     const godot_api = try document.asLeaky(GodotApi, allocator, .{});
+    const parser_time = std.time.nanoTimestamp() - parser_start;
 
     // Build the codegen context
+    const context_start = std.time.nanoTimestamp();
     var ctx = try Context.build(allocator, godot_api, config);
+    const context_time = std.time.nanoTimestamp() - context_start;
 
     // Generate the code
+    const codegen_start = std.time.nanoTimestamp();
     try codegen.generate(&ctx);
+    const codegen_time = std.time.nanoTimestamp() - codegen_start;
 
     // Format the code
+    const format_start = std.time.nanoTimestamp();
     _ = try std.process.Child.run(.{
         .allocator = allocator,
         .cwd_dir = config.output,
         .argv = &.{ "zig", "fmt" },
         .max_output_bytes = 1024 * 1024,
     });
+    const format_time = std.time.nanoTimestamp() - format_start;
 
     if (config.verbosity == .verbose) {
+        if (config.verbosity == .verbose) {
+            const total_time = parser_time + context_time + codegen_time + format_time;
+            std.debug.print("Parser time: {d:.2}ms\n", .{@as(f64, @floatFromInt(parser_time)) / 1_000_000.0});
+            std.debug.print("Context time: {d:.2}ms\n", .{@as(f64, @floatFromInt(context_time)) / 1_000_000.0});
+            std.debug.print("Codegen time: {d:.2}ms\n", .{@as(f64, @floatFromInt(codegen_time)) / 1_000_000.0});
+            std.debug.print("Format time: {d:.2}ms\n", .{@as(f64, @floatFromInt(format_time)) / 1_000_000.0});
+            std.debug.print("Total time: {d:.2}ms\n", .{@as(f64, @floatFromInt(total_time)) / 1_000_000.0});
+        }
         std.debug.print("Output path: {s}\n", .{args[2]});
         std.debug.print("API JSON: {s}/extension_api.json\n", .{args[1]});
     }
