@@ -74,7 +74,7 @@ pub fn stringToAscii(str: core.String, buf: []u8) []const u8 {
     return buf[0..@intCast(sz)];
 }
 
-fn getBaseName(str: []const u8) []const u8 {
+fn getBaseName(str: [:0]const u8) [:0]const u8 {
     const pos = std.mem.lastIndexOfScalar(u8, str, '.') orelse return str;
     return str[pos + 1 ..];
 }
@@ -217,8 +217,8 @@ pub fn registerClass(comptime T: type) void {
 
     const P = std.meta.FieldType(T, .base);
     const parent_class_name = comptime getBaseName(@typeName(P));
-    getParentClassName(T).* = core.StringName.fromUtf8(parent_class_name);
-    getClassName(T).* = core.StringName.fromUtf8(class_name);
+    getParentClassName(T).* = core.StringName.fromComptimeLatin1(parent_class_name);
+    getClassName(T).* = core.StringName.fromComptimeLatin1(class_name);
 
     const PerClassData = struct {
         pub var class_info = init_blk: {
@@ -535,7 +535,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     const p_method = @field(T, name);
     const MethodBinder = MethodBinderT(@TypeOf(p_method));
 
-    MethodBinder.method_name = core.StringName.fromLatin1(name);
+    MethodBinder.method_name = core.StringName.fromComptimeLatin1(name);
     MethodBinder.arg_metadata[0] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
     MethodBinder.arg_properties[0] = c.GDExtensionPropertyInfo{
         .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ReturnType.?)),
@@ -628,20 +628,8 @@ pub fn init() void {
 pub fn deinit() void {
     var key_iter = registered_classes.keyIterator();
     while (key_iter.next()) |it| {
-        var class_name = core.StringName.fromUtf8(it.*);
         core.classdbUnregisterExtensionClass(core.p_library, @ptrCast(&class_name));
     }
-
-    var key_iter1 = registered_methods.keyIterator();
-    while (key_iter1.next()) |it| {
-        general_allocator.free(it.*);
-    }
-
-    var key_iter2 = registered_signals.keyIterator();
-    while (key_iter2.next()) |it| {
-        general_allocator.free(it.*);
-    }
-    //core.deinitCore();
     registered_signals.deinit();
     registered_methods.deinit();
     registered_classes.deinit();
