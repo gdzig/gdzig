@@ -49,8 +49,11 @@ fn getContext(ptr: ?*const anyopaque) *const CodegenContext {
 fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
     const ctx = getWriteContext(ctx_ptr);
 
-    if (try writeDocLink(node, ctx)) {
-        return true;
+    const node_name = try node.getName();
+    if (try symbolLookup(node_name, ctx)) |link| {
+        if (try writeSymbolLink(node_name, link, ctx)) {
+            return true;
+        }
     }
 
     const el: Element = std.meta.stringToEnum(Element, try node.getName()) orelse return false;
@@ -72,46 +75,39 @@ fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
 var symbol_lookup = StringHashMap([]const u8).empty;
 const prefix = "#gdzig.";
 
-fn writeDocLink(node: Node, ctx: *const WriteContext) anyerror!bool {
-    const cg = getContext(ctx.user_data);
-    const api = cg.api;
-    const symbol_name = node.getName() catch return false;
+fn symbolLookup(key: []const u8, ctx: *const WriteContext) !?[]const u8 {
+    if (symbol_lookup.size == 0) {
+        const api = getContext(ctx.user_data).api;
 
-    if (symbol_lookup.get(symbol_name)) |link| {
-        try ctx.writer.print("[{s}]({s}{s})", .{ symbol_name, prefix, link });
-        return true;
-    }
+        logger.debug("Initializing symbol lookup...", .{});
 
-    if (std.mem.eql(u8, symbol_name, "Variant")) {
         try symbol_lookup.putNoClobber(ctx.allocator, "Variant", "Variant");
-        return writeDocLink(node, ctx);
-    }
 
-    for (api.classes) |class| {
-        if (std.mem.eql(u8, class.name, symbol_name)) {
+        for (api.classes) |class| {
             const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{class.name});
-            try symbol_lookup.putNoClobber(ctx.allocator, symbol_name, doc_name);
-            return writeDocLink(node, ctx);
+            try symbol_lookup.putNoClobber(ctx.allocator, class.name, doc_name);
         }
-    }
 
-    for (api.builtin_classes) |builtin| {
-        if (std.mem.eql(u8, builtin.name, symbol_name)) {
+        for (api.builtin_classes) |builtin| {
             const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{builtin.name});
-            try symbol_lookup.putNoClobber(ctx.allocator, symbol_name, doc_name);
-            return writeDocLink(node, ctx);
+            try symbol_lookup.putNoClobber(ctx.allocator, builtin.name, doc_name);
         }
-    }
 
-    for (api.global_enums) |@"enum"| {
-        if (std.mem.eql(u8, @"enum".name, symbol_name)) {
+        for (api.global_enums) |@"enum"| {
             const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.global.{s}", .{@"enum".name});
-            try symbol_lookup.putNoClobber(ctx.allocator, symbol_name, doc_name);
-            return writeDocLink(node, ctx);
+            try symbol_lookup.putNoClobber(ctx.allocator, @"enum".name, doc_name);
         }
+
+        logger.debug("Symbol lookup initialized. Size: {d}", .{symbol_lookup.size});
     }
 
-    return false;
+    return symbol_lookup.get(key);
+}
+
+fn writeSymbolLink(symbol_name: []const u8, link: []const u8, ctx: *const WriteContext) anyerror!bool {
+    const symbol_link_fmt = std.fmt.comptimePrint("[{{s}}]({s}{{s}})", .{prefix});
+    try ctx.writer.print(symbol_link_fmt, .{ symbol_name, link });
+    return true;
 }
 
 fn writeLineBreak(_: Node, ctx: *const WriteContext) anyerror!bool {
@@ -127,8 +123,15 @@ fn writeAnnotation(node: Node, ctx: *const WriteContext) anyerror!bool {
 }
 
 fn writeEnum(node: Node, ctx: *const WriteContext) anyerror!bool {
-    // TODO: make it a link
     const enum_name = try node.getValue() orelse return false;
+
+    if (try symbolLookup(enum_name, ctx)) |link| {
+        if (try writeSymbolLink(enum_name, link, ctx)) {
+            return true;
+        }
+    }
+
+    logger.warn("Enum symbol lookup failed: {s}", .{enum_name});
     try ctx.writer.print("`{s}`", .{enum_name});
     return true;
 }
@@ -141,7 +144,6 @@ fn writeConstant(node: Node, ctx: *const WriteContext) anyerror!bool {
 }
 
 fn writeMember(node: Node, ctx: *const WriteContext) anyerror!bool {
-    // TODO: make it a link
     const member_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{member_name});
     return true;
@@ -149,6 +151,7 @@ fn writeMember(node: Node, ctx: *const WriteContext) anyerror!bool {
 
 fn writeMethod(node: Node, ctx: *const WriteContext) anyerror!bool {
     // TODO: make it a link
+    // how do we get the name of the class that the method belongs to?
     const method_name = try node.getValue() orelse return false;
     try ctx.writer.print("`{s}`", .{method_name});
     return true;
@@ -234,3 +237,4 @@ const StringHashMap = std.StringHashMapUnmanaged;
 const std = @import("std");
 const testing = std.testing;
 const bbcodez = @import("bbcodez");
+const logger = std.log.scoped(.docs);
