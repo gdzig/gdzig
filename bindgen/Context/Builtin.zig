@@ -1,6 +1,7 @@
 const Builtin = @This();
 
 doc: ?[]const u8 = null,
+module: []const u8 = "",
 name: []const u8 = "_",
 api_name: []const u8 = "_",
 
@@ -27,6 +28,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         // break try case.allocTo(allocator, .pascal, api.name);
         break :blk try allocator.dupe(u8, api.name);
     };
+    self.module = try case.allocTo(allocator, .snake, self.name);
     self.api_name = api.name;
     self.size = size_config.size;
     self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
@@ -77,6 +79,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
 pub fn deinit(self: *Builtin, allocator: Allocator) void {
     if (self.doc) |d| allocator.free(d);
+    allocator.free(self.module);
     allocator.free(self.name);
 
     var constants = self.constants.valueIterator();
@@ -117,6 +120,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const StringHashMap = std.StringHashMapUnmanaged;
+
+const case = @import("case");
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;

@@ -1,19 +1,18 @@
 pub fn generate(ctx: *Context) !void {
     try writeBuiltins(ctx);
     try writeClasses(ctx);
-    try writeGlobalEnums(ctx);
+    try writeGlobals(ctx);
+    try writeInterface(ctx);
     try writeModules(ctx);
 
-    try generateCore(ctx);
+    try writeCore(ctx);
 }
 
 fn writeBuiltins(ctx: *const Context) !void {
-    for (ctx.builtins.values()) |*builtin| {
-        if (util.shouldSkipClass(builtin.name)) {
-            continue;
-        }
+    try ctx.config.output.makePath("builtin");
 
-        const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "{s}.zig", .{builtin.name});
+    for (ctx.builtins.values()) |*builtin| {
+        const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "builtin/{s}.zig", .{builtin.module});
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
@@ -215,12 +214,10 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
 }
 
 fn writeClasses(ctx: *const Context) !void {
-    for (ctx.classes.values()) |*class| {
-        if (util.shouldSkipClass(class.name)) {
-            continue;
-        }
+    try ctx.config.output.makePath("class");
 
-        const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{class.name});
+    for (ctx.classes.values()) |*class| {
+        const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "class/{s}.zig", .{class.module});
         defer ctx.rawAllocator().free(filename);
 
         const file = try ctx.config.output.createFile(filename, .{});
@@ -457,6 +454,84 @@ fn writeConstant(w: *Writer, constant: *const Context.Constant) !void {
     try w.printLine(" = {s};", .{constant.value});
 }
 
+fn writeCore(ctx: *Context) !void {
+    const file = try ctx.config.output.createFile("core.zig", .{});
+    defer file.close();
+
+    var buf = bufferedWriter(file.writer());
+    var w = codeWriter(buf.writer().any());
+
+    try w.writeLine(
+        \\pub const c = @import("gdextension");
+        \\
+    );
+
+    try w.writeLine(
+        \\pub const Interface = @import("Interface.zig");
+        \\pub var interface: Interface = undefined;
+        \\
+    );
+
+    for (ctx.modules.values()) |module| {
+        try w.printLine(
+            \\pub const {0s} = @import("{0s}.zig");
+        , .{module.name});
+    }
+
+    try w.writeLine(
+        \\
+        \\pub const builtin = struct {
+    );
+    w.indent += 1;
+    for (ctx.builtins.values()) |builtin| {
+        try w.printLine(
+            \\pub const {1s} = @import("builtin/{0s}.zig").{1s};
+        , .{ builtin.module, builtin.name });
+    }
+    w.indent -= 1;
+    try w.writeLine(
+        \\};
+        \\
+    );
+
+    try w.writeLine(
+        \\pub const class = struct {
+    );
+    w.indent += 1;
+    for (ctx.classes.values()) |class| {
+        try w.printLine(
+            \\pub const {1s} = @import("class/{0s}.zig").{1s};
+        , .{ class.module, class.name });
+    }
+    w.indent -= 1;
+    try w.writeLine(
+        \\};
+        \\
+    );
+
+    try w.writeLine(
+        \\pub const global = struct {
+    );
+    w.indent += 1;
+    for (ctx.enums.values()) |@"enum"| {
+        try w.printLine(
+            \\pub const {1s} = @import("global/{0s}.zig").{1s};
+        , .{ @"enum".module, @"enum".name });
+    }
+    for (ctx.flags.values()) |flag| {
+        try w.printLine(
+            \\pub const {1s} = @import("global/{0s}.zig").{1s};
+        , .{ flag.module, flag.name });
+    }
+    w.indent -= 1;
+    try w.writeLine(
+        \\};
+        \\
+    );
+
+    try buf.flush();
+}
+
 fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
     if (docs) |d| {
         w.comment = .doc;
@@ -465,26 +540,38 @@ fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
     }
 }
 
-fn writeGlobalEnums(ctx: *const Context) !void {
-    const file = try ctx.config.output.createFile("global.zig", .{});
-    defer file.close();
-
-    var buf = bufferedWriter(file.writer());
-    var writer = codeWriter(buf.writer().any());
+fn writeGlobals(ctx: *const Context) !void {
+    try ctx.config.output.makePath("global");
 
     for (ctx.enums.values()) |*@"enum"| {
-        // TODO: shouldSkip functions
-        if (std.mem.startsWith(u8, @"enum".name, "Variant.")) continue;
+        const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{@"enum".module});
+        defer ctx.rawAllocator().free(filename);
+
+        const file = try ctx.config.output.createFile(filename, .{});
+        defer file.close();
+
+        var buf = bufferedWriter(file.writer());
+        var writer = codeWriter(buf.writer().any());
+
         try writeEnum(&writer, @"enum");
+
+        try buf.flush();
     }
 
     for (ctx.flags.values()) |*flag| {
-        // TODO: shouldSkip functions
-        if (std.mem.startsWith(u8, flag.name, "Variant.")) continue;
-        try writeFlag(&writer, flag);
-    }
+        const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{flag.module});
+        defer ctx.rawAllocator().free(filename);
 
-    try buf.flush();
+        const file = try ctx.config.output.createFile(filename, .{});
+        defer file.close();
+
+        var buf = bufferedWriter(file.writer());
+        var writer = codeWriter(buf.writer().any());
+
+        try writeFlag(&writer, flag);
+
+        try buf.flush();
+    }
 }
 
 fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
@@ -732,6 +819,117 @@ fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
     }
 }
 
+fn writeInterface(ctx: *Context) !void {
+    const file = try ctx.config.output.createFile("Interface.zig", .{});
+    defer file.close();
+
+    var buf = bufferedWriter(file.writer());
+    var w = codeWriter(buf.writer().any());
+
+    try w.writeLine(
+        \\const Interface = @This();
+        \\
+    );
+    try w.writeLine(
+        \\library: Child(godot.c.GDExtensionClassLibraryPtr),
+        \\
+    );
+
+    for (ctx.interface.functions.items) |function| {
+        try writeDocBlock(&w, function.docs);
+        try w.printLine(
+            \\{s}: gdext.{s},
+            \\
+        , .{ function.name, function.ptr_type });
+    }
+
+    try writeInterfaceInit(&w, ctx);
+
+    try w.writeLine(
+        \\
+        \\pub fn getName(_: Interface, comptime T: type) StringName {
+        \\    const ptr = getPtr(T);
+        \\    if (ptr.name == null) {
+        \\        ptr.name = StringName.fromComptimeLatin1(blk: {
+        \\            const raw = @as([:0]const u8, @typeName(T));
+        \\            if (std.mem.lastIndexOfScalar(u8, raw, '.')) |split| {
+        \\                break :blk raw[split + 1 ..];
+        \\            } else {
+        \\                break :blk raw;
+        \\            }
+        \\        });
+        \\    }
+        \\    return ptr.name.?;
+        \\}
+        \\
+        \\fn getPtr(comptime T: type) *?StringName {
+        \\    return &struct {
+        \\        comptime {
+        \\            _ = T;
+        \\        }
+        \\        var name: ?StringName = null;
+        \\    }.name;
+        \\}
+        \\
+        \\const std = @import("std");
+        \\const Child = std.meta.Child;
+        \\
+        \\const gdext = @import("gdextension");
+        \\const StringName = @import("StringName.zig");
+    );
+
+    try writeImports(&w, &ctx.interface.imports);
+
+    try buf.flush();
+    try file.sync();
+}
+
+fn writeInterfaceInit(w: *Writer, ctx: *Context) !void {
+    try w.writeLine("pub fn init(getProcAddress: Child(gdext.GDExtensionInterfaceGetProcAddress), library: gdext.GDExtensionClassLibraryPtr) !Interface {");
+    w.indent += 1;
+
+    try w.writeLine(
+        \\const self: Interface = .{
+        \\    .library = library,
+    );
+    w.indent += 1;
+
+    for (ctx.interface.functions.items) |function| {
+        try w.printLine(
+            \\.{s} = @ptrCast(getProcAddress("{s}")),
+        , .{ function.name, function.api_name });
+    }
+
+    w.indent -= 1;
+    try w.writeLine(
+        \\};
+        \\
+    );
+
+    try w.writeLine(
+        \\inline for (&.{
+    );
+    w.indent += 1;
+    for (ctx.all_engine_classes.items) |cls| {
+        try w.printLine(
+            \\.{{ {0s}, "{0s}" }},
+        , .{cls});
+    }
+    w.indent -= 1;
+    try w.writeLine(
+        \\}) |pair| {
+        \\  self.stringNameNewWithLatin1Chars(@ptrCast(getPtr(pair[0])), @ptrCast(pair[1]), true);
+        \\}
+    );
+
+    w.indent -= 1;
+    try w.writeLine(
+        \\
+        \\    return self;
+        \\}
+    );
+}
+
 fn writeModules(ctx: *const Context) !void {
     for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
@@ -873,116 +1071,6 @@ fn writeTypeCheck(w: *Writer, parameter: *const Context.Function.Parameter) !voi
         },
         else => return,
     }
-}
-
-fn generateCore(ctx: *Context) !void {
-    const fp_map = ctx.func_pointers;
-
-    const file = try ctx.config.output.createFile("core.zig", .{});
-    defer file.close();
-
-    var buf = bufferedWriter(file.writer());
-    var w = codeWriter(buf.writer().any());
-
-    try w.writeLine(
-        \\const std = @import("std");
-        \\const gdext = @import("gdextension");
-        \\const godot = @import("../root.zig");
-        \\pub const c = gdext;
-    );
-
-    for (ctx.core_exports.items) |@"export"| {
-        if (@"export".path) |path| {
-            try w.printLine("pub const {s} = @import(\"{s}.zig\").{s};", .{ @"export".ident, @"export".file, path });
-        } else {
-            try w.printLine("pub const {s} = @import(\"{s}.zig\");", .{ @"export".ident, @"export".file });
-        }
-    }
-
-    try w.writeLine(
-        \\pub var p_library: gdext.GDExtensionClassLibraryPtr = null;
-        \\const BindingCallbackMap = std.AutoHashMap(StringName, *gdext.GDExtensionInstanceBindingCallbacks);
-    );
-
-    { // TODO: Separate function generateCoreInterfaceVars
-        for (comptime std.meta.declarations(gdextension)) |decl| {
-            if (std.mem.startsWith(u8, decl.name, "GDExtensionInterface")) {
-                // TODO: move all of this name logic out to helpers/Context
-                var name_buf: [128]u8 = undefined;
-                std.mem.copyForwards(u8, &name_buf, decl.name["GDExtensionInterface".len..]);
-                const name = name_buf[0..(decl.name.len - "GDExtensionInterface".len)];
-                if (std.mem.eql(u8, name, "FunctionPtr") or std.mem.eql(u8, name, "GetProcAddress")) {
-                    continue;
-                }
-                if (std.mem.startsWith(u8, name, "PlaceHolder")) {
-                    std.mem.copyForwards(u8, name_buf[0..], "Placeholder");
-                }
-                if (std.mem.startsWith(u8, name, "CallableCustomGetUserData")) {
-                    std.mem.copyForwards(u8, name_buf[0..], "CallableCustomGetUserdata");
-                }
-                name_buf[0] = std.ascii.toLower(name_buf[0]);
-
-                const docs = ctx.func_docs.get(decl.name).?;
-
-                try w.printLine(
-                    \\{s}
-                    \\pub var {s}: std.meta.Child(gdext.{s}) = undefined;
-                , .{ docs, name, decl.name });
-            }
-        }
-    }
-
-    { // TODO: Separate function generateCoreInterfaceInit
-        try w.writeLine("pub fn initCore(getProcAddress: std.meta.Child(gdext.GDExtensionInterfaceGetProcAddress), library: gdext.GDExtensionClassLibraryPtr) !void {");
-        w.indent += 1;
-        try w.writeLine("p_library = library;");
-
-        for (comptime std.meta.declarations(gdextension)) |decl| {
-            if (std.mem.startsWith(u8, decl.name, "GDExtensionInterface")) {
-                // TODO: move all of this name logic out to helpers/Context
-                var name_buf: [128]u8 = undefined;
-                std.mem.copyForwards(u8, &name_buf, decl.name["GDExtensionInterface".len..]);
-                const name = name_buf[0..(decl.name.len - "GDExtensionInterface".len)];
-                if (std.mem.eql(u8, name, "FunctionPtr") or std.mem.eql(u8, name, "GetProcAddress")) {
-                    continue;
-                }
-                if (std.mem.startsWith(u8, name, "PlaceHolder")) {
-                    std.mem.copyForwards(u8, name_buf[0..], "Placeholder");
-                }
-                if (std.mem.startsWith(u8, name, "CallableCustomGetUserData")) {
-                    std.mem.copyForwards(u8, name_buf[0..], "CallableCustomGetUserdata");
-                }
-                name_buf[0] = std.ascii.toLower(name_buf[0]);
-
-                const fn_name = fp_map.get(decl.name).?;
-
-                try w.printLine("{s} = @ptrCast(getProcAddress(\"{s}\"));", .{ name, fn_name });
-            }
-        }
-
-        for (ctx.all_engine_classes.items) |cls| {
-            try w.printLine("godot.getClassName({0s}).* = godot.core.StringName.fromComptimeLatin1(\"{0s}\");", .{cls});
-        }
-
-        w.indent -= 1;
-        try w.writeLine("}");
-    }
-
-    // TODO: move into types and remove
-    for (ctx.all_engine_classes.items) |cls| {
-        const constructor_code =
-            \\pub fn init{0s}() {0s} {{
-            \\    return .{{
-            \\        .godot_object = godot.core.classdbConstructObject(@ptrCast(godot.getClassName({0s}))).?
-            \\    }};
-            \\}}
-        ;
-        if (!ctx.isSingleton(cls)) {
-            try w.printLine(constructor_code, .{cls});
-        }
-    }
-
-    try buf.flush();
 }
 
 const std = @import("std");
