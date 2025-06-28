@@ -4,7 +4,6 @@ pub fn generate(ctx: *Context) !void {
     try writeModules(ctx);
 
     try generateClasses(ctx);
-    try generateUtilityFunctions(ctx);
     try generateCore(ctx);
 }
 
@@ -788,24 +787,10 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
         try writeDocBlock(w, fn_node.description);
     }
 
-    if (proc_type == .Constructor) {
-        var buf: [256]u8 = undefined;
-        const atypes = ctx.getArgumentsTypes(fn_node, &buf);
-        if (atypes.len > 0) {
-            const temp_atypes_func_name = try std.fmt.allocPrint(ctx.allocator, "{s}_from_{s}", .{ func_name, atypes });
-            const atypes_func_name = ctx.getZigFuncName(temp_atypes_func_name);
+    try w.print("pub fn {s}(", .{zig_func_name});
 
-            try w.print("pub fn {s}(", .{atypes_func_name});
-        } else {
-            try w.print("pub fn {s}(", .{zig_func_name});
-        }
-    } else {
-        try w.print("pub fn {s}(", .{zig_func_name});
-    }
-
-    const is_const = (proc_type == .BuiltinMethod or proc_type == .ClassMethod) and fn_node.is_const;
-    const is_static = (proc_type == .BuiltinMethod or proc_type == .ClassMethod) and fn_node.is_static;
-    const is_vararg = proc_type != .Constructor and proc_type != .Destructor and fn_node.is_vararg;
+    const is_static = proc_type == .ClassMethod and fn_node.is_static;
+    const is_vararg = fn_node.is_vararg;
 
     var args = std.ArrayList([]const u8).init(ctx.allocator);
     defer args.deinit();
@@ -814,59 +799,49 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
     const need_return = !std.mem.eql(u8, return_type, "void");
     var is_first_arg = true;
     if (!is_static) {
-        if (proc_type == .BuiltinMethod or proc_type == .Destructor) {
-            if (is_const) {
-                _ = try w.write("self: Self");
-            } else {
-                _ = try w.write("self: *Self");
-            }
-
-            is_first_arg = false;
-        } else if (proc_type == .ClassMethod) {
+        if (proc_type == .ClassMethod) {
             _ = try w.write("self: anytype");
             is_first_arg = false;
         }
     }
     const arg_name_postfix = "_"; //to avoid shadowing member function, which is not allowed in Zig
 
-    if (proc_type != .Destructor) {
-        if (fn_node.arguments) |as| {
-            for (as, 0..) |a, i| {
-                _ = i;
-                const arg_type = ctx.correctType(a.type, "");
-                const arg_name = try std.fmt.allocPrint(ctx.allocator, "{s}{s}", .{ a.name, arg_name_postfix });
-                // //constructors use Variant to store each argument, which use double/int64_t for float/int internally
-                // if (proc_type == .Constructor) {
-                //     if (std.mem.eql(u8, arg_type, "f32")) {}
-                // }
-                if (!is_first_arg) {
-                    _ = try w.write(", ");
-                }
-                is_first_arg = false;
-                if (ctx.isClass(arg_type)) {
-                    try w.print("{s}: anytype", .{arg_name});
-                } else {
-                    if ((proc_type != .Constructor or !util.isStringType(class_name)) and (util.isStringType(arg_type))) {
-                        try w.print("{s}: anytype", .{arg_name});
-                    } else {
-                        try w.print("{s}: {s}", .{ arg_name, arg_type });
-                    }
-                }
-
-                try args.append(arg_name);
-                try arg_types.append(arg_type);
-            }
-        }
-
-        if (is_vararg) {
+    if (fn_node.arguments) |as| {
+        for (as, 0..) |a, i| {
+            _ = i;
+            const arg_type = ctx.correctType(a.type, "");
+            const arg_name = try std.fmt.allocPrint(ctx.allocator, "{s}{s}", .{ a.name, arg_name_postfix });
+            // //constructors use Variant to store each argument, which use double/int64_t for float/int internally
+            // if (proc_type == .Constructor) {
+            //     if (std.mem.eql(u8, arg_type, "f32")) {}
+            // }
             if (!is_first_arg) {
                 _ = try w.write(", ");
             }
-            const arg_name = "varargs";
-            try w.print("{s}: anytype", .{arg_name});
+            is_first_arg = false;
+            if (ctx.isClass(arg_type)) {
+                try w.print("{s}: anytype", .{arg_name});
+            } else {
+                if (util.isStringType(arg_type)) {
+                    try w.print("{s}: anytype", .{arg_name});
+                } else {
+                    try w.print("{s}: {s}", .{ arg_name, arg_type });
+                }
+            }
+
             try args.append(arg_name);
-            try arg_types.append("anytype");
+            try arg_types.append(arg_type);
         }
+    }
+
+    if (is_vararg) {
+        if (!is_first_arg) {
+            _ = try w.write(", ");
+        }
+        const arg_name = "varargs";
+        try w.print("{s}: anytype", .{arg_name});
+        try args.append(arg_name);
+        try arg_types.append("anytype");
     }
 
     try w.printLine(") {s} {{", .{return_type});
@@ -914,7 +889,7 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
                     \\else {{ args[{0d}] = null; }}
                 , .{ i, arg });
             } else {
-                if ((proc_type != .Constructor or !util.isStringType(class_name)) and (util.isStringType(arg_type))) {
+                if (util.isStringType(arg_type)) {
                     try w.printLine("if(@TypeOf({2s}) == {1s}) {{ args[{0d}] = @ptrCast(&{2s}); }} else {{ args[{0d}] = @ptrCast(&{1s}.fromLatin1({2s})); }}", .{ i, arg_type, arg });
                 } else {
                     try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, arg });
@@ -925,22 +900,9 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
         arg_count = "args.len";
     }
 
-    const enum_type_name = ctx.getVariantTypeName(class_name);
     const result_string = if (need_return) "@ptrCast(&result)" else "null";
 
     switch (proc_type) {
-        .UtilityFunction => {
-            try w.printLine(
-                \\const method = godot.support.bindFunction("{s}", {d});
-                \\method({s}, {s}, {s});
-            , .{
-                func_name,
-                fn_node.hash,
-                result_string,
-                arg_array,
-                arg_count,
-            });
-        },
         .ClassMethod => {
             const self_ptr = if (is_static) "null" else "@ptrCast(godot.getGodotObjectPtr(self).*)";
 
@@ -970,26 +932,6 @@ fn generateProc(w: *Writer, fn_node: anytype, class_name: []const u8, func_name:
                 }
             }
         },
-        .BuiltinMethod => {
-            try w.printLine("const method = godot.support.bindBuiltinMethod({s}, \"{s}\", {d});", .{ enum_type_name, func_name, fn_node.hash });
-            if (is_static) {
-                try w.printLine("method(null, {s}, {s}, {s});", .{ arg_array, result_string, arg_count });
-            } else {
-                try w.printLine("method(@ptrCast(@constCast(&self.value)), {s}, {s}, {s});", .{ arg_array, result_string, arg_count });
-            }
-        },
-        .Constructor => {
-            try w.printLine(
-                \\const method = godot.support.bindConstructor({s}, {d});
-                \\method(@ptrCast(&result), {s});
-            , .{ enum_type_name, fn_node.index, arg_array });
-        },
-        .Destructor => {
-            try w.printLine(
-                \\const method = godot.support.bindDestructor({s});
-                \\method(@ptrCast(&self.value));
-            , .{enum_type_name});
-        },
     }
 
     if (need_return) {
@@ -1012,7 +954,6 @@ fn generateCore(ctx: *Context) !void {
     try w.writeLine(
         \\const std = @import("std");
         \\const godot = @import("../root.zig");
-        \\pub const util = @import("util.zig");
         \\pub const c = @import("gdextension");
     );
 
@@ -1121,38 +1062,8 @@ fn generateCore(ctx: *Context) !void {
     try file.sync();
 }
 
-fn generateUtilityFunctions(ctx: *Context) !void {
-    const file = try ctx.config.output.createFile("util.zig", .{});
-    defer file.close();
-
-    var buf = bufferedWriter(file.writer());
-    var writer = codeWriter(buf.writer().any());
-
-    // TODO: should be managed at a module level in Context and we should generate modules
-    var imports: Context.Imports = .empty;
-    defer imports.deinit(ctx.allocator);
-
-    for (ctx.api.utility_functions) |function| {
-        const return_type = ctx.correctType(function.return_type, "");
-        try generateProc(&writer, function, "", function.name, return_type, .UtilityFunction, ctx);
-
-        if (ctx.function_imports.get(function.name)) |function_imports| {
-            try imports.merge(ctx.allocator, &function_imports);
-        }
-    }
-
-    try writeImports(&writer, &imports);
-
-    try buf.flush();
-    try file.sync();
-}
-
 pub const ProcType = enum {
-    UtilityFunction,
-    BuiltinMethod,
     ClassMethod,
-    Constructor,
-    Destructor,
 };
 
 const std = @import("std");
