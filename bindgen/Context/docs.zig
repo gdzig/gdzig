@@ -8,12 +8,15 @@ const Element = enum {
     // links
     method,
     member,
+    constant,
+    @"enum",
 
     // basic
     param,
     bool,
     int,
     float,
+    br,
 };
 
 pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u8 {
@@ -28,6 +31,7 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8) ![]const u
     var output = ArrayList(u8){};
     try bbcodez.fmt.md.renderDocument(allocator, doc, output.writer(allocator).any(), .{
         .write_element_fn = writeElement,
+        .user_data = null,
     });
 
     return output.toOwnedSlice(allocator);
@@ -52,7 +56,29 @@ fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
         .bool, .int, .float => try writeBasicType(node, ctx),
         .method => try writeMethod(node, ctx),
         .member => try writeMember(node, ctx),
+        .constant => try writeConstant(node, ctx),
+        .@"enum" => try writeEnum(node, ctx),
+        .br => try writeLineBreak(node, ctx),
     };
+}
+
+fn writeLineBreak(_: Node, ctx: *const Context) anyerror!bool {
+    try ctx.writer.writeByte('\n');
+    return true;
+}
+
+fn writeEnum(node: Node, ctx: *const Context) anyerror!bool {
+    // TODO: make it a link
+    const enum_name = try node.getValue() orelse return false;
+    try ctx.writer.print("`{s}`", .{enum_name});
+    return true;
+}
+
+fn writeConstant(node: Node, ctx: *const Context) anyerror!bool {
+    // TODO: make it a link
+    const constant_name = try node.getValue() orelse return false;
+    try ctx.writer.print("`{s}`", .{constant_name});
+    return true;
 }
 
 fn writeMember(node: Node, ctx: *const Context) anyerror!bool {
