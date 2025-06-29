@@ -565,7 +565,7 @@ fn writeFunctionHeader(w: *Writer, self: ?[]const u8, function: *const Context.F
                 try w.writeAll(", ");
             }
             try w.print("{s}: ", .{param.name});
-            try writeTypeAtField(w, &param.type);
+            try writeTypeAtOptionalParameterField(w, &param.type);
             try w.print(" = {s}", .{param.default.?});
             is_first = false;
         }
@@ -738,24 +738,26 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
 
 fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
-        .void => try w.writeAll("void"),
+        .array => try w.writeAll("Array"),
+        .node_path => try w.writeAll("NodePath"),
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .node_path => try w.writeAll("NodePath"),
         .variant => try w.writeAll("Variant"),
-        .many => @panic("cannot format a union types in a struct field position"),
+        .@"union" => @panic("cannot format a union types in a struct field position"),
+        .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
     }
 }
 
 fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
-        .void => try w.writeAll("void"),
+        .array => try w.writeAll("Array"),
+        .node_path => try w.writeAll("NodePath"),
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .node_path => try w.writeAll("NodePath"),
         .variant => try w.writeAll("Variant"),
-        .many => @panic("cannot format a union type in a struct field position"),
+        .@"union" => @panic("cannot format a union type in a return position"),
+        .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
     }
 }
@@ -764,14 +766,29 @@ fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
 /// checks and coercions.
 fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
-        .void => try w.writeAll("void"),
+        .array => try w.writeAll("Array"),
+        .node_path => try w.writeAll("NodePath"),
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .node_path => try w.writeAll("NodePath"),
         .variant => try w.writeAll("Variant"),
-        .many => @panic("cannot format a union type in a function parameter position"),
-        .basic => |name| try w.writeAll(name),
-        .class => |name| try w.writeAll(name),
+        .@"union" => @panic("cannot format a union type in a function parameter position"),
+        .void => try w.writeAll("void"),
+        inline else => |s| try w.writeAll(s),
+    }
+}
+
+/// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
+/// checks and coercions.
+fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !void {
+    switch (@"type".*) {
+        .array => try w.writeAll("?Array"),
+        .node_path => try w.writeAll("NodePath"),
+        .string => try w.writeAll("String"),
+        .string_name => try w.writeAll("StringName"),
+        .variant => try w.writeAll("Variant"),
+        .@"union" => @panic("cannot format a union type in a function parameter position"),
+        .void => try w.writeAll("void"),
+        inline else => |s| try w.writeAll(s),
     }
 }
 

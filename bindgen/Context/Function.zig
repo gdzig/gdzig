@@ -23,6 +23,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     self.doc = if (constructor.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = builtin_name,
     }) else null;
+
     self.name = blk: {
         var buf: ArrayList(u8) = .empty;
         errdefer buf.deinit(allocator);
@@ -52,6 +53,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
 
         break :blk try buf.toOwnedSlice(allocator);
     };
+
     self.index = @intCast(constructor.index);
 
     for (constructor.arguments orelse &.{}) |arg| {
@@ -259,7 +261,11 @@ pub const Parameter = struct {
 
     pub fn fromNameTypeDefault(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, default: []const u8, ctx: *const Context) !Parameter {
         var self = try fromNameType(allocator, api_name, api_type, is_meta, ctx);
-        self.default = default;
+        if (self.type == .array and std.mem.eql(u8, default, "[]")) {
+            self.default = "null";
+        } else {
+            self.default = default;
+        }
         return self;
     }
 
