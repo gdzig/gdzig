@@ -138,9 +138,15 @@ pub const DocumentContext = struct {
     }
 
     pub fn writeMethod(self: DocumentContext, node: Node) anyerror!bool {
-        // TODO: make it a link
-        // how do we get the name of the class that the method belongs to?
         const method_name = try node.getValue() orelse return false;
+
+        if (self.resolveMethod(method_name)) |link| {
+            if (try self.writeSymbolLink(method_name, link)) {
+                return true;
+            }
+        }
+
+        logger.err("Method symbol lookup failed: {s}, current class: {s}", .{ method_name, self.current_class orelse "unknown" });
         try self.writer.print("`{s}`", .{method_name});
         return true;
     }
