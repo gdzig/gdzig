@@ -52,7 +52,7 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
         .name = name,
         .fields = try fields.toOwnedSlice(allocator),
         .consts = try consts.toOwnedSlice(allocator),
-        .padding = 64 - position,
+        .padding = 32 - position,
     };
 }
 

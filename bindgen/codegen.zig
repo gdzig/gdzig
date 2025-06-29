@@ -497,7 +497,7 @@ fn writeGlobalEnums(ctx: *const Context) !void {
 
 fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
     try writeDocBlock(w, @"enum".doc);
-    try w.printLine("pub const {s} = enum(i64) {{", .{@"enum".name});
+    try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
     var values = @"enum".values.valueIterator();
     while (values.next()) |value| {
@@ -520,7 +520,7 @@ fn writeField(w: *Writer, field: *const Context.Field) !void {
 
 fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
     try writeDocBlock(w, flag.doc);
-    try w.printLine("pub const {s} = packed struct(i64) {{", .{flag.name});
+    try w.printLine("pub const {s} = packed struct(i32) {{", .{flag.name});
     w.indent += 1;
     for (flag.fields) |field| {
         try writeDocBlock(w, field.doc);
@@ -531,7 +531,7 @@ fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
     }
     for (flag.consts) |@"const"| {
         try writeDocBlock(w, @"const".doc);
-        try w.printLine("pub const {s}: {s} = @bitCast(@as(u64, {d}));", .{ @"const".name, flag.name, @"const".value });
+        try w.printLine("pub const {s}: {s} = @bitCast(@as(i32, {d}));", .{ @"const".name, flag.name, @"const".value });
     }
     w.indent -= 1;
     try w.writeLine("};");
