@@ -22,7 +22,9 @@ pub fn init(self: *Self) void {
     std.log.info("init {s}", .{@typeName(@TypeOf(self))});
 
     self.fps_counter = Label.init();
-    self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, false);
+    self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{
+        .keepOffsets_ = false,
+    });
     self.base.addChild(self.fps_counter, false, 0);
 }
 

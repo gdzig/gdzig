@@ -136,7 +136,7 @@ pub fn castSafe(comptime TargetType: type, object: anytype) ?TargetType {
 
 pub fn create(comptime T: type) !*T {
     const self = try general_allocator.create(T);
-    self.base = .{ .godot_object = core.classdbConstructObject2(@ptrCast(getParentClassName(T))) };
+    self.base = .{ .godot_object = core.classdbConstructObject2(@ptrCast(getParentClassName(T))).? };
     core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
     core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
     if (@hasDecl(T, "init")) {
@@ -149,7 +149,7 @@ pub fn create(comptime T: type) !*T {
 fn recreate(comptime T: type, obj: ?*anyopaque) !*T {
     const self = try general_allocator.create(T);
     self.* = std.mem.zeroInit(T, .{});
-    self.base = .{ .godot_object = obj };
+    self.base = .{ .godot_object = obj.? };
     core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
     core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
     if (@hasDecl(T, "init")) {
@@ -543,7 +543,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
         .class_name = @ptrCast(@constCast(&core.StringName.init())),
         .hint = @intFromEnum(global.PropertyHint.property_hint_none),
         .hint_string = @ptrCast(@constCast(&core.String.init())),
-        .usage = @bitCast(global.PropertyUsage.property_usage_none),
+        .usage = @bitCast(global.PropertyUsageFlags.property_usage_none),
     };
 
     inline for (1..MethodBinder.ArgCount) |i| {
@@ -553,7 +553,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
             .class_name = getClassName(MethodBinder.ArgsTuple[i].type),
             .hint = @intFromEnum(global.PropertyHint.property_hint_none),
             .hint_string = @ptrCast(@constCast(&core.String.init())),
-            .usage = @bitCast(global.PropertyUsage.property_usage_none),
+            .usage = @bitCast(global.PropertyUsageFlags.property_usage_none),
         };
 
         MethodBinder.arg_metadata[i] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
@@ -643,7 +643,7 @@ pub const PropertyInfo = struct {
     class_name: core.StringName,
     hint: u32 = @intFromEnum(global.PropertyHint.property_hint_none),
     hint_string: core.String,
-    usage: u32 = @bitCast(global.PropertyUsage.property_usage_default),
+    usage: u32 = @bitCast(global.PropertyUsageFlags.property_usage_default),
     const Self = @This();
 
     pub fn init(@"type": c.GDExtensionVariantType, name: core.StringName) Self {
@@ -653,11 +653,11 @@ pub const PropertyInfo = struct {
             .hint_string = core.String.fromUtf8("test property"),
             .class_name = core.StringName.fromLatin1(""),
             .hint = @intFromEnum(global.PropertyHint.property_hint_none),
-            .usage = @bitCast(global.PropertyUsage.property_usage_default),
+            .usage = @bitCast(global.PropertyUsageFlags.property_usage_default),
         };
     }
 
-    pub fn initFull(@"type": c.GDExtensionVariantType, name: core.StringName, class_name: core.StringName, hint: global.PropertHint, hint_string: core.String, usage: global.PropertyUsage) Self {
+    pub fn initFull(@"type": c.GDExtensionVariantType, name: core.StringName, class_name: core.StringName, hint: global.PropertHint, hint_string: core.String, usage: global.PropertyUsageFlags) Self {
         return .{
             .type = @"type",
             .name = name,

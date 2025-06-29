@@ -9,12 +9,7 @@ padding: u8 = 0,
 pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum, ctx: *const Context) !Flag {
     const doc = null;
 
-    const name = if (std.mem.endsWith(u8, api.name, "Flags"))
-        try allocator.dupe(u8, api.name[0 .. api.name.len - "Flags".len])
-    else if (std.mem.endsWith(u8, api.name, "Flag"))
-        try allocator.dupe(u8, api.name[0 .. api.name.len - "Flag".len])
-    else
-        try allocator.dupe(u8, api.name);
+    const name = try allocator.dupe(u8, api.name);
     errdefer allocator.free(name);
 
     var fields: ArrayList(Field) = .empty;

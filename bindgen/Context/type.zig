@@ -16,6 +16,7 @@ pub const Type = union(enum) {
     @"enum": []const u8,
     flag: []const u8,
     array: ?*Type,
+    pointer: *Type,
 
     /// A type union - some properties accept more than one type, like "ParticleProcessMaterial,ShaderMaterial"
     @"union": []Type,
@@ -35,6 +36,7 @@ pub const Type = union(enum) {
         .{ "int16", Type{ .basic = "i16" } },
         .{ "int32", Type{ .basic = "i32" } },
         .{ "int64", Type{ .basic = "i64" } },
+        .{ "uint8_t", Type{ .basic = "u8" } },
         .{ "uint8", Type{ .basic = "u8" } },
         .{ "uint16", Type{ .basic = "u16" } },
         .{ "uint32", Type{ .basic = "u32" } },
@@ -46,7 +48,9 @@ pub const Type = union(enum) {
     });
 
     pub fn from(allocator: Allocator, name: []const u8, is_meta: bool, ctx: *const Context) !Type {
-        const n = mem.count(u8, name, ",");
+        var normalized = name;
+
+        const n = mem.count(u8, normalized, ",");
         if (n > 0) {
             const types = try allocator.alloc(Type, n);
             // TODO: allocate list and generate
@@ -54,15 +58,15 @@ pub const Type = union(enum) {
         }
 
         if (is_meta) {
-            if (meta_overrides.get(name)) |@"type"| {
+            if (meta_overrides.get(normalized)) |@"type"| {
                 return @"type";
             }
         }
-        if (string_map.get(name)) |@"type"| {
+        if (string_map.get(normalized)) |@"type"| {
             return @"type";
         }
 
-        var parts = std.mem.splitSequence(u8, name, "::");
+        var parts = std.mem.splitSequence(u8, normalized, "::");
         if (parts.next()) |k| {
             if (std.mem.eql(u8, "bitfield", k)) {
                 return .{
@@ -75,34 +79,46 @@ pub const Type = union(enum) {
                 };
             }
             if (std.mem.eql(u8, "typedarray", k)) {
-                const subtype = try allocator.create(Type);
-                subtype.* = try Type.from(allocator, parts.next().?, false, ctx);
+                const elem = try allocator.create(Type);
+                elem.* = try Type.from(allocator, parts.next().?, false, ctx);
                 return .{
-                    .array = subtype,
+                    .array = elem,
                 };
             }
         }
 
-        if (std.mem.eql(u8, "Array", name)) {
+        if (std.mem.startsWith(u8, normalized, "const ")) {
+            normalized = normalized[6..];
+        }
+
+        if (normalized[normalized.len - 1] == '*') {
+            const child = try allocator.create(Type);
+            child.* = try Type.from(allocator, normalized[0 .. normalized.len - 1], false, ctx);
+            return .{
+                .pointer = child,
+            };
+        }
+
+        if (std.mem.eql(u8, "Array", normalized)) {
             return .{
                 .array = null,
             };
         }
 
-        if (ctx.isClass(name)) {
+        if (ctx.isClass(normalized)) {
             return .{
-                .class = try allocator.dupe(u8, name),
+                .class = try allocator.dupe(u8, normalized),
             };
         }
 
         return .{
-            .basic = try allocator.dupe(u8, name),
+            .basic = try allocator.dupe(u8, normalized),
         };
     }
 
     pub fn deinit(self: *Type, allocator: Allocator) void {
         switch (self.*) {
-            .array => |subtype| if (subtype) |t| t.deinit(allocator),
+            .array => |elem| if (elem) |t| t.deinit(allocator),
             .basic => |name| allocator.free(name),
             .class => |name| allocator.free(name),
             .@"enum" => |name| allocator.free(name),

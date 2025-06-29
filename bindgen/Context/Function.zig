@@ -261,10 +261,14 @@ pub const Parameter = struct {
 
     pub fn fromNameTypeDefault(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, default: []const u8, ctx: *const Context) !Parameter {
         var self = try fromNameType(allocator, api_name, api_type, is_meta, ctx);
-        if (self.type == .array and std.mem.eql(u8, default, "[]")) {
+        if (self.type == .array and std.mem.indexOf(u8, default, "[]") != null) {
             self.default = "null";
+        } else if (self.type == .@"enum") {
+            self.default = try std.fmt.allocPrint(allocator, "@enumFromInt({s})", .{default});
+        } else if (self.type == .flag) {
+            self.default = try std.fmt.allocPrint(allocator, "@bitCast({s})", .{default});
         } else {
-            self.default = default;
+            self.default = try allocator.dupe(u8, default);
         }
         return self;
     }
