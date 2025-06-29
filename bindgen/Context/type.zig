@@ -91,6 +91,4 @@ const std = @import("std");
 const Allocator = mem.Allocator;
 const mem = std.mem;
 
-const precision = @import("build_options").precision;
-
 const Context = @import("../Context.zig");

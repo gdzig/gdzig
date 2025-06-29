@@ -69,7 +69,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     }
 
     for (api.methods orelse &.{}) |method| {
-        try self.methods.put(allocator, method.name, try Function.fromBuiltinMethod(allocator, method, ctx));
+        try self.methods.put(allocator, method.name, try Function.fromBuiltinMethod(allocator, self.name, method, ctx));
     }
 
     return self;

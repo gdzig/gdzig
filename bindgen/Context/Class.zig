@@ -78,13 +78,13 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         if (@"enum".is_bitfield) {
             try self.flags.put(allocator, @"enum".name, try Flag.fromGlobalEnum(allocator, @"enum", ctx));
         } else {
-            try self.enums.put(allocator, @"enum".name, try Enum.fromClass(allocator, @"enum"));
+            try self.enums.put(allocator, @"enum".name, try Enum.fromClass(allocator, self.name_api, @"enum", ctx));
         }
     }
 
     // Methods
     for (api.methods orelse &.{}) |method| {
-        try self.functions.put(allocator, method.name, try Function.fromClass(allocator, method, ctx));
+        try self.functions.put(allocator, method.name, try Function.fromClass(allocator, self.name_api, method, ctx));
     }
 
     // Properties

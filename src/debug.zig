@@ -49,8 +49,6 @@ pub inline fn assertVariantLike(comptime T: type) void {
 }
 
 const std = @import("std");
-const debug = std.debug;
 const fmt = std.fmt;
-const mem = std.mem;
 
 const godot = @import("root.zig");

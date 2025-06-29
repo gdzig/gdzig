@@ -152,7 +152,7 @@ pub const DocumentContext = struct {
             }
         }
 
-        logger.err("Enum symbol lookup failed: {s}", .{enum_name});
+        logger.err("Enum symbol lookup failed: {s}, current class: {s}", .{ enum_name, self.current_class orelse "unknown" });
         try self.writer.print("`{s}`", .{enum_name});
         return true;
     }

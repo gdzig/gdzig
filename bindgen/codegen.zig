@@ -1014,12 +1014,10 @@ pub const ProcType = enum {
 
 const std = @import("std");
 const bufferedWriter = std.io.bufferedWriter;
-const StringHashMap = std.StringHashMapUnmanaged;
 
 const gdextension = @import("gdextension");
 
 const Context = @import("Context.zig");
-const GodotApi = @import("GodotApi.zig");
 const Writer = @import("writer.zig").AnyWriter;
 const codeWriter = @import("writer.zig").codeWriter;
 const util = @import("util.zig");
