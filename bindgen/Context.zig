@@ -189,39 +189,42 @@ fn collectClassImports(self: *Context, allocator: Allocator, class: *Class) !voi
     class.imports.skip = class.name;
 
     for (class.functions.values()) |function| {
-        try typeImport(allocator, &class.imports, function.return_type);
+        try typeImport(allocator, &class.imports, &function.return_type);
         for (function.parameters.values()) |parameter| {
-            try typeImport(allocator, &class.imports, parameter.type);
+            try typeImport(allocator, &class.imports, &parameter.type);
         }
     }
     for (class.properties.values()) |property| {
-        try typeImport(allocator, &class.imports, property.type);
+        try typeImport(allocator, &class.imports, &property.type);
     }
     for (class.signals.values()) |signal| {
         for (signal.parameters.values()) |parameter| {
-            try typeImport(allocator, &class.imports, parameter.type);
+            try typeImport(allocator, &class.imports, &parameter.type);
         }
     }
 
     // Index imports from the parent class hierarchy
-    var cur: ?*Class = class;
-    while (class.getBase(self)) |base| : (cur = base) {
+    if (class.getBase(self)) |base| {
         try self.collectClassImports(allocator, base);
+        try class.imports.put(allocator, base.name);
         try class.imports.merge(allocator, &base.imports);
     }
 }
 
-fn typeImport(allocator: Allocator, imports: *Imports, @"type": Type) !void {
-    switch (@"type") {
+fn typeImport(allocator: Allocator, imports: *Imports, @"type": *const Type) !void {
+    switch (@"type".*) {
         .array => try imports.put(allocator, "Array"),
+        .basic => |name| try imports.put(allocator, name),
         .class => |name| try imports.put(allocator, name),
         .@"enum" => |name| try imports.put(allocator, name),
         .flag => |name| try imports.put(allocator, name),
+        .pointer => |child| try typeImport(allocator, imports, child),
         .string => try imports.put(allocator, "String"),
         .string_name => try imports.put(allocator, "StringName"),
         .node_path => try imports.put(allocator, "NodePath"),
+        .@"union" => {},
         .variant => try imports.put(allocator, "Variant"),
-        else => {},
+        .void => {},
     }
 }
 
