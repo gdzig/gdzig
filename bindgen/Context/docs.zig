@@ -24,18 +24,18 @@ pub const DocumentContext = struct {
     // TODO: add support for setting a configurable base url
     const link_prefix = "#gdzig.";
 
-    var symbol_lookup = StringHashMap([]const u8).empty;
-
+    symbol_lookup: StringHashMap([]const u8),
     codegen_ctx: *const CodegenContext,
     current_class: ?[]const u8 = null,
     write_ctx: ?*const WriteContext = null,
     // SAFETY: will be initialized in fromWriteContext
     writer: *std.io.AnyWriter = undefined,
 
-    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8) DocumentContext {
+    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap([]const u8)) DocumentContext {
         return DocumentContext{
             .codegen_ctx = codegen_ctx,
             .current_class = current_class,
+            .symbol_lookup = symbol_lookup,
         };
     }
 
@@ -77,6 +77,8 @@ pub const DocumentContext = struct {
     fn resolveMethod(self: *const DocumentContext, method_name: []const u8) ?[]const u8 {
         if (self.current_class) |class_name| {
             const qualified = std.fmt.allocPrint(self.codegen_ctx.allocator, "{s}.{s}", .{ class_name, method_name }) catch return null;
+            defer self.codegen_ctx.allocator.free(qualified);
+
             // Check if this qualified name exists in symbol_lookup
             if (self.symbolLookup(qualified)) |link| {
                 return link;
@@ -86,53 +88,8 @@ pub const DocumentContext = struct {
         return self.symbolLookup(method_name);
     }
 
-    fn buildSymbolLookupTable(self: DocumentContext) !void {
-        if (symbol_lookup.size == 0) {
-            const ctx = self.codegen_ctx;
-            const api = ctx.api;
-
-            logger.debug("Initializing symbol lookup...", .{});
-
-            try symbol_lookup.putNoClobber(ctx.allocator, "Variant", "Variant");
-
-            for (api.classes) |class| {
-                if (util.shouldSkipClass(class.name)) continue;
-
-                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{class.name});
-                try symbol_lookup.putNoClobber(ctx.allocator, class.name, doc_name);
-
-                for (class.enums orelse &.{}) |@"enum"| {
-                    const enum_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ class.name, @"enum".name });
-                    const enum_doc_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ doc_name, enum_name });
-                    try symbol_lookup.putNoClobber(ctx.allocator, enum_name, enum_doc_name);
-                }
-            }
-
-            for (api.builtin_classes) |builtin| {
-                if (util.shouldSkipClass(builtin.name)) continue;
-
-                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{0s}", .{builtin.name});
-                try symbol_lookup.putNoClobber(ctx.allocator, builtin.name, doc_name);
-
-                for (builtin.enums orelse &.{}) |@"enum"| {
-                    const enum_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ builtin.name, @"enum".name });
-                    const enum_doc_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ doc_name, enum_name });
-                    try symbol_lookup.putNoClobber(ctx.allocator, enum_name, enum_doc_name);
-                }
-            }
-
-            for (api.global_enums) |@"enum"| {
-                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.global.{s}", .{@"enum".name});
-                try symbol_lookup.putNoClobber(ctx.allocator, @"enum".name, doc_name);
-            }
-
-            logger.debug("Symbol lookup initialized. Size: {d}", .{symbol_lookup.size});
-        }
-    }
-
     pub fn symbolLookup(self: DocumentContext, key: []const u8) ?[]const u8 {
-        _ = self;
-        return symbol_lookup.get(key);
+        return self.symbol_lookup.get(key);
     }
 
     pub fn writeSymbolLink(self: DocumentContext, symbol_name: []const u8, link: []const u8) anyerror!bool {
@@ -228,9 +185,7 @@ pub const Options = struct {
 };
 
 pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext, options: Options) ![]const u8 {
-    var doc_ctx = DocumentContext.init(ctx, options.current_class);
-
-    try doc_ctx.buildSymbolLookupTable();
+    var doc_ctx = DocumentContext.init(ctx, options.current_class, ctx.symbol_lookup);
 
     var doc = try Document.loadFromBuffer(allocator, input, .{
         .verbatim_tags = verbatim_tags,
@@ -325,6 +280,5 @@ const StringHashMap = std.StringHashMapUnmanaged;
 const std = @import("std");
 const testing = std.testing;
 const bbcodez = @import("bbcodez");
-const util = @import("../util.zig");
 
 const logger = std.log.scoped(.docs);
