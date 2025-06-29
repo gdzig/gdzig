@@ -4,6 +4,9 @@ doc: ?[]const u8 = null,
 name: []const u8 = "_",
 name_api: []const u8 = "_",
 
+/// The name of the parent type that this function belongs to.
+base: ?[]const u8 = null,
+
 index: ?usize = null,
 hash: ?u64 = null,
 
@@ -12,8 +15,16 @@ return_type: Type = .void,
 
 /// The override behavior of the function, in object-oriented terms.
 mode: Mode = .final,
-is_static: bool = true,
-is_const: bool = false,
+self: union(enum) {
+    /// This function takes no instance.
+    static: void,
+    /// This function takes a singleton instance.
+    singleton: void,
+    /// This function takes a constant instance.
+    constant: []const u8,
+    /// This function takes a mutable self instance.
+    mutable: []const u8,
+} = .static,
 is_vararg: bool = false,
 
 pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, constructor: GodotApi.Builtin.Constructor, ctx: *const Context) !Function {
@@ -65,33 +76,37 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     return self;
 }
 
-pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, method: GodotApi.Builtin.Method, ctx: *const Context) !Function {
+pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: GodotApi.Builtin.Method, ctx: *const Context) !Function {
     var self = Function{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (method.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
+    self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = builtin_name,
     }) else null;
-    self.name = try case.allocTo(allocator, .camel, method.name);
-    self.name_api = method.name;
-    self.hash = method.hash;
-    self.is_static = method.is_static;
-    self.is_const = method.is_const;
-    self.is_vararg = method.is_vararg;
+    self.name = try case.allocTo(allocator, .camel, api.name);
+    self.name_api = api.name;
+    self.hash = api.hash;
+    self.self = if (api.is_static)
+        .static
+    else if (api.is_const)
+        .{ .constant = builtin_name }
+    else
+        .{ .mutable = builtin_name };
+    self.is_vararg = api.is_vararg;
 
-    for (method.arguments orelse &.{}) |arg| {
+    for (api.arguments orelse &.{}) |arg| {
         const parameter: Parameter = if (arg.default_value.len > 0)
             try .fromNameTypeDefault(allocator, arg.name, arg.type, false, arg.default_value, ctx)
         else
             try .fromNameType(allocator, arg.name, arg.type, false, ctx);
         try self.parameters.put(allocator, arg.name, parameter);
     }
-    self.return_type = try .from(allocator, method.return_type, false, ctx);
+    self.return_type = try .from(allocator, api.return_type, false, ctx);
 
     return self;
 }
 
-pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Class.Method, ctx: *const Context) !Function {
+pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bool, api: GodotApi.Class.Method, ctx: *const Context) !Function {
     var self = Function{};
     errdefer self.deinit(allocator);
 
@@ -117,10 +132,17 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
         break :blk try buf.toOwnedSlice(allocator);
     };
     self.name_api = api.name;
+    self.base = class_name;
     self.hash = api.hash;
     self.mode = if (!api.is_virtual) .final else if (api.is_required) .abstract else .virtual;
-    self.is_static = api.is_static;
-    self.is_const = api.is_const;
+    self.self = if (api.is_static)
+        .static
+    else if (has_singleton)
+        .singleton
+    else if (api.is_const)
+        .{ .constant = class_name }
+    else
+        .{ .mutable = class_name };
     self.is_vararg = api.is_vararg;
 
     for (api.arguments orelse &.{}) |arg| {
@@ -159,14 +181,14 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
     return self;
 }
 
-pub fn fromGetter(allocator: Allocator, name: []const u8, @"type": Type) !Function {
+pub fn fromClassGetter(allocator: Allocator, class_name: []const u8, name: []const u8, @"type": Type, is_singleton: bool) !Function {
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
     self.name = try case.allocTo(allocator, .camel, name);
     self.name_api = name;
-    self.is_static = false;
-    self.is_const = true;
+    self.base = class_name;
+    self.self = if (is_singleton) .singleton else .{ .constant = class_name };
     self.is_vararg = false;
     self.parameters = .{};
     self.return_type = @"type";
@@ -174,14 +196,14 @@ pub fn fromGetter(allocator: Allocator, name: []const u8, @"type": Type) !Functi
     return self;
 }
 
-pub fn fromSetter(allocator: Allocator, name: []const u8, @"type": Type) !Function {
+pub fn fromClassSetter(allocator: Allocator, class_name: []const u8, is_singleton: bool, name: []const u8, @"type": Type) !Function {
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
     self.name = try case.allocTo(allocator, .camel, name);
     self.name_api = name;
-    self.is_static = false;
-    self.is_const = false;
+    self.base = class_name;
+    self.self = if (is_singleton) .singleton else .{ .mutable = class_name };
     self.is_vararg = false;
     self.return_type = .void;
 
@@ -201,8 +223,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     self.name = try case.allocTo(allocator, .camel, function.name);
     self.name_api = function.name;
     self.hash = function.hash;
-    self.is_static = true;
-    self.is_const = false;
+    self.self = .static;
     self.is_vararg = function.is_vararg;
     for (function.arguments orelse &.{}) |arg| {
         try self.parameters.put(allocator, arg.name, try .fromNameType(allocator, arg.name, arg.type, false, ctx));

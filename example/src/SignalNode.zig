@@ -14,7 +14,7 @@ pub fn _bind_methods() void {
 }
 
 pub fn _enter_tree(self: *Self) void {
-    if (Engine.getSingleton().isEditorHint()) return;
+    if (Engine.isEditorHint()) return;
 
     var signal1_btn = Button.init();
     signal1_btn.setPosition(Vector2.new(100, 20), false);

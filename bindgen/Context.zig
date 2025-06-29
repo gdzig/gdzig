@@ -204,7 +204,7 @@ fn collectClassImports(self: *Context, allocator: Allocator, class: *Class) !voi
     }
 
     // Index imports from the parent class hierarchy
-    if (class.getBase(self)) |base| {
+    if (class.getBasePtr(self)) |base| {
         try self.collectClassImports(allocator, base);
         try class.imports.put(allocator, base.name);
         try class.imports.merge(allocator, &base.imports);
@@ -404,8 +404,18 @@ fn castBuiltins(self: *Context, allocator: Allocator) !void {
 
 fn castClasses(self: *Context, allocator: Allocator) !void {
     for (self.api.classes) |class| {
-        try self.classes.put(allocator, class.name, try .fromApi(allocator, class, self));
+        try self.castClass(allocator, class);
     }
+}
+
+fn castClass(self: *Context, allocator: Allocator, class: GodotApi.Class) !void {
+    // Assemble parent classes first
+    if (self.api.findClass(class.inherits)) |base| {
+        if (!self.classes.contains(base.name)) {
+            try self.castClass(allocator, base);
+        }
+    }
+    try self.classes.put(allocator, class.name, try .fromApi(allocator, class, self));
 }
 
 fn castEnums(self: *Context, allocator: Allocator) !void {

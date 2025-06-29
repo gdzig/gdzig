@@ -22,8 +22,7 @@ pub fn randfRange(self: Self, comptime T: type, min: T, max: T) T {
 }
 
 pub fn _ready(self: *Self) void {
-    const engine = Engine.getSingleton();
-    if (engine.isEditorHint()) return;
+    if (Engine.isEditorHint()) return;
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     self.rng = prng.random();

@@ -129,7 +129,7 @@ pub const Class = struct {
     name: []const u8,
     is_refcounted: bool,
     is_instantiable: bool,
-    inherits: []const u8 = "",
+    inherits: ?[]const u8,
     api_type: []const u8,
 
     constants: ?[]Constant = null,
@@ -256,9 +256,12 @@ pub const UtilityFunction = struct {
     };
 };
 
-pub fn findClass(self: @This(), name: []const u8) ?Class {
+pub fn findClass(self: @This(), name: ?[]const u8) ?Class {
+    if (name == null) {
+        return null;
+    }
     for (self.classes) |class| {
-        if (std.mem.eql(u8, class.name, name)) {
+        if (std.mem.eql(u8, class.name, name.?)) {
             return class;
         }
     }
@@ -294,7 +297,7 @@ pub const Type = union(enum) {
 
 // TODO: handle in Context
 pub fn findParent(self: @This(), class: Class) ?Class {
-    if (class.inherits.len == 0) {
+    if (class.inherits == null) {
         return null;
     }
     return self.findClass(class.inherits);

@@ -13,8 +13,10 @@ base: ?[]const u8 = null,
 /// The name of the base type used in `extension_api.json`
 base_api: ?[]const u8 = null,
 
-/// Is this class a singleton (can only have one instant)?
+/// Is THIS class a singleton
 is_singleton: bool = false,
+/// Is THIS or any PARENT class a singleton
+has_singleton: bool = false,
 /// Can this type be instantiated directly with no arguments
 is_instantiable: bool = false,
 /// Is this a reference counted type
@@ -61,15 +63,17 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
     self.name_api = api.name;
 
     // Base
-    self.base = if (api.inherits.len > 0) blk: {
+    self.base = if (api.inherits) |inherits| blk: {
         // TODO: case conversion
         // break try case.allocTo(allocator, .pascal, api.name);
-        break :blk try allocator.dupe(u8, api.inherits);
+        break :blk try allocator.dupe(u8, inherits);
     } else null;
-    self.base_api = if (api.inherits.len > 0) api.inherits else null;
+    self.base_api = api.inherits;
 
     // Meta
-    self.is_instantiable = api.is_instantiable;
+    self.is_singleton = ctx.isSingleton(api.name);
+    self.has_singleton = self.getNearestSingleton(ctx) != null;
+    self.is_instantiable = !self.has_singleton and api.is_instantiable;
     self.is_refcounted = api.is_refcounted;
 
     // Constants
@@ -88,12 +92,38 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Methods
     for (api.methods orelse &.{}) |method| {
-        try self.functions.put(allocator, method.name, try Function.fromClass(allocator, self.name_api, method, ctx));
+        try self.functions.put(allocator, method.name, try Function.fromClass(allocator, self.name_api, self.has_singleton, method, ctx));
+    }
+
+    // Inherited methods
+    if (self.getBasePtr(ctx)) |base| {
+        // Copy the parent class functions
+        for (base.functions.values()) |*function| {
+            var inherited: Function = function.*;
+
+            // Update the self type to this class
+            if (inherited.self == .constant) {
+                inherited.self = .{ .constant = self.name };
+            } else if (inherited.self == .mutable) {
+                inherited.self = .{ .mutable = self.name };
+            }
+
+            // Convert the function to a singleton function if we are a singleton and the parent is not
+            if (self.is_singleton and inherited.self != .static and inherited.self != .singleton) {
+                inherited.self = .singleton;
+            }
+
+            try self.functions.put(
+                allocator,
+                inherited.name_api,
+                inherited,
+            );
+        }
     }
 
     // Properties
     for (api.properties orelse &.{}) |property| {
-        try self.properties.put(allocator, property.name, try Property.fromClass(allocator, property, ctx));
+        try self.properties.put(allocator, property.name, try Property.fromClass(allocator, self.name, property, self.is_singleton, ctx));
     }
 
     // Signals
@@ -144,8 +174,16 @@ pub fn deinit(self: *Class, allocator: Allocator) void {
     self.* = .{};
 }
 
-pub fn getBase(self: *const Class, ctx: *const Context) ?*Class {
+pub fn getBasePtr(self: *const Class, ctx: *const Context) ?*Class {
     return if (self.base) |base| ctx.classes.getPtr(base) else null;
+}
+
+pub fn getNearestSingleton(self: *const Class, ctx: *const Context) ?*const Class {
+    if (self.is_singleton) return self;
+    if (self.getBasePtr(ctx)) |base| {
+        return base.getNearestSingleton(ctx);
+    }
+    return null;
 }
 
 const std = @import("std");

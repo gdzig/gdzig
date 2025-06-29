@@ -25,7 +25,7 @@ pub fn init(self: *Self) void {
     self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{
         .keepOffsets_ = false,
     });
-    self.base.addChild(self.fps_counter, false, 0);
+    self.base.addChild(.upcast(self.fps_counter), .{});
 }
 
 pub fn deinit(self: *Self) void {
@@ -35,17 +35,16 @@ pub fn deinit(self: *Self) void {
 pub fn _process(self: *Self, delta: f64) void {
     _ = delta;
 
-    const engine = Engine.getSingleton();
-
-    const window = self.base.getTree().?.getRoot().?;
+    const window = self.base.getTree().getRoot();
     const sz = window.getSize();
 
     const label_size = self.fps_counter.getSize();
-    self.fps_counter.setPosition(.{ .x = @floatFromInt(25), .y = @as(f32, @floatFromInt(sz.y - 25)) - label_size.y }, false);
+    self.fps_counter.setPosition(.{ .x = @floatFromInt(25), .y = @as(f32, @floatFromInt(sz.y - 25)) - label_size.y }, .{});
 
     var fps_buf: [64]u8 = undefined;
-    const fps = std.fmt.bufPrint(&fps_buf, "FPS: {d}", .{engine.getFramesPerSecond()}) catch @panic("Failed to format FPS");
-    self.fps_counter.setText(fps);
+    const fps = std.fmt.bufPrint(&fps_buf, "FPS: {d}", .{Engine.getFramesPerSecond()}) catch @panic("Failed to format FPS");
+    const fps_string = String.fromLatin1(fps);
+    self.fps_counter.setText(fps_string);
 }
 
 fn clear_scene(self: *Self) void {
@@ -86,7 +85,7 @@ pub fn _enter_tree(self: *Self) void {
     self.property1 = Vector3.new(111, 111, 111);
     self.property2 = Vector3.new(222, 222, 222);
 
-    if (Engine.getSingleton().isEditorHint()) return;
+    if (Engine.isEditorHint()) return;
 
     const window_size = self.base.getTree().?.getRoot().?.getSize();
     var sp = HSplitContainer.init();
@@ -120,8 +119,8 @@ pub fn _exit_tree(self: *Self) void {
 
 pub fn _notification(self: *Self, what: i32) void {
     if (what == Node.NOTIFICATION_WM_CLOSE_REQUEST) {
-        if (!Engine.getSingleton().isEditorHint()) {
-            self.base.getTree().?.quit(0);
+        if (!Engine.isEditorHint()) {
+            self.base.getTree().quit(.{});
         }
     }
 }

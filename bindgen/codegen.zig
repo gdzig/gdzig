@@ -171,13 +171,13 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin) !void {
     try writeImports(w, &builtin.imports);
 }
 
-fn writeBuiltinConstructor(w: *Writer, self: []const u8, constructor: *const Context.Function) !void {
-    try writeFunctionHeader(w, self, constructor);
+fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *const Context.Function) !void {
+    try writeFunctionHeader(w, constructor);
     try w.printLine(
         \\const constructor = godot.support.bindConstructor({s}, {d});
         \\constructor(@ptrCast(&out), @ptrCast(&args));
     , .{
-        self,
+        builtin_name,
         constructor.index.?,
     });
     try writeFunctionFooter(w, constructor);
@@ -195,21 +195,21 @@ fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
     });
 }
 
-fn writeBuiltinMethod(w: *Writer, self: []const u8, method: *const Context.Function) !void {
-    try writeFunctionHeader(w, self, method);
+fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Context.Function) !void {
+    try writeFunctionHeader(w, method);
     try w.printLine(
         \\const method = godot.support.bindBuiltinMethod({s}, "{s}", {d});
         \\method({s}, @ptrCast(&args), @ptrCast(&out), args.len);
     , .{
-        self,
+        builtin_name,
         method.name_api,
         method.hash.?,
-        if (method.is_static)
-            "null"
-        else if (method.is_const)
-            "@ptrCast(@constCast(self))"
-        else
-            "@ptrCast(self)",
+        switch (method.self) {
+            .static => "null",
+            .singleton => @panic("singleton builtins not supported"),
+            .constant => "@ptrCast(@constCast(self))",
+            .mutable => "@ptrCast(self)",
+        },
     });
     try writeFunctionFooter(w, method);
 }
@@ -244,6 +244,13 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     , .{class.name});
     w.indent += 1;
 
+    // Singleton storage
+    if (class.is_singleton) {
+        try w.printLine(
+            \\pub var instance: ?{0s} = null;
+        , .{class.name});
+    }
+
     // Object pointer
     try w.writeLine(
         \\godot_object: *anyopaque,
@@ -276,30 +283,10 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         , .{class.name});
     }
 
-    // Singleton
-    if (class.is_singleton) {
-        try w.printLine(
-            \\/// Returns the singleton instance of {0s}.
-            \\pub fn getSingleton() {0s} {{
-            \\    const Singleton = struct {{
-            \\        var instance: ?{0s} = null;
-            \\    }};
-            \\
-            \\    if (Singleton.instance == null) {{
-            \\        Singleton.instance = .{{
-            \\            .godot_object = godot.core.globalGetSingleton(@ptrCast(godot.getClassName({0s}))),
-            \\        }};
-            \\    }}
-            \\
-            \\    return Singleton.instance.?;
-            \\}}
-            \\
-        , .{class.name});
-    }
-
     // Functions
     for (class.functions.values()) |*function| {
-        try writeClassFunction(w, class.name, class.name, function);
+        if (function.mode != .final) continue;
+        try writeClassFunction(w, class, function, ctx);
         try w.writeLine("");
     }
 
@@ -310,15 +297,28 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     //     try writeClassProperty(w, class.name, property);
     // }
 
-    // Inherited functions
-    var cur = class;
-    while (cur.getBase(ctx)) |base| : (cur = base) {
-        for (base.functions.values()) |*function| {
-            if (function.mode != .final) continue;
-            try writeClassFunction(w, class.name, base.name, function);
-            try w.writeLine("");
-        }
-    }
+    // Cast helper
+    try w.printLine(
+        \\/// Upcasts a child type to a `{0s}`.
+        \\///
+        \\/// This is a zero cost, compile time operation.
+        \\pub fn upcast(value: anytype) {0s} {{
+        \\    _ = value;
+        \\    @panic("TODO");
+        \\}}
+        \\
+        \\/// Downcasts a parent type to a `{0s}`.
+        \\///
+        \\/// This operation will fail at compile time if {0s} does not inherit from `@TypeOf(value)`. However,
+        \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
+        \\/// and may return `null`.
+        \\pub fn downcast(value: anytype) ?{0s} {{
+        \\    _ = value;
+        \\    @panic("TODO");
+        \\}}
+    , .{
+        class.name,
+    });
 
     // Virtual dispatch
     try writeClassVirtualDispatch(w, class, ctx);
@@ -344,50 +344,74 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     try writeImports(w, &class.imports);
 }
 
-fn writeClassFunction(w: *Writer, self: []const u8, base: []const u8, function: *const Context.Function) !void {
-    try writeFunctionHeader(w, self, function);
+fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionHeader(w, function);
+
+    if (class.is_singleton) {
+        try w.printLine(
+            \\if (instance == null) {{
+            \\    instance = .{{
+            \\        .godot_object = godot.core.globalGetSingleton(@ptrCast(godot.getClassName({0s}))).?,
+            \\    }};
+            \\}}
+        , .{class.name});
+    }
 
     try w.printLine("const method = godot.support.bindClassMethod({s}, \"{s}\", {d});", .{
-        base,
+        function.base.?,
         function.name,
         function.hash.?,
     });
 
-    const self_ptr = if (function.is_static) "null" else "self.godot_object";
-
     if (function.is_vararg) {
-        try w.writeLine("var err: gdext.GDExtensionCallError = undefined;");
+        // For non-void, non-variant returns: call with Variant pointer, then convert to expected type
+        if (function.return_type != .variant and function.return_type != .void) {
+            try w.writeAll("var variant: Variant = .nil;");
+        }
 
-        if (function.return_type == .variant) {
-            try w.printLine(
-                \\godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args.ptr)), args.len, @ptrCast(&out), &err);
-            , .{self_ptr});
-        } else if (function.return_type != .void) {
-            try w.print(
-                \\var variant: Variant = .nil;
-                \\godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args.ptr)), args.len, @ptrCast(&variant), &err);
-                \\out = variant.as(
-            , .{self_ptr});
+        try w.writeLine("var err: gdext.GDExtensionCallError = undefined;");
+        try w.writeLine("godot.core.objectMethodBindCall(method, ");
+        try writeClassFunctionObjectPtr(w, class, function, ctx);
+        try w.printLine(", @ptrCast(@alignCast(&args.ptr)), args.len, {s}, &err);", .{
+            if (function.return_type == .variant)
+                "@ptrCast(&out)"
+            else if (function.return_type != .void)
+                "@ptrCast(&variant)"
+            else
+                "null",
+        });
+
+        if (function.return_type != .variant and function.return_type != .void) {
+            try w.writeAll("out = variant.as(");
             try writeTypeAtReturn(w, &function.return_type);
             try w.writeLine(");");
-        } else {
-            try w.print(
-                \\godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args.ptr)), args.len, null, &err);
-            , .{self_ptr});
         }
     } else {
-        if (function.return_type == .class) {
-            try w.printLine(
-                \\godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), @ptrCast(&out));
-            , .{self_ptr});
-        } else if (function.return_type != .void) {
-            try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), @ptrCast(&out));", .{self_ptr});
-        } else {
-            try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), null);", .{self_ptr});
-        }
+        try w.writeAll("godot.core.objectMethodBindPtrcall(method, ");
+        try writeClassFunctionObjectPtr(w, class, function, ctx);
+        try w.printLine(", @ptrCast(&args), {s});", .{
+            if (function.return_type != .void)
+                "@ptrCast(&out)"
+            else
+                "null",
+        });
     }
 
     try writeFunctionFooter(w, function);
+}
+
+fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+    if (function.self == .static) {
+        try w.writeAll("null");
+    } else if (class.getNearestSingleton(ctx)) |singleton| {
+        if (class.is_singleton) {
+            try w.writeAll("instance.?.godot_object");
+        } else {
+            try w.print("{s}.instance.?.godot_object", .{singleton.name});
+        }
+    } else {
+        try w.writeAll("self.godot_object");
+    }
 }
 
 fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
@@ -398,7 +422,7 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
 
     // Inherited virtual/abstract functions
     var cur: ?*const Context.Class = class;
-    while (cur) |base| : (cur = base.getBase(ctx)) {
+    while (cur) |base| : (cur = base.getBasePtr(ctx)) {
         for (base.functions.values()) |*function| {
             if (function.mode == .final) continue;
             try w.printLine(
@@ -507,13 +531,13 @@ fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
     }
     for (flag.consts) |@"const"| {
         try writeDocBlock(w, @"const".doc);
-        try w.printLine("pub const {s}: {s} = @bitCast(@as(u32, {d}));", .{ @"const".name, flag.name, @"const".value });
+        try w.printLine("pub const {s}: {s} = @bitCast(@as(u64, {d}));", .{ @"const".name, flag.name, @"const".value });
     }
     w.indent -= 1;
     try w.writeLine("};");
 }
 
-fn writeFunctionHeader(w: *Writer, self: ?[]const u8, function: *const Context.Function) !void {
+fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     try writeDocBlock(w, function.doc);
 
     // Declaration
@@ -526,17 +550,20 @@ fn writeFunctionHeader(w: *Writer, self: ?[]const u8, function: *const Context.F
 
     var is_first = true;
 
-    // Self
-    if (!function.is_static) {
-        try w.writeAll("self: *");
-        if (function.is_const) {
-            try w.writeAll("const ");
-        }
-        try w.writeAll(self orelse "@This()");
-        is_first = false;
+    // Self parameter
+    switch (function.self) {
+        .constant => |self| {
+            try w.print("self: *const {0s}", .{self});
+            is_first = false;
+        },
+        .mutable => |self| {
+            try w.print("self: {0s}", .{self});
+            is_first = false;
+        },
+        else => {},
     }
 
-    // Standard parameters
+    // Positional parameters
     var opt: usize = function.parameters.count();
     for (function.parameters.values(), 0..) |param, i| {
         if (param.default != null) {
@@ -730,7 +757,7 @@ fn writeModule(w: *Writer, module: *const Context.Module) !void {
 //     - Engine class returns: convert godot_object pointer to struct
 //     - Vararg returns: handle Variant conversion
 fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
-    try writeFunctionHeader(w, null, function);
+    try writeFunctionHeader(w, function);
 
     try w.printLine(
         \\const function = godot.support.bindFunction("{s}", {d});

@@ -4,7 +4,7 @@ base: Control,
 sprite: Sprite2D,
 
 pub fn _enter_tree(self: *Self) void {
-    if (Engine.getSingleton().isEditorHint()) return;
+    if (Engine.isEditorHint()) return;
 
     var normal_btn = Button.init();
     self.base.addChild(normal_btn, false, Node.INTERNAL_MODE_DISABLED);

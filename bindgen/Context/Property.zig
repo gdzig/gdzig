@@ -7,7 +7,7 @@ type: Type = .void,
 getter: Function = .{},
 setter: ?Function = null,
 
-pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Property, ctx: *const Context) !Property {
+pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Class.Property, is_singleton: bool, ctx: *const Context) !Property {
     var self = Property{};
     errdefer self.deinit(allocator);
 
@@ -18,8 +18,8 @@ pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Property, ctx: *const
     self.name_api = api.name;
     self.index = if (api.index < 0) null else @intCast(api.index);
     self.type = try Type.from(allocator, api.type, false, ctx);
-    self.getter = try Function.fromGetter(allocator, api.getter, self.type);
-    self.setter = if (api.setter.len > 0) try Function.fromSetter(allocator, api.setter, self.type) else null;
+    self.getter = try Function.fromClassGetter(allocator, class_name, api.getter, self.type, is_singleton);
+    self.setter = if (api.setter.len > 0) try Function.fromClassSetter(allocator, class_name, is_singleton, api.setter, self.type) else null;
 
     return self;
 }
