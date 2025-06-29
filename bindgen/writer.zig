@@ -106,7 +106,6 @@ pub fn CodeWriter(comptime W: type) type {
 }
 
 const std = @import("std");
-const io = std.io;
 const testing = std.testing;
 
 test "indents" {
