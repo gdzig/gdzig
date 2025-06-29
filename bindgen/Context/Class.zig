@@ -42,9 +42,9 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Documentation
     self.doc = if (api.description) |desc|
-        try docs.convertDocsToMarkdown(allocator, desc, ctx)
+        try docs.convertDocsToMarkdown(allocator, desc, ctx, .{})
     else if (api.brief_description) |desc|
-        try docs.convertDocsToMarkdown(allocator, desc, ctx)
+        try docs.convertDocsToMarkdown(allocator, desc, ctx, .{})
     else
         null;
 
@@ -146,15 +146,12 @@ pub fn getBase(self: *const Class, ctx: *const Context) ?*Class {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayListUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
-const StringHashMap = std.StringHashMapUnmanaged;
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;
 const Enum = Context.Enum;
 const Flag = Context.Flag;
-const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
 const Property = Context.Property;

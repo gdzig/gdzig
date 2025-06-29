@@ -20,7 +20,208 @@ const Element = enum {
     br,
 };
 
-pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext) ![]const u8 {
+pub const DocumentContext = struct {
+    // TODO: add support for setting a configurable base url
+    const link_prefix = "#gdzig.";
+
+    var symbol_lookup = StringHashMap([]const u8).empty;
+
+    codegen_ctx: *const CodegenContext,
+    current_class: ?[]const u8 = null,
+    write_ctx: ?*const WriteContext = null,
+    // SAFETY: will be initialized in fromWriteContext
+    writer: *std.io.AnyWriter = undefined,
+
+    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8) DocumentContext {
+        return DocumentContext{
+            .codegen_ctx = codegen_ctx,
+            .current_class = current_class,
+        };
+    }
+
+    pub fn fromOpaque(ptr: ?*anyopaque) *DocumentContext {
+        return @constCast(@alignCast(@ptrCast(ptr)));
+    }
+
+    pub fn fromWriteContext(write_ctx: *const WriteContext) *DocumentContext {
+        var doc_ctx: *DocumentContext = .fromOpaque(write_ctx.user_data);
+        if (doc_ctx.write_ctx == null) {
+            doc_ctx.write_ctx = write_ctx;
+            doc_ctx.writer = @constCast(&write_ctx.writer);
+        }
+        return doc_ctx;
+    }
+
+    pub fn resolveSymbol(self: DocumentContext, symbol: []const u8, symbol_type: Element) ?[]const u8 {
+        return switch (symbol_type) {
+            .@"enum" => self.resolveEnum(symbol),
+            .method => self.resolveMethod(symbol),
+            else => null,
+        };
+    }
+
+    fn resolveEnum(self: DocumentContext, enum_name: []const u8) ?[]const u8 {
+        if (self.current_class) |class_name| {
+            const qualified = std.fmt.allocPrint(self.codegen_ctx.allocator, "{s}.{s}", .{ class_name, enum_name }) catch return null;
+            defer self.codegen_ctx.allocator.free(qualified);
+
+            // Check if this qualified name exists in symbol_lookup
+            if (self.symbolLookup(qualified)) |link| {
+                return link;
+            }
+        }
+        // Fall back to global lookup
+        return self.symbolLookup(enum_name);
+    }
+
+    fn resolveMethod(self: *const DocumentContext, method_name: []const u8) ?[]const u8 {
+        if (self.current_class) |class_name| {
+            const qualified = std.fmt.allocPrint(self.codegen_ctx.allocator, "{s}.{s}", .{ class_name, method_name }) catch return null;
+            // Check if this qualified name exists in symbol_lookup
+            if (self.symbolLookup(qualified)) |link| {
+                return link;
+            }
+        }
+        // Fall back to global lookup
+        return self.symbolLookup(method_name);
+    }
+
+    fn buildSymbolLookupTable(self: DocumentContext) !void {
+        if (symbol_lookup.size == 0) {
+            const ctx = self.codegen_ctx;
+            const api = ctx.api;
+
+            logger.debug("Initializing symbol lookup...", .{});
+
+            try symbol_lookup.putNoClobber(ctx.allocator, "Variant", "Variant");
+
+            for (api.classes) |class| {
+                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{class.name});
+                try symbol_lookup.putNoClobber(ctx.allocator, class.name, doc_name);
+
+                for (class.enums orelse &.{}) |@"enum"| {
+                    const enum_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ class.name, @"enum".name });
+                    const enum_doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}.{s}", .{ class.name, enum_name });
+                    try symbol_lookup.putNoClobber(ctx.allocator, enum_name, enum_doc_name);
+                }
+            }
+
+            for (api.builtin_classes) |builtin| {
+                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{builtin.name});
+                try symbol_lookup.putNoClobber(ctx.allocator, builtin.name, doc_name);
+            }
+
+            for (api.global_enums) |@"enum"| {
+                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.global.{s}", .{@"enum".name});
+                try symbol_lookup.putNoClobber(ctx.allocator, @"enum".name, doc_name);
+            }
+
+            logger.debug("Symbol lookup initialized. Size: {d}", .{symbol_lookup.size});
+        }
+    }
+
+    pub fn symbolLookup(self: DocumentContext, key: []const u8) ?[]const u8 {
+        _ = self;
+        return symbol_lookup.get(key);
+    }
+
+    pub fn writeSymbolLink(self: DocumentContext, symbol_name: []const u8, link: []const u8) anyerror!bool {
+        const symbol_link_fmt = std.fmt.comptimePrint("[{{s}}]({s}{{s}})", .{link_prefix});
+        try self.writer.print(symbol_link_fmt, .{ symbol_name, link });
+        return true;
+    }
+
+    pub fn writeLineBreak(self: DocumentContext, _: Node) anyerror!bool {
+        try self.writer.writeByte('\n');
+        return true;
+    }
+
+    pub fn writeAnnotation(self: DocumentContext, node: Node) anyerror!bool {
+        // TODO: make it a link
+        const annotation_name = try node.getValue() orelse return false;
+        try self.writer.print("`{s}`", .{annotation_name});
+        return true;
+    }
+
+    pub fn writeEnum(self: DocumentContext, node: Node) anyerror!bool {
+        const enum_name = try node.getValue() orelse return false;
+
+        if (self.resolveEnum(enum_name)) |link| {
+            if (try self.writeSymbolLink(enum_name, link)) {
+                return true;
+            }
+        }
+
+        logger.err("Enum symbol lookup failed: {s}", .{enum_name});
+        try self.writer.print("`{s}`", .{enum_name});
+        return true;
+    }
+
+    pub fn writeConstant(self: DocumentContext, node: Node) anyerror!bool {
+        // TODO: make it a link
+        const constant_name = try node.getValue() orelse return false;
+        try self.writer.print("`{s}`", .{constant_name});
+        return true;
+    }
+
+    pub fn writeMember(self: DocumentContext, node: Node) anyerror!bool {
+        const member_name = try node.getValue() orelse return false;
+        try self.writer.print("`{s}`", .{member_name});
+        return true;
+    }
+
+    pub fn writeMethod(self: DocumentContext, node: Node) anyerror!bool {
+        // TODO: make it a link
+        // how do we get the name of the class that the method belongs to?
+        const method_name = try node.getValue() orelse return false;
+        try self.writer.print("`{s}`", .{method_name});
+        return true;
+    }
+
+    pub fn writeCodeblock(self: DocumentContext, node: Node) anyerror!bool {
+        try self.writer.writeAll("```");
+        try render(node, self.write_ctx.?);
+        try self.writer.writeAll("```");
+
+        return true;
+    }
+
+    pub fn writeCodeblocks(self: DocumentContext, node: Node) anyerror!bool {
+        var element_list = try node.childrenOfType(self.codegen_ctx.allocator, .element);
+        defer element_list.deinit(self.codegen_ctx.allocator);
+
+        for (element_list.items) |child| {
+            const lang = try child.getName();
+            try self.writer.print("```{s}", .{lang});
+            try render(child, self.write_ctx.?);
+            try self.writer.writeAll("```");
+        }
+
+        return true;
+    }
+
+    pub fn writeParam(self: DocumentContext, node: Node) anyerror!bool {
+        const param_name = try node.getValue() orelse return false;
+        try self.writer.print("`{s}`", .{param_name});
+        return true;
+    }
+
+    pub fn writeBasicType(self: DocumentContext, node: Node) anyerror!bool {
+        const type_name = node.getName() catch return false;
+        try self.writer.print("`{s}`", .{type_name});
+        return true;
+    }
+};
+
+pub const Options = struct {
+    current_class: ?[]const u8 = null,
+};
+
+pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext, options: Options) ![]const u8 {
+    var doc_ctx = DocumentContext.init(ctx, options.current_class);
+
+    try doc_ctx.buildSymbolLookupTable();
+
     var doc = try Document.loadFromBuffer(allocator, input, .{
         .verbatim_tags = verbatim_tags,
         .tokenizer_options = TokenizerOptions{
@@ -32,7 +233,7 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *cons
     var output = ArrayList(u8){};
     try bbcodez.fmt.md.renderDocument(allocator, doc, output.writer(allocator).any(), .{
         .write_element_fn = writeElement,
-        .user_data = @constCast(@ptrCast(ctx)),
+        .user_data = @constCast(@ptrCast(&doc_ctx)),
     });
 
     return output.toOwnedSlice(allocator);
@@ -42,16 +243,12 @@ fn getWriteContext(ptr: ?*const anyopaque) *const WriteContext {
     return @alignCast(@ptrCast(ptr));
 }
 
-fn getContext(ptr: ?*const anyopaque) *const CodegenContext {
-    return @alignCast(@ptrCast(ptr));
-}
-
 fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
-    const ctx = getWriteContext(ctx_ptr);
+    const doc_ctx: *DocumentContext = .fromWriteContext(getWriteContext(ctx_ptr));
 
     const node_name = try node.getName();
-    if (try symbolLookup(node_name, ctx)) |link| {
-        if (try writeSymbolLink(node_name, link, ctx)) {
+    if (doc_ctx.symbolLookup(node_name)) |link| {
+        if (try doc_ctx.writeSymbolLink(node_name, link)) {
             return true;
         }
     }
@@ -59,138 +256,17 @@ fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
     const el: Element = std.meta.stringToEnum(Element, try node.getName()) orelse return false;
 
     return switch (el) {
-        .codeblocks => try writeCodeblocks(node, ctx),
-        .codeblock, .gdscript, .csharp => try writeCodeblock(node, ctx),
-        .param => try writeParam(node, ctx),
-        .bool, .int, .float => try writeBasicType(node, ctx),
-        .method => try writeMethod(node, ctx),
-        .member => try writeMember(node, ctx),
-        .constant => try writeConstant(node, ctx),
-        .@"enum" => try writeEnum(node, ctx),
-        .br => try writeLineBreak(node, ctx),
-        .annotation => try writeAnnotation(node, ctx),
+        .codeblocks => try doc_ctx.writeCodeblocks(node),
+        .codeblock, .gdscript, .csharp => try doc_ctx.writeCodeblock(node),
+        .param => try doc_ctx.writeParam(node),
+        .bool, .int, .float => try doc_ctx.writeBasicType(node),
+        .method => try doc_ctx.writeMethod(node),
+        .member => try doc_ctx.writeMember(node),
+        .constant => try doc_ctx.writeConstant(node),
+        .@"enum" => try doc_ctx.writeEnum(node),
+        .br => try doc_ctx.writeLineBreak(node),
+        .annotation => try doc_ctx.writeAnnotation(node),
     };
-}
-
-var symbol_lookup = StringHashMap([]const u8).empty;
-
-// TODO: add support for setting a configurable base url
-const prefix = "#gdzig.";
-
-fn symbolLookup(key: []const u8, ctx: *const WriteContext) !?[]const u8 {
-    if (symbol_lookup.size == 0) {
-        const api = getContext(ctx.user_data).api;
-
-        logger.debug("Initializing symbol lookup...", .{});
-
-        try symbol_lookup.putNoClobber(ctx.allocator, "Variant", "Variant");
-
-        for (api.classes) |class| {
-            const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{class.name});
-            try symbol_lookup.putNoClobber(ctx.allocator, class.name, doc_name);
-        }
-
-        for (api.builtin_classes) |builtin| {
-            const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{builtin.name});
-            try symbol_lookup.putNoClobber(ctx.allocator, builtin.name, doc_name);
-        }
-
-        for (api.global_enums) |@"enum"| {
-            const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.global.{s}", .{@"enum".name});
-            try symbol_lookup.putNoClobber(ctx.allocator, @"enum".name, doc_name);
-        }
-
-        logger.debug("Symbol lookup initialized. Size: {d}", .{symbol_lookup.size});
-    }
-
-    return symbol_lookup.get(key);
-}
-
-fn writeSymbolLink(symbol_name: []const u8, link: []const u8, ctx: *const WriteContext) anyerror!bool {
-    const symbol_link_fmt = std.fmt.comptimePrint("[{{s}}]({s}{{s}})", .{prefix});
-    try ctx.writer.print(symbol_link_fmt, .{ symbol_name, link });
-    return true;
-}
-
-fn writeLineBreak(_: Node, ctx: *const WriteContext) anyerror!bool {
-    try ctx.writer.writeByte('\n');
-    return true;
-}
-
-fn writeAnnotation(node: Node, ctx: *const WriteContext) anyerror!bool {
-    // TODO: make it a link
-    const annotation_name = try node.getValue() orelse return false;
-    try ctx.writer.print("`{s}`", .{annotation_name});
-    return true;
-}
-
-fn writeEnum(node: Node, ctx: *const WriteContext) anyerror!bool {
-    const enum_name = try node.getValue() orelse return false;
-
-    if (try symbolLookup(enum_name, ctx)) |link| {
-        if (try writeSymbolLink(enum_name, link, ctx)) {
-            return true;
-        }
-    }
-
-    logger.warn("Enum symbol lookup failed: {s}", .{enum_name});
-    try ctx.writer.print("`{s}`", .{enum_name});
-    return true;
-}
-
-fn writeConstant(node: Node, ctx: *const WriteContext) anyerror!bool {
-    // TODO: make it a link
-    const constant_name = try node.getValue() orelse return false;
-    try ctx.writer.print("`{s}`", .{constant_name});
-    return true;
-}
-
-fn writeMember(node: Node, ctx: *const WriteContext) anyerror!bool {
-    const member_name = try node.getValue() orelse return false;
-    try ctx.writer.print("`{s}`", .{member_name});
-    return true;
-}
-
-fn writeMethod(node: Node, ctx: *const WriteContext) anyerror!bool {
-    // TODO: make it a link
-    // how do we get the name of the class that the method belongs to?
-    const method_name = try node.getValue() orelse return false;
-    try ctx.writer.print("`{s}`", .{method_name});
-    return true;
-}
-
-fn writeCodeblock(node: Node, ctx: *const WriteContext) anyerror!bool {
-    try ctx.writer.writeAll("```");
-    try render(node, ctx);
-    try ctx.writer.writeAll("```");
-
-    return true;
-}
-
-fn writeCodeblocks(node: Node, ctx: *const WriteContext) anyerror!bool {
-    var element_list = try node.childrenOfType(ctx.allocator, .element);
-    defer element_list.deinit(ctx.allocator);
-
-    for (element_list.items) |child| {
-        const lang = try child.getName();
-        try ctx.writer.print("```{s}", .{lang});
-        try render(child, ctx);
-        try ctx.writer.writeAll("```");
-    }
-
-    return true;
-}
-
-fn writeParam(node: Node, ctx: *const WriteContext) anyerror!bool {
-    const param_name = try node.getValue() orelse return false;
-    try ctx.writer.print("`{s}`", .{param_name});
-    return true;
-}
-
-fn writeBasicType(node: Node, ctx: *const WriteContext) anyerror!bool {
-    const type_name = node.getName() catch return false;
-    try ctx.writer.print("`{s}`", .{type_name});
-    return true;
 }
 
 const verbatim_tags = &[_][]const u8{
