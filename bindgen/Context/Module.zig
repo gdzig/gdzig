@@ -22,4 +22,3 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Context = @import("../Context.zig");
-const GodotApi = @import("../GodotApi.zig");

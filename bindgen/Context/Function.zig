@@ -20,7 +20,9 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     var self = Function{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (constructor.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{}) else null;
+    self.doc = if (constructor.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
+        .current_class = builtin_name,
+    }) else null;
     self.name = blk: {
         var buf: ArrayList(u8) = .empty;
         errdefer buf.deinit(allocator);
@@ -61,11 +63,13 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     return self;
 }
 
-pub fn fromBuiltinMethod(allocator: Allocator, method: GodotApi.Builtin.Method, ctx: *const Context) !Function {
+pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, method: GodotApi.Builtin.Method, ctx: *const Context) !Function {
     var self = Function{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (method.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{}) else null;
+    self.doc = if (method.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
+        .current_class = builtin_name,
+    }) else null;
     self.name = try case.allocTo(allocator, .camel, method.name);
     self.name_api = method.name;
     self.hash = method.hash;
@@ -85,11 +89,13 @@ pub fn fromBuiltinMethod(allocator: Allocator, method: GodotApi.Builtin.Method, 
     return self;
 }
 
-pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Method, ctx: *const Context) !Function {
+pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Class.Method, ctx: *const Context) !Function {
     var self = Function{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{}) else null;
+    self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
+        .current_class = class_name,
+    }) else null;
     self.name = blk: {
         if (!api.is_virtual) {
             break :blk try case.allocTo(allocator, .camel, api.name);

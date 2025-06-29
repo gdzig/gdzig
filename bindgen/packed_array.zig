@@ -1,10 +1,6 @@
 const std = @import("std");
 const mzvr = @import("mvzr");
-const GodotApi = @import("GodotApi.zig");
 const case = @import("case");
-
-const Config = @import("Config.zig");
-const Context = @import("Context.zig");
 
 const PackedArrayType = enum {
     byte,

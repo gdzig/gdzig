@@ -228,8 +228,6 @@ const meta = std.meta;
 
 const precision = @import("build_options").precision;
 
-const gdext = @import("gdextension");
-
 const vector = @import("vector");
 const Vector2 = vector.Vector2;
 const Vector2i = vector.Vector2i;

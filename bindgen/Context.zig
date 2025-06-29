@@ -418,7 +418,7 @@ fn castEnums(self: *Context, allocator: Allocator) !void {
         if (@"enum".is_bitfield) {
             continue;
         }
-        try self.enums.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, @"enum", self));
+        try self.enums.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, null, @"enum", self));
     }
 }
 
