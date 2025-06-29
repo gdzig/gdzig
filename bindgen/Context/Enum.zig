@@ -34,7 +34,7 @@ pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *cons
 
     self.name = try allocator.dupe(u8, api.name);
     for (api.values) |value| {
-        const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx) else null;
+        const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{}) else null;
         try self.values.put(allocator, value.name, try .init(allocator, desc, value.name, value.value));
     }
 
