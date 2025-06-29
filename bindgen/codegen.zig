@@ -296,7 +296,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
 
     // Functions
     for (class.functions.values()) |*function| {
-        try writeClassFunction(w, class.name, function);
+        try writeClassFunction(w, class.name, class.name, function);
         try w.writeLine("");
     }
 
@@ -312,7 +312,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     while (cur.getBase(ctx)) |base| : (cur = base) {
         for (base.functions.values()) |*function| {
             if (function.mode != .final) continue;
-            try writeClassInheritedFunction(w, class.name, function);
+            try writeClassFunction(w, class.name, base.name, function);
             try w.writeLine("");
         }
     }
@@ -341,116 +341,92 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     try writeImports(w, &class.imports);
 }
 
-fn writeClassFunction(w: *Writer, self: []const u8, function: *const Context.Function) !void {
+fn writeClassFunction(w: *Writer, self: []const u8, base: []const u8, function: *const Context.Function) !void {
     try writeFunctionHeader(w, self, function);
-    // const self_ptr = if (is_static) "null" else "@ptrCast(godot.getGodotObjectPtr(self).*)";
-    // try w.printLine("const method = godot.support.bindClassMethod({s}, \"{s}\", {d});", .{
-    //     class_name,
-    //     func_name,
-    //     fn_node.hash,
-    // });
-    // if (is_vararg) {
-    //     try w.writeLine("var err:godot.c.GDExtensionCallError = undefined;");
-    //     if (std.mem.eql(u8, return_type, "Variant")) {
-    //         try w.printLine("godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args[0])), args.len, &result, &err);", .{self_ptr});
-    //     } else {
-    //         try w.writeLine("var ret: Variant = .nil;");
-    //         try w.printLine("godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args[0])), args.len, &ret, &err);", .{self_ptr});
-    //         if (need_return) {
-    //             try w.printLine("result = ret.as({s});", .{return_type});
-    //         }
-    //     }
-    // } else {
-    //     if (ctx.isClass(return_type)) {
-    //         try w.writeLine("var godot_object:?*anyopaque = null;");
-    //         try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, {s}, @ptrCast(&godot_object));", .{ self_ptr, arg_array });
-    //         try w.printLine("result = {s}{{ .godot_object = godot_object }};", .{util.childType(return_type)});
-    //     } else {
-    //         try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, {s}, {s});", .{ self_ptr, arg_array, result_string });
-    //     }
-    // }
-    try writeFunctionFooter(w, function);
-}
 
-fn writeClassInheritedFunction(w: *Writer, self: []const u8, function: *const Context.Function) !void {
-    try writeFunctionHeader(w, self, function);
-    try w.writeLine("// TODO");
+    try w.printLine("const method = godot.support.bindClassMethod({s}, \"{s}\", {d});", .{
+        base,
+        function.name,
+        function.hash.?,
+    });
+
+    const self_ptr = if (function.is_static) "null" else "self.godot_object";
+
+    if (function.is_vararg) {
+        try w.writeLine("var err: gdext.GDExtensionCallError = undefined;");
+
+        if (function.return_type == .variant) {
+            try w.printLine(
+                \\godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args.ptr)), args.len, @ptrCast(&out), &err);
+            , .{self_ptr});
+        } else if (function.return_type != .void) {
+            try w.print(
+                \\var variant: Variant = .nil;
+                \\godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args.ptr)), args.len, @ptrCast(&variant), &err);
+                \\out = variant.as(
+            , .{self_ptr});
+            try writeTypeAtReturn(w, &function.return_type);
+            try w.writeLine(");");
+        } else {
+            try w.print(
+                \\godot.core.objectMethodBindCall(method, {s}, @ptrCast(@alignCast(&args.ptr)), args.len, null, &err);
+            , .{self_ptr});
+        }
+    } else {
+        if (function.return_type == .class) {
+            try w.printLine(
+                \\godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), @ptrCast(&out));
+            , .{self_ptr});
+        } else {
+            try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), @ptrCast(&out));", .{self_ptr});
+        }
+    }
+
     try writeFunctionFooter(w, function);
 }
 
 fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
-    try w.printLine(
-        \\pub fn getVirtualDispatch(p_userdata: ?*anyopaque, p_name: gdext.GDExtensionConstStringNamePtr) gdext.GDExtensionClassCallVirtual {{
-    , .{});
-    w.indent += 1;
-
     try w.writeLine(
-        \\const ptrs: std.StaticStringMap(*anyopaque) = .initComptime(.{
+        \\pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: godot.c.GDExtensionConstStringNamePtr) godot.c.GDExtensionClassCallVirtual {
     );
     w.indent += 1;
+
     // Inherited virtual/abstract functions
     var cur: ?*const Context.Class = class;
     while (cur) |base| : (cur = base.getBase(ctx)) {
         for (base.functions.values()) |*function| {
             if (function.mode == .final) continue;
             try w.printLine(
-                \\.{{ "{0s}", @ptrCast(&{1s}.{2s}) }},
-            , .{ function.name_api, base.name, function.name });
+                \\if (@as(*StringName, @ptrCast(@constCast(p_name))).casecmpTo(String.fromComptimeLatin1("{0s}")) == 0 and @hasDecl(T, "{0s}")) {{
+                \\    const MethodBinder = struct {{
+                \\        pub fn {0s}(p_instance: godot.c.GDExtensionClassInstancePtr, p_args: [*c]const godot.c.GDExtensionConstTypePtr, p_ret: godot.c.GDExtensionTypePtr) callconv(.C) void {{
+                \\            const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
+                \\            MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
+                \\        }}
+                \\    }};
+                \\    return MethodBinder.{0s};
+                \\}}
+            , .{function.name});
         }
     }
-    w.indent -= 1;
-    try w.writeLine(
-        \\});
-    );
+
+    if (class.base) |base| {
+        try w.printLine(
+            \\return godot.core.{s}.getVirtualDispatch(T, p_userdata, p_name);
+        , .{base});
+    } else {
+        try w.writeLine(
+            \\_ = T;
+            \\_ = p_userdata;
+            \\_ = p_name;
+            \\return null;
+        );
+    }
 
     w.indent -= 1;
     try w.writeLine(
         \\}
     );
-
-    // const methods = class.methods orelse return;
-
-    // try w.writeLine("pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: godot.c.GDExtensionConstStringNamePtr) godot.c.GDExtensionClassCallVirtual {");
-    // w.indent += 1;
-    // for (methods) |method| {
-    //     const func_name = method.name;
-    //     const casecmp_to_func_name = ctx.getZigFuncName("casecmp_to");
-
-    //     if (!method.is_virtual) {
-    //         continue;
-    //     }
-
-    //     try w.printLine(
-    //         \\{{
-    //         \\    var name = String.fromLatin1("{0s}");
-    //         \\    defer name.deinit();
-    //         \\    if (@as(*StringName, @ptrCast(@constCast(p_name))).{1s}(name) == 0 and @hasDecl(T, "{0s}")) {{
-    //         \\        const MethodBinder = struct {{
-    //         \\            pub fn {0s}(p_instance: godot.c.GDExtensionClassInstancePtr, p_args: [*c]const godot.c.GDExtensionConstTypePtr, p_ret: godot.c.GDExtensionTypePtr) callconv(.C) void {{
-    //         \\                const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
-    //         \\                MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
-    //         \\            }}
-    //         \\        }};
-    //         \\        return MethodBinder.{0s};
-    //         \\    }}
-    //         \\}}
-    //     , .{ func_name, casecmp_to_func_name });
-    // }
-
-    // if (class.inherits.len > 0) {
-    //     try w.printLine(
-    //         \\return godot.core.{s}.getVirtualDispatch(T, p_userdata, p_name);
-    //     , .{class.inherits});
-    // } else {
-    //     try w.writeLine(
-    //         \\_ = T;
-    //         \\_ = p_userdata;
-    //         \\_ = p_name;
-    //         \\return null;
-    //     );
-    // }
-    // w.indent -= 1;
-    // try w.writeLine("}");
 }
 
 fn writeConstant(w: *Writer, constant: *const Context.Constant) !void {
