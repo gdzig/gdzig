@@ -13,8 +13,12 @@ pub const Type = union(enum) {
     variant: void,
     /// A class type, used for polymorphic parameters
     class: []const u8,
-    /// Some properties accept more than one type, like "ParticleProcessMaterial,ShaderMaterial"
-    many: []Type,
+    @"enum": []const u8,
+    flag: []const u8,
+    array: ?*Type,
+
+    /// A type union - some properties accept more than one type, like "ParticleProcessMaterial,ShaderMaterial"
+    @"union": []Type,
 
     const string_map: std.StaticStringMap(Type) = .initComptime(.{
         .{ "String", .string },
@@ -46,7 +50,7 @@ pub const Type = union(enum) {
         if (n > 0) {
             const types = try allocator.alloc(Type, n);
             // TODO: allocate list and generate
-            return .{ .many = types };
+            return .{ .@"union" = types };
         }
 
         if (is_meta) {
@@ -56,6 +60,33 @@ pub const Type = union(enum) {
         }
         if (string_map.get(name)) |@"type"| {
             return @"type";
+        }
+
+        var parts = std.mem.splitSequence(u8, name, "::");
+        if (parts.next()) |k| {
+            if (std.mem.eql(u8, "bitfield", k)) {
+                return .{
+                    .flag = try allocator.dupe(u8, parts.next().?),
+                };
+            }
+            if (std.mem.eql(u8, "enum", k)) {
+                return .{
+                    .@"enum" = try allocator.dupe(u8, parts.next().?),
+                };
+            }
+            if (std.mem.eql(u8, "typedarray", k)) {
+                const subtype = try allocator.create(Type);
+                subtype.* = try Type.from(allocator, parts.next().?, false, ctx);
+                return .{
+                    .array = subtype,
+                };
+            }
+        }
+
+        if (std.mem.eql(u8, "Array", name)) {
+            return .{
+                .array = null,
+            };
         }
 
         if (ctx.isClass(name)) {
@@ -71,15 +102,12 @@ pub const Type = union(enum) {
 
     pub fn deinit(self: *Type, allocator: Allocator) void {
         switch (self.*) {
-            .basic => |name| {
-                allocator.free(name);
-            },
-            .class => |name| {
-                allocator.free(name);
-            },
-            .many => |types| {
-                allocator.free(types);
-            },
+            .array => |subtype| if (subtype) |t| t.deinit(allocator),
+            .basic => |name| allocator.free(name),
+            .class => |name| allocator.free(name),
+            .@"enum" => |name| allocator.free(name),
+            .flag => |name| allocator.free(name),
+            .@"union" => |types| allocator.free(types),
             else => {},
         }
 
