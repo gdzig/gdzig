@@ -1,5 +1,7 @@
 const Context = @This();
 
+const logger = std.log.scoped(.context);
+
 pub const Builtin = @import("Context/Builtin.zig");
 pub const Class = @import("Context/Class.zig");
 pub const Constant = @import("Context/Constant.zig");
@@ -12,6 +14,7 @@ pub const Module = @import("Context/Module.zig");
 pub const Property = @import("Context/Property.zig");
 pub const Signal = @import("Context/Signal.zig");
 pub const Type = @import("Context/type.zig").Type;
+pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
 
 /// @deprecated: prefer passing allocator
 allocator: Allocator,
@@ -39,6 +42,8 @@ enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
 modules: StringArrayHashMap(Module) = .empty,
 
+symbol_lookup: StringHashMap([]const u8) = .empty,
+
 const func_case: case.Case = .camel;
 
 const base_type_map = std.StaticStringMap([]const u8).initComptime(.{
@@ -61,6 +66,8 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
         .api = api,
         .config = config,
     };
+
+    try self.buildSymbolLookupTable();
 
     try self.parseGdExtensionHeaders();
     try self.parseSingletons();
@@ -94,6 +101,7 @@ pub fn deinit(self: *Context) void {
     self.class_index.deinit(self.allocator);
     self.class_imports.deinit(self.allocator);
     self.function_imports.deinit(self.allocator);
+    self.symbol_lookup.deinit(self.allocator);
 
     for (self.enums.items) |@"enum"| {
         @"enum".deinit(self.allocator);
@@ -561,6 +569,47 @@ pub fn isClass(self: *const Context, type_name: []const u8) bool {
 
 pub fn isSingleton(self: *const Context, class_name: []const u8) bool {
     return self.singletons.contains(class_name);
+}
+
+pub fn buildSymbolLookupTable(self: *Context) !void {
+    if (self.symbol_lookup.size == 0) {
+        logger.debug("Initializing symbol lookup...", .{});
+
+        try self.symbol_lookup.putNoClobber(self.allocator, "Variant", "Variant");
+
+        for (self.api.classes) |class| {
+            if (util.shouldSkipClass(class.name)) continue;
+
+            const doc_name = try std.fmt.allocPrint(self.allocator, "bindings.core.{s}", .{class.name});
+            try self.symbol_lookup.putNoClobber(self.allocator, class.name, doc_name);
+
+            for (class.enums orelse &.{}) |@"enum"| {
+                const enum_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ class.name, @"enum".name });
+                const enum_doc_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ doc_name, enum_name });
+                try self.symbol_lookup.putNoClobber(self.allocator, enum_name, enum_doc_name);
+            }
+        }
+
+        for (self.api.builtin_classes) |builtin| {
+            if (util.shouldSkipClass(builtin.name)) continue;
+
+            const doc_name = try std.fmt.allocPrint(self.allocator, "bindings.core.{0s}", .{builtin.name});
+            try self.symbol_lookup.putNoClobber(self.allocator, builtin.name, doc_name);
+
+            for (builtin.enums orelse &.{}) |@"enum"| {
+                const enum_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ builtin.name, @"enum".name });
+                const enum_doc_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ doc_name, enum_name });
+                try self.symbol_lookup.putNoClobber(self.allocator, enum_name, enum_doc_name);
+            }
+        }
+
+        for (self.api.global_enums) |@"enum"| {
+            const doc_name = try std.fmt.allocPrint(self.allocator, "bindings.global.{s}", .{@"enum".name});
+            try self.symbol_lookup.putNoClobber(self.allocator, @"enum".name, doc_name);
+        }
+
+        logger.debug("Symbol lookup initialized. Size: {d}", .{self.symbol_lookup.size});
+    }
 }
 
 const std = @import("std");
