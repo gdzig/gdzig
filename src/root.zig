@@ -626,12 +626,29 @@ pub fn init() void {
 }
 
 pub fn deinit() void {
-    var key_iter = registered_classes.keyIterator();
-    while (key_iter.next()) |it| {
-        var class_name = core.StringName.fromUtf8(it.*);
-        defer class_name.deinit();
-        core.classdbUnregisterExtensionClass(core.p_library, @ptrCast(&class_name));
+    {
+        var keys = registered_classes.keyIterator();
+        while (keys.next()) |it| {
+            var class_name = core.StringName.fromUtf8(it.*);
+            defer class_name.deinit();
+            core.classdbUnregisterExtensionClass(core.p_library, @ptrCast(&class_name));
+        }
     }
+
+    {
+        var keys = registered_methods.keyIterator();
+        while (keys.next()) |it| {
+            general_allocator.free(it.*);
+        }
+    }
+
+    {
+        var keys = registered_signals.keyIterator();
+        while (keys.next()) |it| {
+            general_allocator.free(it.*);
+        }
+    }
+
     registered_signals.deinit();
     registered_methods.deinit();
     registered_classes.deinit();
