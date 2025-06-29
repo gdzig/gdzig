@@ -147,15 +147,17 @@ pub fn create(comptime T: type) !*T {
 
 //for extension reloading
 fn recreate(comptime T: type, obj: ?*anyopaque) !*T {
-    const self = try general_allocator.create(T);
-    self.* = std.mem.zeroInit(T, .{});
-    self.base = .{ .godot_object = obj.? };
-    core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
-    core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
-    if (@hasDecl(T, "init")) {
-        self.init();
-    }
-    return self;
+    _ = obj;
+    @panic("Extension reloading is not currently supported");
+    // const self = try general_allocator.create(T);
+    // self.* = .{};
+    // self.base = .{ .godot_object = obj.? };
+    // core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
+    // core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
+    // if (@hasDecl(T, "init")) {
+    //     self.init();
+    // }
+    // return self;
 }
 
 pub fn destroy(instance: anytype) void {
