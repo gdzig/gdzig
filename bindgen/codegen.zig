@@ -303,8 +303,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\///
         \\/// This is a zero cost, compile time operation.
         \\pub fn upcast(value: anytype) {0s} {{
-        \\    _ = value;
-        \\    @panic("TODO");
+        \\    return godot.meta.upcast({0s}, value);
         \\}}
         \\
         \\/// Downcasts a parent type to a `{0s}`.
@@ -313,9 +312,9 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
         \\/// and may return `null`.
         \\pub fn downcast(value: anytype) ?{0s} {{
-        \\    _ = value;
-        \\    @panic("TODO");
+        \\    return godot.meta.downcast({0s}, value);
         \\}}
+        \\
     , .{
         class.name,
     });
@@ -359,7 +358,7 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
 
     try w.printLine("const method = godot.support.bindClassMethod({s}, \"{s}\", {d});", .{
         function.base.?,
-        function.name,
+        function.name_api,
         function.hash.?,
     });
 
@@ -520,18 +519,26 @@ fn writeField(w: *Writer, field: *const Context.Field) !void {
 
 fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
     try writeDocBlock(w, flag.doc);
-    try w.printLine("pub const {s} = packed struct(i32) {{", .{flag.name});
+    try w.printLine("pub const {s} = packed struct({s}) {{", .{
+        flag.name, switch (flag.representation) {
+            .u32 => "u32",
+            .u64 => "u64",
+        },
+    });
     w.indent += 1;
-    for (flag.fields) |field| {
+    for (flag.fields.values()) |field| {
         try writeDocBlock(w, field.doc);
         try w.printLine("{s}: bool = {s},", .{ field.name, if (field.default) "true" else "false" });
     }
     if (flag.padding > 0) {
         try w.printLine("_: u{d} = 0,", .{flag.padding});
     }
-    for (flag.consts) |@"const"| {
+    for (flag.consts.values()) |@"const"| {
         try writeDocBlock(w, @"const".doc);
-        try w.printLine("pub const {s}: {s} = @bitCast(@as(i32, {d}));", .{ @"const".name, flag.name, @"const".value });
+        try w.printLine("pub const {s}: {s} = @bitCast(@as({s}, {d}));", .{ @"const".name, flag.name, switch (flag.representation) {
+            .u32 => "u32",
+            .u64 => "u64",
+        }, @"const".value });
     }
     w.indent -= 1;
     try w.writeLine("};");

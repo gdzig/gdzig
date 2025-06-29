@@ -2,28 +2,24 @@ const Flag = @This();
 
 doc: ?[]const u8 = null,
 name: []const u8 = "_",
-fields: []Field = &.{},
-consts: []Const = &.{},
+fields: StringArrayHashMap(Field) = .empty,
+consts: StringArrayHashMap(Const) = .empty,
 padding: u8 = 0,
+representation: enum { u32, u64 } = .u32,
 
 pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum, ctx: *const Context) !Flag {
-    const doc = null;
+    var self: Flag = .{};
+    errdefer self.deinit(allocator);
 
-    const name = try allocator.dupe(u8, api.name);
-    errdefer allocator.free(name);
-
-    var fields: ArrayList(Field) = .empty;
-    errdefer fields.deinit(allocator);
-
-    var consts: ArrayList(Const) = .empty;
-    errdefer consts.deinit(allocator);
+    self.name = try allocator.dupe(u8, api.name);
 
     var default: i64 = 0;
     var position: u8 = 0;
+
     for (api.values) |value| {
         if (std.mem.endsWith(u8, value.name, "_DEFAULT")) {
             default = value.value;
-            try consts.append(allocator, try .fromGlobalEnum(allocator, class_name, value, ctx));
+            try self.consts.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx));
             continue;
         }
 
@@ -32,41 +28,46 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
 
             // Fill in any missing bit positions with placeholder fields
             while (position < expected_position) : (position += 1) {
-                try fields.append(allocator, .{
-                    .doc = null,
-                    .name = try std.fmt.allocPrint(allocator, "@\"{d}\"", .{position}),
-                    .default = false,
+                std.debug.print("{s} expected position: {} Actual: {}\n", .{ self.name, expected_position, position });
+                const name = try std.fmt.allocPrint(allocator, "@\"{d}\"", .{position});
+                try self.fields.put(allocator, name, .{
+                    .name = name,
                 });
             }
 
             // Add the field at the correct bit position
-            try fields.append(allocator, try .fromGlobalEnum(allocator, class_name, value, ctx, default));
+            try self.fields.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx, default));
             position += 1;
         } else {
-            try consts.append(allocator, try .fromGlobalEnum(allocator, class_name, value, ctx));
+            try self.consts.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx));
         }
     }
 
-    return .{
-        .doc = doc,
-        .name = name,
-        .fields = try fields.toOwnedSlice(allocator),
-        .consts = try consts.toOwnedSlice(allocator),
-        .padding = 32 - position,
+    if (position > 32) {
+        self.representation = .u64;
+    }
+
+    self.padding = switch (self.representation) {
+        .u32 => 32 - position,
+        .u64 => 64 - position,
     };
+
+    return self;
 }
 
 pub fn deinit(self: *Flag, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
     allocator.free(self.name);
-    for (self.fields) |*value| {
+
+    for (self.fields.values()) |*value| {
         value.deinit(allocator);
     }
-    allocator.free(self.fields);
-    for (self.consts) |*@"const"| {
+    self.fields.deinit(allocator);
+
+    for (self.consts.values()) |*@"const"| {
         @"const".deinit(allocator);
     }
-    allocator.free(self.consts);
+    self.consts.deinit(allocator);
 
     self.* = .{};
 }
@@ -132,6 +133,7 @@ pub const Const = struct {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Context = @import("../Context.zig");
 
 const case = @import("case");

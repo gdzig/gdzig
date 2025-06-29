@@ -214,10 +214,11 @@ fn buildBindgen(
 } {
     const mod = b.addModule("bindgen", .{
         .target = opt.target,
-        .optimize = .ReleaseFast,
+        .optimize = opt.optimize,
         .root_source_file = b.path("bindgen/main.zig"),
         .link_libc = true,
     });
+
     const options = b.addOptions();
     options.addOption([]const u8, "architecture", opt.architecture);
     options.addOption([]const u8, "precision", opt.precision);

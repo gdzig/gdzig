@@ -1,6 +1,6 @@
 pub inline fn bindBuiltinMethod(
     comptime T: type,
-    comptime name: []const u8,
+    comptime name: [:0]const u8,
     comptime hash: comptime_int,
 ) BuiltinMethod {
     const callback = struct {
@@ -14,7 +14,7 @@ pub inline fn bindBuiltinMethod(
 
 pub inline fn bindClassMethod(
     comptime T: type,
-    comptime name: []const u8,
+    comptime name: [:0]const u8,
     comptime hash: comptime_int,
 ) ClassMethod {
     const callback = struct {
@@ -53,7 +53,7 @@ pub inline fn bindDestructor(
 }
 
 pub inline fn bindFunction(
-    comptime name: []const u8,
+    comptime name: [:0]const u8,
     comptime hash: comptime_int,
 ) Function {
     const callback = struct {
@@ -86,7 +86,7 @@ pub inline fn bindVariantTo(comptime @"type": godot.Variant.Tag) VariantTo {
 }
 
 inline fn bind(
-    comptime name: ?[]const u8,
+    comptime name: ?[:0]const u8,
     comptime callback: anytype,
 ) @typeInfo(@TypeOf(callback)).@"fn".return_type.? {
     // building all elements into the struct ensures that the binding is generated
@@ -99,9 +99,7 @@ inline fn bind(
 
     if (Binding.function == null) {
         if (name) |name_| {
-            var string_name = core.StringName.fromLatin1(@ptrCast(name_));
-            defer string_name.deinit();
-            Binding.function = callback(string_name);
+            Binding.function = callback(core.StringName.fromComptimeLatin1(name_));
         } else {
             Binding.function = callback();
         }

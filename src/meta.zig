@@ -88,7 +88,7 @@ pub fn upcast(comptime T: type, value: anytype) T {
     }
 }
 
-pub fn downcast(comptime T: type, value: anytype) T {
+pub fn downcast(comptime T: type, value: anytype) ?T {
     _ = value;
     @panic("todo: fieldParentPtr-based casting");
 }
