@@ -25,7 +25,7 @@ pub fn init(self: *Self) void {
     self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{
         .keepOffsets_ = false,
     });
-    self.base.addChild(.upcast(self.fps_counter), .{});
+    self.base.addChild(Node.cast(self.fps_counter).?, .{});
 }
 
 pub fn deinit(self: *Self) void {

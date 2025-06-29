@@ -299,22 +299,25 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
 
     // Cast helper
     try w.printLine(
-        \\/// Upcasts a child type to a `{0s}`.
-        \\///
-        \\/// This is a zero cost, compile time operation.
-        \\pub fn upcast(value: anytype) {0s} {{
-        \\    return godot.meta.upcast({0s}, value);
+        \\pub fn cast(value: anytype) ?{0s} {{
+        \\    return godot.castSafe({0s}, value);
         \\}}
-        \\
-        \\/// Downcasts a parent type to a `{0s}`.
-        \\///
-        \\/// This operation will fail at compile time if {0s} does not inherit from `@TypeOf(value)`. However,
-        \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
-        \\/// and may return `null`.
-        \\pub fn downcast(value: anytype) ?{0s} {{
-        \\    return godot.meta.downcast({0s}, value);
-        \\}}
-        \\
+        // \\/// Upcasts a child type to a `{0s}`.
+        // \\///
+        // \\/// This is a zero cost, compile time operation.
+        // \\pub fn upcast(value: anytype) {0s} {{
+        // \\    return godot.meta.upcast({0s}, value);
+        // \\}}
+        // \\
+        // \\/// Downcasts a parent type to a `{0s}`.
+        // \\///
+        // \\/// This operation will fail at compile time if {0s} does not inherit from `@TypeOf(value)`. However,
+        // \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
+        // \\/// and may return `null`.
+        // \\pub fn downcast(value: anytype) ?{0s} {{
+        // \\    return godot.meta.downcast({0s}, value);
+        // \\}}
+        // \\
     , .{
         class.name,
     });
