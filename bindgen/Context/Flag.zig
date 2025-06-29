@@ -82,7 +82,7 @@ pub const Field = struct {
     default: bool = false,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, ctx: *const Context, default: i64) !Field {
-        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx) else null;
+        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);
@@ -109,7 +109,7 @@ pub const Const = struct {
     value: i64 = 0,
 
     pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, ctx: *const Context) !Const {
-        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx) else null;
+        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);
