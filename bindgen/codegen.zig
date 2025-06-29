@@ -380,8 +380,10 @@ fn writeClassFunction(w: *Writer, self: []const u8, base: []const u8, function: 
             try w.printLine(
                 \\godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), @ptrCast(&out));
             , .{self_ptr});
-        } else {
+        } else if (function.return_type != .void) {
             try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), @ptrCast(&out));", .{self_ptr});
+        } else {
+            try w.printLine("godot.core.objectMethodBindPtrcall(method, {s}, @ptrCast(&args), null);", .{self_ptr});
         }
     }
 

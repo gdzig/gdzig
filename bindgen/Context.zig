@@ -142,7 +142,7 @@ fn collectImports(self: *Context, allocator: Allocator) !void {
         try self.class_index.put(allocator, class.name, i);
     }
     for (self.api.classes) |class| {
-        try self.collectClassImports(allocator, class);
+        try self.collectClassImports(allocator, self.classes.getPtr(class.name).?);
     }
     for (self.api.utility_functions) |function| {
         try self.collectFunctionImports(allocator, function);
@@ -184,41 +184,45 @@ fn collectBuiltinImports(self: *Context, allocator: Allocator, builtin: GodotApi
     }
 }
 
-fn collectClassImports(self: *Context, allocator: Allocator, class: GodotApi.Class) !void {
-    if (self.class_imports.contains(class.name)) return;
+fn collectClassImports(self: *Context, allocator: Allocator, class: *Class) !void {
+    if (class.imports.map.count() > 0) return;
+    class.imports.skip = class.name;
 
-    var imports: Imports = .empty;
-    imports.skip = class.name;
-
-    for (class.methods orelse &.{}) |method| {
-        if (method.return_value) |return_value| {
-            try imports.put(allocator, self.correctType(return_value.type, return_value.meta));
-        }
-        for (method.arguments orelse &.{}) |argument| {
-            try imports.put(allocator, self.correctType(argument.type, argument.meta));
+    for (class.functions.values()) |function| {
+        try typeImport(allocator, &class.imports, function.return_type);
+        for (function.parameters.values()) |parameter| {
+            try typeImport(allocator, &class.imports, parameter.type);
         }
     }
-    for (class.properties orelse &.{}) |_| {
-        // TODO: deal with comma separated "CanvasItemMaterial,ShaderMaterial"
-        // try imports.put(allocator, self.correctType(property.type, ""));
+    for (class.properties.values()) |property| {
+        try typeImport(allocator, &class.imports, property.type);
     }
-    for (class.signals orelse &.{}) |signal| {
-        for (signal.arguments orelse &.{}) |argument| {
-            try imports.put(allocator, self.correctType(argument.type, ""));
+    for (class.signals.values()) |signal| {
+        for (signal.parameters.values()) |parameter| {
+            try typeImport(allocator, &class.imports, parameter.type);
         }
     }
 
     // Index imports from the parent class hierarchy
-    var cur = class;
-    while (cur.inherits.len > 0) {
-        const idx = self.class_index.get(cur.inherits).?;
-        cur = self.api.classes[idx];
-        try self.collectClassImports(allocator, cur);
-        try imports.put(allocator, cur.name);
-        try imports.merge(allocator, &self.class_imports.get(cur.name).?);
+    var cur: ?*Class = class;
+    while (class.getBase(self)) |base| : (cur = base) {
+        try self.collectClassImports(allocator, base);
+        try class.imports.merge(allocator, &base.imports);
     }
+}
 
-    try self.class_imports.put(allocator, class.name, imports);
+fn typeImport(allocator: Allocator, imports: *Imports, @"type": Type) !void {
+    switch (@"type") {
+        .array => try imports.put(allocator, "Array"),
+        .class => |name| try imports.put(allocator, name),
+        .@"enum" => |name| try imports.put(allocator, name),
+        .flag => |name| try imports.put(allocator, name),
+        .string => try imports.put(allocator, "String"),
+        .string_name => try imports.put(allocator, "StringName"),
+        .node_path => try imports.put(allocator, "NodePath"),
+        .variant => try imports.put(allocator, "Variant"),
+        else => {},
+    }
 }
 
 fn collectFunctionImports(self: *Context, allocator: Allocator, function: GodotApi.UtilityFunction) !void {
