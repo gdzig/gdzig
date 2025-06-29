@@ -42,9 +42,13 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Documentation
     self.doc = if (api.description) |desc|
-        try docs.convertDocsToMarkdown(allocator, desc, ctx, .{})
+        try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+            .current_class = api.name,
+        })
     else if (api.brief_description) |desc|
-        try docs.convertDocsToMarkdown(allocator, desc, ctx, .{})
+        try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+            .current_class = api.name,
+        })
     else
         null;
 
@@ -76,7 +80,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
     // Enums
     for (api.enums orelse &.{}) |@"enum"| {
         if (@"enum".is_bitfield) {
-            try self.flags.put(allocator, @"enum".name, try Flag.fromGlobalEnum(allocator, @"enum", ctx));
+            try self.flags.put(allocator, @"enum".name, try Flag.fromGlobalEnum(allocator, self.name_api, @"enum", ctx));
         } else {
             try self.enums.put(allocator, @"enum".name, try Enum.fromClass(allocator, self.name_api, @"enum", ctx));
         }

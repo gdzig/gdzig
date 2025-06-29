@@ -6,7 +6,7 @@ fields: []Field = &.{},
 consts: []Const = &.{},
 padding: u8 = 0,
 
-pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *const Context) !Flag {
+pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum, ctx: *const Context) !Flag {
     const doc = null;
 
     const name = if (std.mem.endsWith(u8, api.name, "Flags"))
@@ -28,7 +28,7 @@ pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *cons
     for (api.values) |value| {
         if (std.mem.endsWith(u8, value.name, "_DEFAULT")) {
             default = value.value;
-            try consts.append(allocator, try .fromGlobalEnum(allocator, value, ctx));
+            try consts.append(allocator, try .fromGlobalEnum(allocator, class_name, value, ctx));
             continue;
         }
 
@@ -45,10 +45,10 @@ pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum, ctx: *cons
             }
 
             // Add the field at the correct bit position
-            try fields.append(allocator, try .fromGlobalEnum(allocator, value, ctx, default));
+            try fields.append(allocator, try .fromGlobalEnum(allocator, class_name, value, ctx, default));
             position += 1;
         } else {
-            try consts.append(allocator, try .fromGlobalEnum(allocator, value, ctx));
+            try consts.append(allocator, try .fromGlobalEnum(allocator, class_name, value, ctx));
         }
     }
 
@@ -81,8 +81,10 @@ pub const Field = struct {
     name: []const u8 = "_",
     default: bool = false,
 
-    pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, ctx: *const Context, default: i64) !Field {
-        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
+    pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum.Value, ctx: *const Context, default: i64) !Field {
+        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+            .current_class = class_name,
+        }) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);
@@ -108,8 +110,10 @@ pub const Const = struct {
     name: []const u8 = "_",
     value: i64 = 0,
 
-    pub fn fromGlobalEnum(allocator: Allocator, api: GodotApi.GlobalEnum.Value, ctx: *const Context) !Const {
-        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
+    pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum.Value, ctx: *const Context) !Const {
+        const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+            .current_class = class_name,
+        }) else null;
         errdefer allocator.free(doc orelse "");
 
         const name = try case.allocTo(allocator, .snake, api.name);

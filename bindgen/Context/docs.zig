@@ -96,19 +96,29 @@ pub const DocumentContext = struct {
             try symbol_lookup.putNoClobber(ctx.allocator, "Variant", "Variant");
 
             for (api.classes) |class| {
+                if (util.shouldSkipClass(class.name)) continue;
+
                 const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{class.name});
                 try symbol_lookup.putNoClobber(ctx.allocator, class.name, doc_name);
 
                 for (class.enums orelse &.{}) |@"enum"| {
                     const enum_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ class.name, @"enum".name });
-                    const enum_doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}.{s}", .{ class.name, enum_name });
+                    const enum_doc_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ doc_name, enum_name });
                     try symbol_lookup.putNoClobber(ctx.allocator, enum_name, enum_doc_name);
                 }
             }
 
             for (api.builtin_classes) |builtin| {
-                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{s}", .{builtin.name});
+                if (util.shouldSkipClass(builtin.name)) continue;
+
+                const doc_name = try std.fmt.allocPrint(ctx.allocator, "bindings.core.{0s}", .{builtin.name});
                 try symbol_lookup.putNoClobber(ctx.allocator, builtin.name, doc_name);
+
+                for (builtin.enums orelse &.{}) |@"enum"| {
+                    const enum_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ builtin.name, @"enum".name });
+                    const enum_doc_name = try std.fmt.allocPrint(ctx.allocator, "{s}.{s}", .{ doc_name, enum_name });
+                    try symbol_lookup.putNoClobber(ctx.allocator, enum_name, enum_doc_name);
+                }
             }
 
             for (api.global_enums) |@"enum"| {
@@ -315,4 +325,6 @@ const StringHashMap = std.StringHashMapUnmanaged;
 const std = @import("std");
 const testing = std.testing;
 const bbcodez = @import("bbcodez");
+const util = @import("../util.zig");
+
 const logger = std.log.scoped(.docs);
