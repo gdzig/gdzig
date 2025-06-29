@@ -13,9 +13,7 @@ fn writeBuiltins(ctx: *const Context) !void {
             continue;
         }
 
-        const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{builtin.name});
-        defer ctx.allocator.free(filename);
-
+        const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "{s}.zig", .{builtin.name});
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
@@ -219,8 +217,8 @@ fn writeClasses(ctx: *const Context) !void {
             continue;
         }
 
-        const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{class.name});
-        defer ctx.allocator.free(filename);
+        const filename = try std.fmt.allocPrint(ctx.getRawAllocator(), "{s}.zig", .{class.name});
+        defer ctx.getRawAllocator().free(filename);
 
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
@@ -707,8 +705,8 @@ fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
 
 fn writeModules(ctx: *const Context) !void {
     for (ctx.modules.values()) |*module| {
-        const filename = try std.fmt.allocPrint(ctx.allocator, "{s}.zig", .{module.name});
-        defer ctx.allocator.free(filename);
+        const filename = try std.fmt.allocPrint(ctx.getRawAllocator(), "{s}.zig", .{module.name});
+        defer ctx.getRawAllocator().free(filename);
 
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
