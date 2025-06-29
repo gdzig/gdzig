@@ -16,8 +16,7 @@ pub const Signal = @import("Context/Signal.zig");
 pub const Type = @import("Context/type.zig").Type;
 pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
 
-/// @deprecated: prefer passing allocator
-allocator: Allocator,
+arena: *ArenaAllocator,
 api: GodotApi,
 config: Config,
 
@@ -61,8 +60,11 @@ const base_type_map = std.StaticStringMap([]const u8).initComptime(.{
 });
 
 pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
+    const arena = try allocator.create(ArenaAllocator);
+    arena.* = ArenaAllocator.init(allocator);
+
     var self = Context{
-        .allocator = allocator,
+        .arena = arena,
         .api = api,
         .config = config,
     };
@@ -73,50 +75,24 @@ pub fn build(allocator: Allocator, api: GodotApi, config: Config) !Context {
     try self.parseSingletons();
     try self.parseClasses();
 
-    try self.collectSizes(allocator);
+    try self.collectSizes(self.arena.allocator());
 
-    try self.castBuiltins(allocator);
-    try self.castClasses(allocator);
-    try self.castEnums(allocator);
-    try self.castFlags(allocator);
-    try self.castModules(allocator);
+    try self.castBuiltins(self.arena.allocator());
+    try self.castClasses(self.arena.allocator());
+    try self.castEnums(self.arena.allocator());
+    try self.castFlags(self.arena.allocator());
+    try self.castModules(self.arena.allocator());
 
-    try self.collectExports(allocator);
-    try self.collectImports(allocator);
+    try self.collectExports(self.arena.allocator());
+    try self.collectImports(self.arena.allocator());
 
     return self;
 }
 
 pub fn deinit(self: *Context) void {
-    self.all_classes.deinit(self.allocator);
-    self.all_engine_classes.deinit(self.allocator);
-    self.builtin_sizes.deinit(self.allocator);
-    self.depends.deinit(self.allocator);
-    self.engine_classes.deinit(self.allocator);
-    self.func_docs.deinit(self.allocator);
-    self.func_names.deinit(self.allocator);
-    self.func_pointers.deinit(self.allocator);
-    self.singletons.deinit(self.allocator);
-    self.builtin_imports.deinit(self.allocator);
-    self.class_index.deinit(self.allocator);
-    self.class_imports.deinit(self.allocator);
-    self.function_imports.deinit(self.allocator);
-    self.symbol_lookup.deinit(self.allocator);
-
-    for (self.enums.items) |@"enum"| {
-        @"enum".deinit(self.allocator);
-    }
-    self.enums.deinit(self.allocator);
-
-    for (self.flags.items) |flag| {
-        flag.deinit(self.allocator);
-    }
-    self.flags.deinit(self.allocator);
-
-    for (self.modules.items) |module| {
-        module.deinit(self.allocator);
-    }
-    self.modules.deinit(self.allocator);
+    const allocator = self.arena.child_allocator;
+    self.arena.deinit();
+    allocator.destroy(self.arena);
 }
 
 /// This function generates a list of types/modules to re-export in core.zig
@@ -261,26 +237,30 @@ fn collectFunctionImports(self: *Context, allocator: Allocator, function: GodotA
 }
 
 fn parseClasses(self: *Context) !void {
+    const allocator = self.arena.allocator();
     for (self.api.classes) |bc| {
         // TODO: why?
         if (std.mem.eql(u8, bc.name, "ClassDB")) {
             continue;
         }
-        try self.engine_classes.put(self.allocator, bc.name, bc.is_refcounted);
+        try self.engine_classes.put(allocator, bc.name, bc.is_refcounted);
     }
 
     for (self.api.native_structures) |ns| {
-        try self.engine_classes.put(self.allocator, ns.name, false);
+        try self.engine_classes.put(allocator, ns.name, false);
     }
 }
 
 fn parseSingletons(self: *Context) !void {
+    const allocator = self.arena.allocator();
     for (self.api.singletons) |sg| {
-        try self.singletons.put(self.allocator, sg.name, sg.type);
+        try self.singletons.put(allocator, sg.name, sg.type);
     }
 }
 
 fn parseGdExtensionHeaders(self: *Context) !void {
+    const allocator = self.arena.allocator();
+
     var buffered_reader = std.io.bufferedReader(self.config.gdextension_interface.reader());
     const reader = buffered_reader.reader();
 
@@ -292,7 +272,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     const safe_ident_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
 
     var doc_stream: std.ArrayListUnmanaged(u8) = .empty;
-    const doc_writer: std.ArrayListUnmanaged(u8).Writer = doc_stream.writer(self.allocator);
+    const doc_writer: std.ArrayListUnmanaged(u8).Writer = doc_stream.writer(allocator);
 
     var doc_start: ?usize = null;
     var doc_end: ?usize = null;
@@ -329,7 +309,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
 
                 if (!contains_name_doc and !(is_last_line and doc_line.len == 0)) {
                     try doc_writer.writeAll("/// ");
-                    try doc_writer.writeAll(try self.allocator.dupe(u8, doc_line));
+                    try doc_writer.writeAll(try allocator.dupe(u8, doc_line));
                     try doc_writer.writeAll("\n");
                 }
 
@@ -343,7 +323,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
         if (contains_name_doc) {
             const name_index = std.mem.indexOf(u8, line, name_doc).?;
             const start = name_index + name_doc.len + 1; // +1 to skip the space after @name
-            fn_name = try self.allocator.dupe(u8, line[start..]);
+            fn_name = try allocator.dupe(u8, line[start..]);
             fp_type = null;
         } else if (std.mem.startsWith(u8, line, "typedef")) {
             if (fn_name == null) continue; // skip if we don't have a function name yet
@@ -359,15 +339,15 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             const fp_type_slice = iterator.next().?;
             const start = std.mem.indexOfAny(u8, fp_type_slice, safe_ident_chars).?;
             const end = std.mem.indexOf(u8, fp_type_slice[start..], ")").?;
-            fp_type = try self.allocator.dupe(u8, fp_type_slice[start..(end + start)]);
+            fp_type = try allocator.dupe(u8, fp_type_slice[start..(end + start)]);
         }
 
         if (fn_name) |_| if (fp_type) |_| {
-            try self.func_pointers.put(self.allocator, fp_type.?, fn_name.?);
+            try self.func_pointers.put(allocator, fp_type.?, fn_name.?);
 
             if (doc_start) |start_index| if (doc_end) |end_index| {
-                const doc_text = try self.allocator.dupe(u8, doc_stream.items[start_index..end_index]);
-                try self.func_docs.put(self.allocator, fp_type.?, doc_text);
+                const doc_text = try allocator.dupe(u8, doc_stream.items[start_index..end_index]);
+                try self.func_docs.put(allocator, fp_type.?, doc_text);
             };
 
             fn_name = null;
@@ -465,13 +445,15 @@ fn castModules(self: *Context, allocator: Allocator) !void {
 
 pub fn correctName(self: *const Context, name: []const u8) []const u8 {
     if (std.zig.Token.keywords.has(name)) {
-        return std.fmt.allocPrint(self.allocator, "@\"{s}\"", .{name}) catch unreachable;
+        return std.fmt.allocPrint(self.arena.allocator(), "@\"{s}\"", .{name}) catch unreachable;
     }
 
     return name;
 }
 
 pub fn correctType(self: *const Context, type_name: []const u8, meta: []const u8) []const u8 {
+    const allocator = self.arena.allocator();
+
     var correct_type = if (meta.len > 0) meta else type_name;
     if (correct_type.len == 0) return "void";
 
@@ -489,7 +471,7 @@ pub fn correctType(self: *const Context, type_name: []const u8, meta: []const u8
     } else if (util.isEnum(correct_type)) {
         const cls = util.getEnumClass(correct_type);
         if (std.mem.eql(u8, cls, "GlobalConstants")) {
-            return std.fmt.allocPrint(self.allocator, "global.{s}", .{util.getEnumName(correct_type)}) catch unreachable;
+            return std.fmt.allocPrint(allocator, "global.{s}", .{util.getEnumName(correct_type)}) catch unreachable;
         } else {
             return util.getEnumName(correct_type);
         }
@@ -500,11 +482,11 @@ pub fn correctType(self: *const Context, type_name: []const u8, meta: []const u8
     }
 
     if (self.isRefCounted(correct_type)) {
-        return std.fmt.allocPrint(self.allocator, "?{s}", .{correct_type}) catch unreachable;
+        return std.fmt.allocPrint(allocator, "?{s}", .{correct_type}) catch unreachable;
     } else if (self.isClass(correct_type)) {
-        return std.fmt.allocPrint(self.allocator, "?{s}", .{correct_type}) catch unreachable;
+        return std.fmt.allocPrint(allocator, "?{s}", .{correct_type}) catch unreachable;
     } else if (correct_type[correct_type.len - 1] == '*') {
-        return std.fmt.allocPrint(self.allocator, "?*{s}", .{correct_type[0 .. correct_type.len - 1]}) catch unreachable;
+        return std.fmt.allocPrint(allocator, "?*{s}", .{correct_type[0 .. correct_type.len - 1]}) catch unreachable;
     }
     return correct_type;
 }
@@ -539,10 +521,12 @@ pub fn getReturnType(self: *const Context, method: GodotApi.GdMethod) []const u8
 }
 
 pub fn getZigFuncName(self: *Context, godot_func_name: []const u8) []const u8 {
-    const result = self.func_names.getOrPut(self.allocator, godot_func_name) catch unreachable;
+    const allocator = self.arena.allocator();
+
+    const result = self.func_names.getOrPut(allocator, godot_func_name) catch unreachable;
 
     if (!result.found_existing) {
-        result.value_ptr.* = self.correctName(case.allocTo(self.allocator, func_case, godot_func_name) catch unreachable);
+        result.value_ptr.* = self.correctName(case.allocTo(allocator, func_case, godot_func_name) catch unreachable);
     }
 
     return result.value_ptr.*;
@@ -551,7 +535,7 @@ pub fn getZigFuncName(self: *Context, godot_func_name: []const u8) []const u8 {
 pub fn getVariantTypeName(self: *const Context, class_name: []const u8) []const u8 {
     var buf: [256]u8 = undefined;
     const nnn = case.bufTo(&buf, .snake, class_name) catch unreachable;
-    return std.fmt.allocPrint(self.allocator, "godot.c.GDEXTENSION_VARIANT_TYPE_{s}", .{std.ascii.upperString(&buf, nnn)}) catch unreachable;
+    return std.fmt.allocPrint(self.arena.allocator(), "godot.c.GDEXTENSION_VARIANT_TYPE_{s}", .{std.ascii.upperString(&buf, nnn)}) catch unreachable;
 }
 
 pub fn isRefCounted(self: *const Context, type_name: []const u8) bool {
@@ -571,41 +555,47 @@ pub fn isSingleton(self: *const Context, class_name: []const u8) bool {
     return self.singletons.contains(class_name);
 }
 
+pub fn getRawAllocator(self: *const Context) std.mem.Allocator {
+    return self.arena.child_allocator;
+}
+
 pub fn buildSymbolLookupTable(self: *Context) !void {
+    const allocator = self.arena.allocator();
+
     if (self.symbol_lookup.size == 0) {
         logger.debug("Initializing symbol lookup...", .{});
 
-        try self.symbol_lookup.putNoClobber(self.allocator, "Variant", "Variant");
+        try self.symbol_lookup.putNoClobber(allocator, "Variant", "Variant");
 
         for (self.api.classes) |class| {
             if (util.shouldSkipClass(class.name)) continue;
 
-            const doc_name = try std.fmt.allocPrint(self.allocator, "bindings.core.{s}", .{class.name});
-            try self.symbol_lookup.putNoClobber(self.allocator, class.name, doc_name);
+            const doc_name = try std.fmt.allocPrint(allocator, "bindings.core.{s}", .{class.name});
+            try self.symbol_lookup.putNoClobber(allocator, class.name, doc_name);
 
             for (class.enums orelse &.{}) |@"enum"| {
-                const enum_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ class.name, @"enum".name });
-                const enum_doc_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ doc_name, enum_name });
-                try self.symbol_lookup.putNoClobber(self.allocator, enum_name, enum_doc_name);
+                const enum_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ class.name, @"enum".name });
+                const enum_doc_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ doc_name, enum_name });
+                try self.symbol_lookup.putNoClobber(allocator, enum_name, enum_doc_name);
             }
         }
 
         for (self.api.builtin_classes) |builtin| {
             if (util.shouldSkipClass(builtin.name)) continue;
 
-            const doc_name = try std.fmt.allocPrint(self.allocator, "bindings.core.{0s}", .{builtin.name});
-            try self.symbol_lookup.putNoClobber(self.allocator, builtin.name, doc_name);
+            const doc_name = try std.fmt.allocPrint(allocator, "bindings.core.{s}", .{builtin.name});
+            try self.symbol_lookup.putNoClobber(allocator, builtin.name, doc_name);
 
             for (builtin.enums orelse &.{}) |@"enum"| {
-                const enum_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ builtin.name, @"enum".name });
-                const enum_doc_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{ doc_name, enum_name });
-                try self.symbol_lookup.putNoClobber(self.allocator, enum_name, enum_doc_name);
+                const enum_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ builtin.name, @"enum".name });
+                const enum_doc_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ doc_name, enum_name });
+                try self.symbol_lookup.putNoClobber(allocator, enum_name, enum_doc_name);
             }
         }
 
         for (self.api.global_enums) |@"enum"| {
-            const doc_name = try std.fmt.allocPrint(self.allocator, "bindings.global.{s}", .{@"enum".name});
-            try self.symbol_lookup.putNoClobber(self.allocator, @"enum".name, doc_name);
+            const doc_name = try std.fmt.allocPrint(allocator, "bindings.global.{s}", .{@"enum".name});
+            try self.symbol_lookup.putNoClobber(allocator, @"enum".name, doc_name);
         }
 
         logger.debug("Symbol lookup initialized. Size: {d}", .{self.symbol_lookup.size});
@@ -615,6 +605,7 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.StringHashMapUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
