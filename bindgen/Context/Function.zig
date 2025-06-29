@@ -284,6 +284,8 @@ pub const Parameter = struct {
         var self = try fromNameType(allocator, api_name, api_type, is_meta, ctx);
         if (self.type == .array and std.mem.indexOf(u8, default, "[]") != null) {
             self.default = "null";
+        } else if (self.type == .string and std.mem.eql(u8, default, "\"\"")) {
+            self.default = "null";
         } else if (self.type == .@"enum") {
             self.default = try std.fmt.allocPrint(allocator, "@enumFromInt({s})", .{default});
         } else if (self.type == .flag) {

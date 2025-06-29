@@ -237,12 +237,12 @@ pub fn registerClass(comptime T: type) void {
                 .is_exposed = 1,
                 .set_func = if (@hasDecl(T, "_set")) setBind else null,
                 .get_func = if (@hasDecl(T, "_get")) getBind else null,
-                .get_property_list_func = if (@hasDecl(T, "_get_property_list")) getPropertyListBind else null,
-                .property_can_revert_func = if (@hasDecl(T, "_property_can_revert")) propertyCanRevertBind else null,
-                .property_get_revert_func = if (@hasDecl(T, "_property_get_revert")) propertyGetRevertBind else null,
-                .validate_property_func = if (@hasDecl(T, "_validate_property")) validatePropertyBind else null,
+                .get_property_list_func = if (@hasDecl(T, "_getPropertyList")) getPropertyListBind else null,
+                .property_can_revert_func = if (@hasDecl(T, "_propertyCanRevert")) propertyCanRevertBind else null,
+                .property_get_revert_func = if (@hasDecl(T, "_propertyGetRevert")) propertyGetRevertBind else null,
+                .validate_property_func = if (@hasDecl(T, "_validateProperty")) validatePropertyBind else null,
                 .notification_func = if (@hasDecl(T, "_notification")) notificationBind else null,
-                .to_string_func = if (@hasDecl(T, "_to_string")) toStringBind else null,
+                .to_string_func = if (@hasDecl(T, "_toString")) toStringBind else null,
                 .reference_func = null,
                 .unreference_func = null,
                 .create_instance_func = createInstanceBind, // (Default) constructor; mandatory. If the class is not instantiable, consider making it virtual or abstract.
@@ -289,7 +289,7 @@ pub fn registerClass(comptime T: type) void {
         pub fn getPropertyListBind(p_instance: c.GDExtensionClassInstancePtr, r_count: [*c]u32) callconv(.C) [*c]const c.GDExtensionPropertyInfo {
             if (p_instance) |p| {
                 const ptr: *T = @ptrCast(@alignCast(p));
-                const property_list = T._get_property_list(ptr);
+                const property_list = T._getPropertyList(ptr);
 
                 const count: u32 = @intCast(property_list.len);
 
@@ -315,9 +315,9 @@ pub fn registerClass(comptime T: type) void {
         }
 
         pub fn freePropertyListBind(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo) callconv(.C) void {
-            if (@hasDecl(T, "_free_property_list")) {
+            if (@hasDecl(T, "_freePropertyList")) {
                 if (p_instance) |p| {
-                    T._free_property_list(@ptrCast(@alignCast(p)), p_list); //fn _free_property_list(self:*Self, p_list:[*c]const c.GDExtensionPropertyInfo) void {}
+                    T._freePropertyList(@ptrCast(@alignCast(p)), p_list); //fn _free_property_list(self:*Self, p_list:[*c]const c.GDExtensionPropertyInfo) void {}
                 }
             }
             if (p_list) |list| {
@@ -326,9 +326,9 @@ pub fn registerClass(comptime T: type) void {
         }
 
         pub fn freePropertyListBind2(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo, p_count: u32) callconv(.C) void {
-            if (@hasDecl(T, "_free_property_list")) {
+            if (@hasDecl(T, "_freePropertyList")) {
                 if (p_instance) |p| {
-                    T._free_property_list(@ptrCast(@alignCast(p)), p_list, p_count); //fn _free_property_list(self:*Self, p_list:[*c]const c.GDExtensionPropertyInfo, p_count:u32) void {}
+                    T._freePropertyList(@ptrCast(@alignCast(p)), p_list, p_count); //fn _free_property_list(self:*Self, p_list:[*c]const c.GDExtensionPropertyInfo, p_count:u32) void {}
                 }
             }
             if (p_list) |list| {
@@ -338,7 +338,7 @@ pub fn registerClass(comptime T: type) void {
 
         pub fn propertyCanRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr) callconv(.C) c.GDExtensionBool {
             if (p_instance) |p| {
-                return if (T._property_can_revert(@ptrCast(@alignCast(p)), @as(*core.StringName, @ptrCast(@constCast(p_name))).*)) 1 else 0; //fn _property_can_revert(self:*Self, name: core.StringName) bool
+                return if (T._propertyCanRevert(@ptrCast(@alignCast(p)), @as(*core.StringName, @ptrCast(@constCast(p_name))).*)) 1 else 0; //fn _property_can_revert(self:*Self, name: core.StringName) bool
             } else {
                 return 0;
             }
@@ -346,7 +346,7 @@ pub fn registerClass(comptime T: type) void {
 
         pub fn propertyGetRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr, r_ret: c.GDExtensionVariantPtr) callconv(.C) c.GDExtensionBool {
             if (p_instance) |p| {
-                return if (T._property_get_revert(@ptrCast(@alignCast(p)), @as(*core.StringName, @ptrCast(@constCast(p_name))).*, @as(*Variant, @ptrCast(@alignCast(r_ret))))) 1 else 0; //fn _property_get_revert(self:*Self, name: core.StringName, ret:*Variant) bool
+                return if (T._propertyGetRevert(@ptrCast(@alignCast(p)), @as(*core.StringName, @ptrCast(@constCast(p_name))).*, @as(*Variant, @ptrCast(@alignCast(r_ret))))) 1 else 0; //fn _property_get_revert(self:*Self, name: core.StringName, ret:*Variant) bool
             } else {
                 return 0;
             }
@@ -354,7 +354,7 @@ pub fn registerClass(comptime T: type) void {
 
         pub fn validatePropertyBind(p_instance: c.GDExtensionClassInstancePtr, p_property: [*c]c.GDExtensionPropertyInfo) callconv(.C) c.GDExtensionBool {
             if (p_instance) |p| {
-                return if (T._validate_property(@ptrCast(@alignCast(p)), p_property)) 1 else 0; //fn _validate_property(self:*Self, p_property: [*c]c.GDExtensionPropertyInfo) bool
+                return if (T._validateProperty(@ptrCast(@alignCast(p)), p_property)) 1 else 0; //fn _validate_property(self:*Self, p_property: [*c]c.GDExtensionPropertyInfo) bool
             } else {
                 return 0;
             }
@@ -368,7 +368,7 @@ pub fn registerClass(comptime T: type) void {
 
         pub fn toStringBind(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: [*c]c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.C) void {
             if (p_instance) |p| {
-                const ret: ?core.String = T._to_string(@ptrCast(@alignCast(p))); //fn _to_string(self:*Self) ?Godot.core.String {}
+                const ret: ?core.String = T._toString(@ptrCast(@alignCast(p))); //fn _to_string(self:*Self) ?Godot.core.String {}
                 if (ret) |r| {
                     r_is_valid.* = 1;
                     @as(*core.String, @ptrCast(p_out)).* = r;
@@ -415,7 +415,7 @@ pub fn registerClass(comptime T: type) void {
         }
 
         pub fn getRidBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.C) u64 {
-            return T._get_rid(@ptrCast(@alignCast(p_instance)));
+            return T._getRid(@ptrCast(@alignCast(p_instance)));
         }
     };
 
@@ -429,7 +429,7 @@ pub fn registerClass(comptime T: type) void {
     classdbRegisterExtensionClass(@ptrCast(core.p_library), @ptrCast(getClassName(T)), @ptrCast(getParentClassName(T)), @ptrCast(&PerClassData.class_info));
 
     if (@hasDecl(T, "_bind_methods")) {
-        T._bind_methods();
+        T._bindMethods();
     }
 }
 
@@ -611,14 +611,14 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 }
 
-pub fn connect(godot_object: anytype, signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
+pub fn connect(godot_object: anytype, comptime signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
     if (@typeInfo(@TypeOf(instance)) != .pointer) {
         @compileError("pointer type expected for parameter 'instance'");
     }
     // TODO: I think this is a memory leak??
     registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = core.Callable.initObjectMethod(.{ .godot_object = getGodotObjectPtr(instance).* }, .fromComptimeLatin1(method_name));
-    _ = godot_object.connect(signal_name, callable, 0);
+    const callable = core.Callable.initObjectMethod(.{ .godot_object = getGodotObjectPtr(instance).*.? }, .fromComptimeLatin1(method_name));
+    _ = godot_object.connect(.fromComptimeLatin1(signal_name), callable, .{});
 }
 
 pub fn init() void {

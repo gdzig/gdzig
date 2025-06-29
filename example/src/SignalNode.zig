@@ -3,7 +3,7 @@ const Self = @This();
 base: Control, //this makes @Self a valid gdextension class
 color_rect: ColorRect = undefined,
 
-pub fn _bind_methods() void {
+pub fn _bindMethods() void {
     godot.registerSignal(Self, "signal1", &[_]PropertyInfo{
         PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_STRING, StringName.fromComptimeLatin1("name")),
         PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromComptimeLatin1("position")),
@@ -13,32 +13,32 @@ pub fn _bind_methods() void {
     godot.registerSignal(Self, "signal3", &.{});
 }
 
-pub fn _enter_tree(self: *Self) void {
+pub fn _enterTree(self: *Self) void {
     if (Engine.isEditorHint()) return;
 
     var signal1_btn = Button.init();
-    signal1_btn.setPosition(Vector2.new(100, 20), false);
-    signal1_btn.setSize(Vector2.new(100, 50), false);
-    signal1_btn.setText("Signal1");
-    self.base.addChild(signal1_btn, false, Node.INTERNAL_MODE_DISABLED);
+    signal1_btn.setPosition(.new(100, 20), .{});
+    signal1_btn.setSize(.new(100, 50), .{});
+    signal1_btn.setText(.fromLatin1("Signal1"));
+    self.base.addChild(Node.cast(signal1_btn).?, .{});
 
     var signal2_btn = Button.init();
-    signal2_btn.setPosition(Vector2.new(250, 20), false);
-    signal2_btn.setSize(Vector2.new(100, 50), false);
-    signal2_btn.setText("Signal2");
-    self.base.addChild(signal2_btn, false, Node.INTERNAL_MODE_DISABLED);
+    signal2_btn.setPosition(.new(250, 20), .{});
+    signal2_btn.setSize(.new(100, 50), .{});
+    signal2_btn.setText(.fromLatin1("Signal2"));
+    self.base.addChild(Node.cast(signal2_btn).?, .{});
 
     var signal3_btn = Button.init();
-    signal3_btn.setPosition(Vector2.new(400, 20), false);
-    signal3_btn.setSize(Vector2.new(100, 50), false);
-    signal3_btn.setText("Signal3");
-    self.base.addChild(signal3_btn, false, Node.INTERNAL_MODE_DISABLED);
+    signal3_btn.setPosition(.new(400, 20), .{});
+    signal3_btn.setSize(.new(100, 50), .{});
+    signal3_btn.setText(.fromLatin1("Signal3"));
+    self.base.addChild(Node.cast(signal3_btn).?, .{});
 
     self.color_rect = ColorRect.init();
-    self.color_rect.setPosition(Vector2.new(400, 400), false);
-    self.color_rect.setSize(Vector2.new(100, 100), false);
-    self.color_rect.setColor(Color.initRGBA(1, 0, 0, 1));
-    self.base.addChild(self.color_rect, false, Node.INTERNAL_MODE_DISABLED);
+    self.color_rect.setPosition(.new(400, 400), .{});
+    self.color_rect.setSize(.new(100, 100), .{});
+    self.color_rect.setColor(.initRGBA(1, 0, 0, 1));
+    self.base.addChild(Node.cast(self.color_rect).?, .{});
 
     godot.connect(signal1_btn, "pressed", self, "emitSignal1");
     godot.connect(signal2_btn, "pressed", self, "emitSignal2");
@@ -48,7 +48,7 @@ pub fn _enter_tree(self: *Self) void {
     godot.connect(self.base, "signal3", self, "onSignal3");
 }
 
-pub fn _exit_tree(self: *Self) void {
+pub fn _exitTree(self: *Self) void {
     _ = self;
 }
 
@@ -68,13 +68,13 @@ pub fn onSignal3(self: *Self) void {
 }
 
 pub fn emitSignal1(self: *Self) void {
-    _ = self.base.emitSignal("signal1", .{ String.fromLatin1("test_signal_name"), Vector3.new(123, 321, 333) });
+    _ = self.base.emitSignal(.fromComptimeLatin1("signal1"), .{ String.fromLatin1("test_signal_name"), Vector3.new(123, 321, 333) });
 }
 pub fn emitSignal2(self: *Self) void {
-    _ = self.base.emitSignal("signal2", .{});
+    _ = self.base.emitSignal(.fromComptimeLatin1("signal2"), .{});
 }
 pub fn emitSignal3(self: *Self) void {
-    _ = self.base.emitSignal("signal3", .{});
+    _ = self.base.emitSignal(.fromComptimeLatin1("signal3"), .{});
 }
 
 const std = @import("std");

@@ -28,9 +28,8 @@ pub fn _ready(self: *Self) void {
     self.rng = prng.random();
     self.sprites = std.ArrayList(Sprite).init(godot.general_allocator);
 
-    const resource_loader = ResourceLoader.getSingleton();
-    const tex = resource_loader.load("res://textures/logo.png", "", ResourceLoader.CACHE_MODE_REUSE);
-    defer _ = godot.unreference(tex.?);
+    const tex = ResourceLoader.load(.fromLatin1("res://textures/logo.png"), .{});
+    defer _ = godot.unreference(tex);
 
     const sz = self.base.getParentAreaSize();
 
@@ -42,19 +41,19 @@ pub fn _ready(self: *Self) void {
             .scale = Vector2.set(s),
             .gd_sprite = Sprite2D.init(),
         };
-        spr.gd_sprite.setTexture(tex);
+        spr.gd_sprite.setTexture(Texture2D.cast(tex).?);
         spr.gd_sprite.setRotation(self.randfRange(f32, 0, std.math.pi));
         spr.gd_sprite.setScale(spr.scale);
-        self.base.addChild(spr.gd_sprite, false, Node.INTERNAL_MODE_DISABLED);
+        self.base.addChild(Node.cast(spr.gd_sprite).?, .{});
         self.sprites.append(spr) catch unreachable;
     }
 }
 
-pub fn _exit_tree(self: *Self) void {
+pub fn _exitTree(self: *Self) void {
     self.sprites.deinit();
 }
 
-pub fn _physics_process(self: *Self, delta: f64) void {
+pub fn _physicsProcess(self: *Self, delta: f64) void {
     const sz = self.base.getParentAreaSize(); //get_size();
 
     for (self.sprites.items) |*spr| {
@@ -83,4 +82,5 @@ const Engine = godot.core.Engine;
 const Node = godot.core.Node;
 const ResourceLoader = godot.core.ResourceLoader;
 const Sprite2D = godot.core.Sprite2D;
+const Texture2D = godot.core.Texture2D;
 const Vector2 = godot.Vector2;

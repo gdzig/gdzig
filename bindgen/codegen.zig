@@ -368,13 +368,13 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     if (function.is_vararg) {
         // For non-void, non-variant returns: call with Variant pointer, then convert to expected type
         if (function.return_type != .variant and function.return_type != .void) {
-            try w.writeAll("var variant: Variant = .nil;");
+            try w.writeLine("var variant: Variant = .nil;");
         }
 
         try w.writeLine("var err: gdext.GDExtensionCallError = undefined;");
         try w.writeLine("godot.core.objectMethodBindCall(method, ");
         try writeClassFunctionObjectPtr(w, class, function, ctx);
-        try w.printLine(", @ptrCast(@alignCast(&args.ptr)), args.len, {s}, &err);", .{
+        try w.printLine(", @ptrCast(@alignCast(&args[0])), args.len, {s}, &err);", .{
             if (function.return_type == .variant)
                 "@ptrCast(&out)"
             else if (function.return_type != .void)
@@ -609,6 +609,9 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
                 try w.writeAll(", ");
             }
             try w.print("{s}: ", .{param.name});
+            if (std.mem.eql(u8, "null", param.default.?)) {
+                try w.writeAll("?");
+            }
             try writeTypeAtOptionalParameterField(w, &param.type);
             try w.print(" = {s}", .{param.default.?});
             is_first = false;
@@ -660,7 +663,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
         }
         try w.printLine(
             \\inline for (0..@"...".len) |i| {{
-            \\  args[{d} + i] = &godot.Variant.init(@field(@"...", i));
+            \\    args[{d} + i] = &godot.Variant.init(@"..."[i]);
             \\}}
         , .{function.parameters.count()});
     }
@@ -751,21 +754,6 @@ fn writeModule(w: *Writer, module: *const Context.Module) !void {
     try writeImports(w, &module.imports);
 }
 
-// TO DO IN CONTEXT
-// 2. Transform return type (add optional '?' prefix for pointer types)
-// 9. Generate function arguments with underscore postfix:
-//    - Handle engine class types as 'anytype'
-//    - Handle string types as 'anytype' (with exceptions)
-//    - Regular types use their actual type
-//
-// TO DO IN CODEGEN
-// 8. Generate self parameter based on proc type:
-//    - ClassMethod: 'self: anytype' ????
-// 14. Generate argument array setup:
-//     - Handle string type conversion with Latin1 chars
-// 16. Handle special return value processing:
-//     - Engine class returns: convert godot_object pointer to struct
-//     - Vararg returns: handle Variant conversion
 fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
     try writeFunctionHeader(w, function);
 
@@ -838,7 +826,10 @@ fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
 /// checks and coercions.
 fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
-        .array => try w.writeAll("?Array"),
+        .array => try w.writeAll("Array"),
+        .class => |name| {
+            try w.writeAll(name);
+        },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
@@ -880,76 +871,6 @@ fn writeTypeCheck(w: *Writer, parameter: *const Context.Function.Parameter) !voi
         else => return,
     }
 }
-
-// fn generateClass(w: *Writer, class: GodotApi.Class, ctx: *Context) !void {
-//     try generateClassVirtualDispatch(w, class, ctx);
-//     try generateClassInheritedMethods(w, class, ctx);
-// }
-
-// fn generateClassInheritedMethods(w: *Writer, class: GodotApi.Class, ctx: *Context) !void {
-//     var cur = class;
-//     while (ctx.api.findParent(cur)) |parent| : (cur = parent) {
-//         // TODO: is allocation necessary?
-//         const name = try std.fmt.allocPrint(ctx.allocator, "godot.core.{s}", .{parent.name});
-//         defer ctx.allocator.free(name);
-
-//         const methods = parent.methods orelse continue;
-
-//         // TODO: reuse existing generate functions
-//         for (methods) |method| {
-//             if (method.isPrivate()) continue;
-
-//             const return_type = ctx.getReturnType(.{ .class = method });
-//             try generateProc(w, method, name, method.name, return_type, .ClassMethod, ctx);
-//         }
-//     }
-// }
-
-// fn generateClassVirtualDispatch(w: *Writer, class: GodotApi.Class, ctx: *Context) !void {
-//     const methods = class.methods orelse return;
-
-//     try w.writeLine("pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: gdext.GDExtensionConstStringNamePtr) gdext.GDExtensionClassCallVirtual {");
-//     w.indent += 1;
-//     for (methods) |method| {
-//         const func_name = method.name;
-//         const casecmp_to_func_name = ctx.getZigFuncName("casecmp_to");
-
-//         if (!method.is_virtual) {
-//             continue;
-//         }
-
-//         try w.printLine(
-//             \\{{
-//             \\    var name = String.fromLatin1("{0s}");
-//             \\    defer name.deinit();
-//             \\    if (@as(*StringName, @ptrCast(@constCast(p_name))).{1s}(name) == 0 and @hasDecl(T, "{0s}")) {{
-//             \\        const MethodBinder = struct {{
-//             \\            pub fn {0s}(p_instance: gdext.GDExtensionClassInstancePtr, p_args: [*c]const gdext.GDExtensionConstTypePtr, p_ret: gdext.GDExtensionTypePtr) callconv(.C) void {{
-//             \\                const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
-//             \\                MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
-//             \\            }}
-//             \\        }};
-//             \\        return MethodBinder.{0s};
-//             \\    }}
-//             \\}}
-//         , .{ func_name, casecmp_to_func_name });
-//     }
-
-//     if (class.inherits.len > 0) {
-//         try w.printLine(
-//             \\return godot.core.{s}.getVirtualDispatch(T, p_userdata, p_name);
-//         , .{class.inherits});
-//     } else {
-//         try w.writeLine(
-//             \\_ = T;
-//             \\_ = p_userdata;
-//             \\_ = p_name;
-//             \\return null;
-//         );
-//     }
-//     w.indent -= 1;
-//     try w.writeLine("}");
-// }
 
 fn generateCore(ctx: *Context) !void {
     const fp_map = ctx.func_pointers;

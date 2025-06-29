@@ -102,7 +102,7 @@ fn collectExports(self: *Context, allocator: Allocator) !void {
         .file = "global",
     });
 
-    for (self.api.builtin_classes) |builtin| {
+    for (self.builtins.values()) |*builtin| {
         if (util.shouldSkipClass(builtin.name)) {
             continue;
         }
@@ -113,7 +113,7 @@ fn collectExports(self: *Context, allocator: Allocator) !void {
         });
     }
 
-    for (self.api.classes) |class| {
+    for (self.classes.values()) |*class| {
         if (util.shouldSkipClass(class.name)) {
             continue;
         }
@@ -123,6 +123,22 @@ fn collectExports(self: *Context, allocator: Allocator) !void {
             .path = class.name,
         });
         try self.all_engine_classes.append(allocator, class.name);
+    }
+
+    for (self.enums.values()) |@"enum"| {
+        try self.core_exports.append(allocator, .{
+            .ident = @"enum".name,
+            .file = "global",
+            .path = @"enum".name,
+        });
+    }
+
+    for (self.flags.values()) |flag| {
+        try self.core_exports.append(allocator, .{
+            .ident = flag.name,
+            .file = "global",
+            .path = flag.name,
+        });
     }
 
     for (self.modules.values()) |module| {
@@ -423,6 +439,9 @@ fn castEnums(self: *Context, allocator: Allocator) !void {
         if (@"enum".is_bitfield) {
             continue;
         }
+        if (std.mem.startsWith(u8, @"enum".name, "Variant.")) {
+            continue;
+        }
         try self.enums.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, null, @"enum", self));
     }
 }
@@ -430,6 +449,9 @@ fn castEnums(self: *Context, allocator: Allocator) !void {
 fn castFlags(self: *Context, allocator: Allocator) !void {
     for (self.api.global_enums) |@"enum"| {
         if (!@"enum".is_bitfield) {
+            continue;
+        }
+        if (std.mem.startsWith(u8, @"enum".name, "Variant.")) {
             continue;
         }
         try self.flags.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, null, @"enum", self));
