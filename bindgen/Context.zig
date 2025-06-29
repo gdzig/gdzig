@@ -585,6 +585,12 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
                 const enum_doc_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ doc_name, enum_name });
                 try self.symbol_lookup.putNoClobber(allocator, enum_name, enum_doc_name);
             }
+
+            for (class.methods orelse &.{}) |method| {
+                const method_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ class.name, method.name });
+                const method_doc_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ doc_name, method.name });
+                try self.symbol_lookup.putNoClobber(allocator, method_name, method_doc_name);
+            }
         }
 
         for (self.api.builtin_classes) |builtin| {
@@ -597,6 +603,12 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
                 const enum_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ builtin.name, @"enum".name });
                 const enum_doc_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ doc_name, enum_name });
                 try self.symbol_lookup.putNoClobber(allocator, enum_name, enum_doc_name);
+            }
+
+            for (builtin.methods orelse &.{}) |method| {
+                const method_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ builtin.name, method.name });
+                const method_doc_name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ doc_name, method.name });
+                try self.symbol_lookup.putNoClobber(allocator, method_name, method_doc_name);
             }
         }
 
