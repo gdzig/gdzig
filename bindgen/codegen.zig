@@ -58,8 +58,11 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin) !void {
 
     // Fields
     if (builtin.fields.count() == 0) {
-        // TODO: this should probably be handled in Context.Builtin
-        try w.printLine("value: [{d}]u8,", .{builtin.size});
+        try w.printLine(
+            \\/// {0s} is an opaque data structure; these bytes are not meant to be accessed directly.
+            \\_: [{1d}]u8,
+            \\
+        , .{ builtin.name, builtin.size });
     } else if (builtin.fields.count() > 0) {
         for (builtin.fields.values()) |*field| {
             if (field.offset != null) {
@@ -80,27 +83,27 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin) !void {
         try w.writeLine(
             \\pub fn fromLatin1(chars: []const u8) String {
             \\    var self: String = undefined;
-            \\    godot.core.stringNewWithLatin1CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
+            \\    godot.core.stringNewWithLatin1CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\pub fn fromUtf8(chars: []const u8) String {
             \\    var self: String = undefined;
-            \\    godot.core.stringNewWithUtf8CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
+            \\    godot.core.stringNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\pub fn fromUtf16(chars: []const godot.char16_t) String {
             \\    var self: String = undefined;
-            \\    godot.core.stringNewWithUtf16CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
+            \\    godot.core.stringNewWithUtf16CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\pub fn fromUtf32(chars: []const godot.char32_t) String {
             \\    var self: String = undefined;
-            \\    godot.core.stringNewWithUtf32CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
+            \\    godot.core.stringNewWithUtf32CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\pub fn fromWide(chars: []const godot.wchar_t) String {
             \\    var self: String = undefined;
-            \\    godot.core.stringNewWithWideCharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
+            \\    godot.core.stringNewWithWideCharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
         );
@@ -109,17 +112,17 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin) !void {
         try w.writeLine(
             \\pub fn fromComptimeLatin1(comptime chars: [:0]const u8) StringName {
             \\    var self: StringName = undefined;
-            \\    godot.core.stringNameNewWithLatin1Chars(@ptrCast(&self.value), chars.ptr, 1);
+            \\    godot.core.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 1);
             \\    return self;
             \\}
             \\pub fn fromLatin1(chars: [:0]const u8) StringName {
             \\    var self: StringName = undefined;
-            \\    godot.core.stringNameNewWithLatin1Chars(@ptrCast(&self.value), chars.ptr, 0);
+            \\    godot.core.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 0);
             \\    return self;
             \\}
             \\pub fn fromUtf8(chars: []const u8) StringName {
             \\    var self: StringName = undefined;
-            \\    godot.core.stringNameNewWithUtf8CharsAndLen(@ptrCast(&self.value), chars.ptr, @intCast(chars.len));
+            \\    godot.core.stringNameNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
         );

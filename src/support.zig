@@ -5,7 +5,7 @@ pub inline fn bindBuiltinMethod(
 ) BuiltinMethod {
     const callback = struct {
         fn callback(string_name: core.StringName) BuiltinMethod {
-            return core.variantGetPtrBuiltinMethod(@intFromEnum(godot.Variant.Tag.forType(T)), @ptrCast(&string_name.value), hash).?;
+            return core.variantGetPtrBuiltinMethod(@intFromEnum(godot.Variant.Tag.forType(T)), @ptrCast(&string_name), hash).?;
         }
     }.callback;
 

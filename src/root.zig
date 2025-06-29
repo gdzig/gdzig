@@ -296,9 +296,9 @@ pub fn registerClass(comptime T: type) void {
                     propertyies[i].type = property.type;
                     propertyies[i].hint = property.hint;
                     propertyies[i].usage = property.usage;
-                    propertyies[i].name = @ptrCast(@constCast(&property.name.value));
-                    propertyies[i].class_name = @ptrCast(@constCast(&property.class_name.value));
-                    propertyies[i].hint_string = @ptrCast(@constCast(&property.hint_string.value));
+                    propertyies[i].name = @ptrCast(@constCast(&property.name));
+                    propertyies[i].class_name = @ptrCast(@constCast(&property.class_name));
+                    propertyies[i].hint_string = @ptrCast(@constCast(&property.hint_string));
                 }
                 if (r_count) |r| {
                     r.* = count;
