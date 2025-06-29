@@ -427,7 +427,7 @@ fn castFlags(self: *Context, allocator: Allocator) !void {
         if (!@"enum".is_bitfield) {
             continue;
         }
-        try self.flags.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, @"enum", self));
+        try self.flags.put(allocator, @"enum".name, try .fromGlobalEnum(allocator, null, @"enum", self));
     }
 }
 
