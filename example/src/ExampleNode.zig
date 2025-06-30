@@ -80,8 +80,8 @@ pub fn _enterTree(self: *Self) void {
 
     //initialize fields
     self.example_node = null;
-    self.property1 = Vector3.new(111, 111, 111);
-    self.property2 = Vector3.new(222, 222, 222);
+    self.property1 = Vector3.initXYZ(111, 111, 111);
+    self.property2 = Vector3.initXYZ(222, 222, 222);
 
     if (Engine.isEditorHint()) return;
 
@@ -166,10 +166,10 @@ pub fn _propertyGetRevert(_: *Self, name: StringName, value: *Variant) bool {
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        value.* = Variant.init(Vector3.new(42, 42, 42));
+        value.* = Variant.init(Vector3.initXYZ(42, 42, 42));
         return true;
     } else if (name.casecmpTo(prop2) == 0) {
-        value.* = Variant.init(Vector3.new(24, 24, 24));
+        value.* = Variant.init(Vector3.initXYZ(24, 24, 24));
         return true;
     }
 
@@ -229,7 +229,7 @@ const PropertyInfo = godot.PropertyInfo;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
-const Vector3 = godot.Vector3;
+const Vector3 = godot.builtin.Vector3;
 
 const SpritesNode = @import("SpriteNode.zig");
 const GuiNode = @import("GuiNode.zig");

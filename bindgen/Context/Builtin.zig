@@ -36,6 +36,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     self.has_destructor = api.has_destructor;
 
     for (api.constants orelse &.{}) |constant| {
+        // TODO: default values with value constructors
+        if (std.mem.indexOf(u8, constant.value, "(") != null) continue;
         try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, constant, ctx));
     }
 

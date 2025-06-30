@@ -36,9 +36,9 @@ pub fn _ready(self: *Self) void {
     for (0..10000) |_| {
         const s: f32 = self.randfRange(f32, 0.1, 0.2);
         const spr = Sprite{
-            .pos = Vector2.new(self.randfRange(f32, 0, sz.x), self.randfRange(f32, 0, sz.y)),
-            .vel = Vector2.new(self.randfRange(f32, -1000, 1000), self.randfRange(f32, -1000, 1000)),
-            .scale = Vector2.set(s),
+            .pos = Vector2.initXY(self.randfRange(f32, 0, sz.x), self.randfRange(f32, 0, sz.y)),
+            .vel = Vector2.initXY(self.randfRange(f32, -1000, 1000), self.randfRange(f32, -1000, 1000)),
+            .scale = Vector2.initXY(s, s),
             .gd_sprite = Sprite2D.init(),
         };
         spr.gd_sprite.setTexture(Texture2D.downcast(tex) catch unreachable);
@@ -57,7 +57,7 @@ pub fn _physicsProcess(self: *Self, delta: f64) void {
     const sz = self.base.getParentAreaSize(); //get_size();
 
     for (self.sprites.items) |*spr| {
-        const pos = spr.pos.add(spr.vel.scale(@floatCast(delta)));
+        const pos = spr.pos.add(spr.vel.mulFloat(@floatCast(delta)));
         const spr_size = spr.gd_sprite.getRect().size.mul(spr.gd_sprite.getScale());
 
         if (pos.x <= spr_size.x / 2) {
@@ -83,4 +83,4 @@ const Node = godot.class.Node;
 const ResourceLoader = godot.class.ResourceLoader;
 const Sprite2D = godot.class.Sprite2D;
 const Texture2D = godot.class.Texture2D;
-const Vector2 = godot.Vector2;
+const Vector2 = godot.builtin.Vector2;

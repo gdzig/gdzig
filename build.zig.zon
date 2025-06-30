@@ -11,10 +11,6 @@
             .url = "https://github.com/godotengine/godot-cpp/archive/refs/heads/4.4.tar.gz",
             .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
         },
-        .vector_z = .{
-            .url = "git+https://github.com/doubleword-labs/vector-z.git#49ca3fbad6e732a1fb7f3699baaa637826beabec",
-            .hash = "vector_z-0.0.0-M8WAeZspAADGRn6hygmQ5U1ess9RlHpSwyLUerk3lT2M",
-        },
         .mvzr = .{
             .url = "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.4.tar.gz",
             .hash = "mvzr-0.3.4-ZSOky2RnAQDtFSuVhbh2fP1s4PwRvTQ-DDw2lixvvA7T",
@@ -36,7 +32,7 @@
             .hash = "temp-0.3.0-Ogl1FSSBAAB2WXv3QbTYO3NYfVFoYTBkZsVK3MYvbxFE",
         },
     },
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.14.1",
 
     .paths = .{
         "LICENSE",

@@ -862,9 +862,7 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
     while (iter.next()) |import| {
         if (util.isBuiltinType(import.*)) continue;
 
-        if (std.mem.startsWith(u8, import.*, "Vector")) {
-            try w.printLine("const {0s} = @import(\"vector\").{0s};", .{import.*});
-        } else if (std.mem.eql(u8, import.*, "Variant")) {
+        if (std.mem.eql(u8, import.*, "Variant")) {
             try w.printLine("const Variant = @import(\"{0s}/builtin/variant.zig\").Variant;", .{root});
         } else if (ctx.builtins.contains(import.*)) {
             try w.printLine("const {1s} = @import(\"{0s}/builtin.zig\").{1s};", .{ root, import.* });

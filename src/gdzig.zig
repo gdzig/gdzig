@@ -45,14 +45,6 @@ pub const support = @import("support.zig");
 
 pub var interface: Interface = undefined;
 
-const vector = @import("vector");
-pub const Vector2 = vector.Vector2;
-pub const Vector2i = vector.Vector2i;
-pub const Vector3 = vector.Vector3;
-pub const Vector3i = vector.Vector3i;
-pub const Vector4 = vector.Vector4;
-pub const Vector4i = vector.Vector4i;
-
 pub var dummy_callbacks = c.GDExtensionInstanceBindingCallbacks{ .create_callback = instanceBindingCreateCallback, .free_callback = instanceBindingFreeCallback, .reference_callback = instanceBindingReferenceCallback };
 pub fn instanceBindingCreateCallback(_: ?*anyopaque, _: ?*anyopaque) callconv(.C) ?*anyopaque {
     return null;

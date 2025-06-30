@@ -26,7 +26,6 @@ pub fn build(b: *Build) !void {
     // Targets
     const case = buildCase(b);
     const mvzr = buildMvzr(b);
-    const vector_z = buildVectorZ(b, opt);
     const zimdjson = buildZimdjson(b);
     const bbcodez = buildBbcodez(b);
     const temp = buildTemp(b);
@@ -50,7 +49,6 @@ pub fn build(b: *Build) !void {
     bindgen.mod.addImport("temp", temp.mod);
 
     gdzig.mod.addImport("gdextension", gdextension.mod);
-    gdzig.mod.addImport("vector", vector_z.mod);
 
     // Steps
     b.step("bindgen", "Build the bindgen executable").dependOn(&bindgen.install.step);
@@ -93,17 +91,6 @@ fn buildCase(
 ) GdzDependency {
     const dep = b.dependency("case", .{});
     const mod = dep.module("case");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: vector_z
-fn buildVectorZ(
-    b: *Build,
-    opt: Options,
-) GdzDependency {
-    const dep = b.dependency("vector_z", .{ .precision = opt.precision });
-    const mod = dep.module("vector_z");
 
     return .{ .dep = dep, .mod = mod };
 }

@@ -227,14 +227,6 @@ const mem = std.mem;
 
 const precision = @import("build_options").precision;
 
-const vector = @import("vector");
-const Vector2 = vector.Vector2;
-const Vector2i = vector.Vector2i;
-const Vector3 = vector.Vector3;
-const Vector3i = vector.Vector3i;
-const Vector4 = vector.Vector4;
-const Vector4i = vector.Vector4i;
-
 const godot = @import("../gdzig.zig");
 const AABB = godot.builtin.AABB;
 const Array = godot.builtin.Array;
@@ -267,6 +259,12 @@ const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const Transform2D = godot.builtin.Transform2D;
 const Transform3D = godot.builtin.Transform3D;
+const Vector2 = godot.builtin.Vector2;
+const Vector2i = godot.builtin.Vector2i;
+const Vector3 = godot.builtin.Vector3;
+const Vector3i = godot.builtin.Vector3i;
+const Vector4 = godot.builtin.Vector4;
+const Vector4i = godot.builtin.Vector4i;
 
 const tests = struct {
     const Tag = Variant.Tag;

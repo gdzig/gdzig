@@ -1,14 +1,5 @@
 //! Pure/stateless helper functions
 
-const native_type_map: std.StaticStringMap(void) = .initComptime(.{
-    .{"Vector2"},
-    .{"Vector2i"},
-    .{"Vector3"},
-    .{"Vector3i"},
-    .{"Vector4"},
-    .{"Vector4i"},
-});
-
 const builtin_type_map = std.StaticStringMap(void).initComptime(.{
     .{"void"},
     .{"i8"},
@@ -86,8 +77,7 @@ pub fn shouldSkipClass(class_name: []const u8) bool {
     return std.mem.eql(u8, class_name, "bool") or
         std.mem.eql(u8, class_name, "Nil") or
         std.mem.eql(u8, class_name, "int") or
-        std.mem.eql(u8, class_name, "float") or
-        native_type_map.has(class_name);
+        std.mem.eql(u8, class_name, "float");
 }
 
 const std = @import("std");

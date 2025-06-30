@@ -8,14 +8,14 @@ pub fn _enterTree(self: *Self) void {
 
     var normal_btn = Button.init();
     self.base.addChild(.upcast(normal_btn), .{});
-    normal_btn.setPosition(Vector2.new(100, 20), .{});
-    normal_btn.setSize(Vector2.new(100, 50), .{});
+    normal_btn.setPosition(Vector2.initXY(100, 20), .{});
+    normal_btn.setSize(Vector2.initXY(100, 50), .{});
     normal_btn.setText(.fromLatin1("Press Me"));
 
     var toggle_btn = CheckBox.init();
     self.base.addChild(.upcast(toggle_btn), .{});
-    toggle_btn.setPosition(.new(320, 20), .{});
-    toggle_btn.setSize(.new(100, 50), .{});
+    toggle_btn.setPosition(.initXY(320, 20), .{});
+    toggle_btn.setSize(.initXY(100, 50), .{});
     toggle_btn.setText(.fromLatin1("Toggle Me"));
 
     godot.connect(toggle_btn, "toggled", self, "onToggled");
@@ -26,8 +26,8 @@ pub fn _enterTree(self: *Self) void {
     defer _ = texture.unreference();
     self.sprite = Sprite2D.init();
     self.sprite.setTexture(Texture2D.downcast(texture) catch unreachable);
-    self.sprite.setPosition(.new(400, 300));
-    self.sprite.setScale(.new(0.6, 0.6));
+    self.sprite.setPosition(.initXY(400, 300));
+    self.sprite.setScale(.initXY(0.6, 0.6));
     self.base.addChild(.upcast(self.sprite), .{});
 }
 
@@ -56,4 +56,4 @@ const ResourceLoader = godot.class.ResourceLoader;
 const Sprite2D = godot.class.Sprite2D;
 const String = godot.builtin.String;
 const Texture2D = godot.class.Texture2D;
-const Vector2 = godot.Vector2;
+const Vector2 = godot.builtin.Vector2;
