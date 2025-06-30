@@ -1,3 +1,5 @@
+const GodotApi = @This();
+
 header: Header,
 builtin_class_sizes: []BuiltinSize,
 builtin_class_member_offsets: []BuiltinMemberOffset,
@@ -303,4 +305,16 @@ pub fn findParent(self: @This(), class: Class) ?Class {
     return self.findClass(class.inherits);
 }
 
+pub fn parseFromReader(arena: *ArenaAllocator, reader: AnyReader) !Parsed(GodotApi) {
+    var parser: Parser = .init;
+    var document = try parser.parseFromReader(arena.allocator(), reader);
+    return try document.as(GodotApi, arena.allocator(), .{});
+}
+
+const Parsed = std.json.Parsed;
+const AnyReader = std.io.AnyReader;
+const ArenaAllocator = std.heap.ArenaAllocator;
+const Parser = zimdjson.ondemand.FullParser(.default);
+
 const std = @import("std");
+const zimdjson = @import("zimdjson");

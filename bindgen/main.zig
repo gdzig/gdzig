@@ -18,15 +18,13 @@ pub fn main() !void {
 
     // Parse the extension_api.json
     const parser_start = std.time.nanoTimestamp();
-    var parser = zimdjson.ondemand.FullParser(.default).init;
-    defer parser.deinit(allocator);
-    var document = try parser.parseFromReader(allocator, config.extension_api.reader().any());
-    const godot_api = try document.asLeaky(GodotApi, allocator, .{});
+    const godot_api = try GodotApi.parseFromReader(&arena, config.extension_api.reader().any());
+    defer godot_api.deinit();
     const parser_time = std.time.nanoTimestamp() - parser_start;
 
     // Build the codegen context
     const context_start = std.time.nanoTimestamp();
-    var ctx = try Context.build(&arena, godot_api, config);
+    var ctx = try Context.build(&arena, godot_api.value, config);
     const context_time = std.time.nanoTimestamp() - context_start;
 
     // Generate the code
@@ -59,8 +57,6 @@ pub fn main() !void {
 }
 
 const std = @import("std");
-
-const zimdjson = @import("zimdjson");
 
 const codegen = @import("codegen.zig");
 const Config = @import("Config.zig");
