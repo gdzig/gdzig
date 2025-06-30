@@ -979,10 +979,6 @@ fn generateCore(ctx: *Context) !void {
     try buf.flush();
 }
 
-pub const ProcType = enum {
-    ClassMethod,
-};
-
 const std = @import("std");
 const bufferedWriter = std.io.bufferedWriter;
 
