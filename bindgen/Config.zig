@@ -67,5 +67,20 @@ pub fn deinit(self: *Config) void {
     self.output.close();
 }
 
+pub fn testConfig(output: Dir) !Config {
+    var cwd = std.fs.cwd();
+
+    return Config{
+        .arch = .float,
+        .extension_api = try cwd.openFile("vendor/extension_api.json", .{}),
+        .gdextension_interface = try cwd.openFile("vendor/gdextension_interface.h", .{}),
+        .output = output,
+        .precision = .@"32",
+        .verbosity = .quiet,
+    };
+}
+
+const Dir = std.fs.Dir;
+
 const std = @import("std");
 const fs = std.fs;
