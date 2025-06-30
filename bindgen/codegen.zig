@@ -664,40 +664,45 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
             try w.writeLine("var result: godot.Variant = .nil;");
         } else {
             try w.writeAll("var result: ");
-            try writeTypeAtReturn(w, &function.return_type);
-            try w.writeLine(" = undefined;");
+            if (function.return_type == .class) {
+                try w.writeLine("?*anyopaque = null;");
+            } else {
+                try writeTypeAtReturn(w, &function.return_type);
+                try w.writeLine(" = undefined;");
+            }
         }
     }
 }
 
 fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
-    // Return the value
-    if (function.return_type != .void) {
-        // Fixed arity functions
-        if (!function.is_vararg) {
+    switch (function.return_type) {
+        // Class functions need to cast an object pointer
+        .class => {
+            try w.writeLine(
+                \\return if (result) |ptr| @bitCast(Object { .godot_object = ptr }) else null;
+            );
+        },
+
+        // Variant return types can always be returned directly, even in a vararg function.
+        .variant => {
             try w.writeLine(
                 \\return result;
             );
-        }
+        },
 
-        // Variadic functions that return Variant
-        if (function.is_vararg and function.return_type == .variant) {
-            try w.writeLine(
-                \\return result;
-            );
-        }
+        // Void does nothing.
+        .void => {},
 
-        // Variadic functions that return other values
-        if (function.is_vararg and function.return_type != .variant) {
+        // Vararg functions cast to the return type, fixed arity return directly.
+        else => if (function.is_vararg) {
             try w.writeAll("return result.as(");
             try writeTypeAtReturn(w, &function.return_type);
             try w.writeLine(");");
-        }
-    }
-
-    // Return for variable argument funtions
-    if (function.is_vararg and function.return_type != .void) {
-        // @panic("todo");
+        } else {
+            try w.writeLine(
+                \\return result;
+            );
+        },
     }
 
     // End function
