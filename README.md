@@ -44,7 +44,7 @@ pub fn _enter_tree(self: *Self) void {
 
     const resource_loader = ResourceLoader.getSingleton();
     const res_name = String.fromLatin1("res://textures/logo.png");
-    const texture = resource_loader.load(res_name, "", ResourceLoader.CACHE_MODE_REUSE);
+    const texture = resource_loader.load(res_name, "", ResourceLoader.CACHE_MODE_REUSE).?;
     if (texture) |tex| {
         defer _ = godot.unreference(tex);
         self.sprite = Sprite2D.init();

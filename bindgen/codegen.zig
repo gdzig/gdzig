@@ -776,8 +776,8 @@ fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .variant => try w.writeAll("Variant"),
         .@"union" => @panic("cannot format a union types in a struct field position"),
+        .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
     }
@@ -786,6 +786,7 @@ fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
 fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
+        .class => |name| try w.print("?{0s}", .{name}),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
@@ -793,8 +794,8 @@ fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .variant => try w.writeAll("Variant"),
         .@"union" => @panic("cannot format a union type in a return position"),
+        .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
     }
@@ -812,8 +813,8 @@ fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .variant => try w.writeAll("Variant"),
         .@"union" => @panic("cannot format a union type in a function parameter position"),
+        .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
     }
@@ -834,8 +835,8 @@ fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
-        .variant => try w.writeAll("Variant"),
         .@"union" => @panic("cannot format a union type in a function parameter position"),
+        .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
     }

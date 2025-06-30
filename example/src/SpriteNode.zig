@@ -28,8 +28,8 @@ pub fn _ready(self: *Self) void {
     self.rng = prng.random();
     self.sprites = std.ArrayList(Sprite).init(godot.general_allocator);
 
-    const tex = ResourceLoader.load(.fromLatin1("res://textures/logo.png"), .{});
-    defer _ = godot.unreference(tex);
+    const tex = ResourceLoader.load(.fromLatin1("res://textures/logo.png"), .{}).?;
+    defer _ = tex.unreference();
 
     const sz = self.base.getParentAreaSize();
 

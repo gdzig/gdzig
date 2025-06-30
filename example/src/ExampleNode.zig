@@ -33,7 +33,7 @@ pub fn deinit(self: *Self) void {
 pub fn _process(self: *Self, delta: f64) void {
     _ = delta;
 
-    const window = self.base.getTree().getRoot();
+    const window = self.base.getTree().?.getRoot().?;
     const sz = window.getSize();
 
     const label_size = self.fps_counter.getSize();
@@ -85,7 +85,7 @@ pub fn _enterTree(self: *Self) void {
 
     if (Engine.isEditorHint()) return;
 
-    const window_size = self.base.getTree().getRoot().getSize();
+    const window_size = self.base.getTree().?.getRoot().?.getSize();
     var sp = HSplitContainer.init();
     sp.setHSizeFlags(.size_expand_fill);
     sp.setVSizeFlags(.size_expand_fill);
@@ -96,7 +96,7 @@ pub fn _enterTree(self: *Self) void {
         const name = String.fromLatin1(Examples[i].name);
         _ = itemList.addItem(name, .{});
     }
-    var timer = self.base.getTree().createTimer(1.0, .{});
+    var timer = self.base.getTree().?.createTimer(1.0, .{}).?;
     defer _ = timer.unreference();
 
     godot.connect(timer, "timeout", self, "onTimeout");
@@ -119,7 +119,7 @@ pub fn _exitTree(self: *Self) void {
 pub fn _notification(self: *Self, what: i32) void {
     if (what == Node.NOTIFICATION_WM_CLOSE_REQUEST) {
         if (!Engine.isEditorHint()) {
-            self.base.getTree().quit(.{});
+            self.base.getTree().?.quit(.{});
         }
     }
 }

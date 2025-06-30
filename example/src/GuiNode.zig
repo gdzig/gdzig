@@ -22,8 +22,8 @@ pub fn _enterTree(self: *Self) void {
     godot.connect(normal_btn, "pressed", self, "onPressed");
 
     const res_name = String.fromLatin1("res://textures/logo.png");
-    const texture = ResourceLoader.load(res_name, .{});
-    defer _ = godot.unreference(texture);
+    const texture = ResourceLoader.load(res_name, .{}).?;
+    defer _ = texture.unreference();
     self.sprite = Sprite2D.init();
     self.sprite.setTexture(Texture2D.cast(texture).?);
     self.sprite.setPosition(.new(400, 300));
