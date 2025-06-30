@@ -151,14 +151,14 @@ pub const DocumentContext = struct {
         return true;
     }
 
-    pub fn writeCodeBlockInner(self: DocumentContext, node: Node) anyerror!bool {
+    pub fn writeCodeblockInner(self: DocumentContext, node: Node) anyerror!bool {
         try bbcodez.fmt.md.writeAllChildrenText(node, self.write_ctx.?);
         return true;
     }
 
     pub fn writeCodeblock(self: DocumentContext, node: Node) anyerror!bool {
         try self.writer.writeAll("```");
-        _ = try self.writeCodeBlockInner(node);
+        _ = try self.writeCodeblockInner(node);
         try self.writer.writeAll("```");
         return true;
     }
@@ -167,8 +167,9 @@ pub const DocumentContext = struct {
         var it = node.iterator(.{ .type = .element });
         while (it.next()) |child| {
             const lang = try child.getName();
-            try self.writer.print("\n```{s}", .{lang});
-            _ = try self.writeCodeBlockInner(child);
+            try self.writer.print("\n## {s}\n", .{lang});
+            try self.writer.writeAll("\n```");
+            _ = try self.writeCodeblockInner(child);
             try self.writer.writeAll("```");
         }
         return true;
