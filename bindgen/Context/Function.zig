@@ -10,6 +10,9 @@ base: ?[]const u8 = null,
 index: ?usize = null,
 hash: ?u64 = null,
 
+// When the function is an operator, this is the name of the operator.
+operator_name: ?[]const u8 = null,
+
 parameters: StringArrayHashMap(Parameter) = .empty,
 return_type: Type = .void,
 
@@ -26,6 +29,105 @@ self: union(enum) {
     mutable: []const u8,
 } = .static,
 is_vararg: bool = false,
+
+/// This maps the API's operator name to a function name
+const operator_fn_names: StaticStringMap([]const u8) = .initComptime(.{
+    .{ "+", "add" },
+    .{ "&", "band" },
+    .{ "~", "bnot" },
+    .{ "|", "bor" },
+    .{ "/", "div" },
+    .{ "==", "eql" },
+    .{ ">", "gt" },
+    .{ ">=", "gtEql" },
+    .{ "in", "in" },
+    .{ "and", "land" },
+    .{ "<", "lt" },
+    .{ "<=", "ltEql" },
+    .{ "or", "lor" },
+    .{ "%", "mod" },
+    .{ "*", "mul" },
+    .{ "unary-", "negate" },
+    .{ "!=", "notEql" },
+    .{ "not", "not" },
+    .{ "**", "power" },
+    .{ "<<", "shl" },
+    .{ ">>", "shr" },
+    .{ "-", "sub" },
+    .{ "^", "xor" },
+    .{ "xor", "xor" },
+});
+
+/// This maps the API's operator name to the Variant.Operator tag name
+const operator_enum_names = StaticStringMap([]const u8).initComptime(.{
+    .{ "==", "equal" },
+    .{ "!=", "not_equal" },
+    .{ "<", "less" },
+    .{ "<=", "less_equal" },
+    .{ ">", "greater" },
+    .{ ">=", "greater_equal" },
+    .{ "+", "add" },
+    .{ "-", "subtract" },
+    .{ "*", "multiply" },
+    .{ "/", "divide" },
+    .{ "unary-", "negate" },
+    .{ "%", "module" },
+    .{ "**", "power" },
+    .{ "<<", "shift_left" },
+    .{ ">>", "shift_right" },
+    .{ "&", "bit_and" },
+    .{ "|", "bit_or" },
+    .{ "^", "bit_xor" },
+    .{ "~", "bit_negate" },
+    .{ "and", "@\"and\"" },
+    .{ "or", "@\"or\"" },
+    .{ "xor", "xor" },
+    .{ "not", "not" },
+    .{ "in", "in" },
+});
+
+pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: GodotApi.Builtin.Operator, ctx: *const Context) !Function {
+    var self: Function = .{};
+
+    self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
+        .current_class = builtin_name,
+    }) else null;
+    self.name = blk: {
+        var buf: ArrayList(u8) = .empty;
+        errdefer buf.deinit(allocator);
+        try buf.appendSlice(allocator, operator_fn_names.get(api.name).?);
+
+        var stream = std.io.fixedBufferStream(api.right_type);
+        var reader = stream.reader();
+        var writer = buf.writer(allocator);
+
+        try case.to(.pascal, &reader, &writer);
+
+        if (std.mem.endsWith(u8, buf.items, builtin_name)) {
+            buf.shrinkAndFree(allocator, buf.items.len - builtin_name.len);
+        }
+
+        break :blk try buf.toOwnedSlice(allocator);
+    };
+    self.name_api = api.name;
+
+    self.operator_name = operator_enum_names.get(api.name).?;
+
+    const right_type = if (api.right_type.len > 0) try Type.from(allocator, api.right_type, false, ctx) else null;
+    if (right_type) |rhs| {
+        try self.parameters.put(allocator, "rhs", .{
+            .name = "rhs",
+            .type = rhs,
+        });
+    }
+    self.return_type = try Type.from(allocator, api.return_type, false, ctx);
+
+    self.mode = .final;
+    self.self = .{ .constant = builtin_name };
+    self.is_vararg = false;
+
+    return self;
+}
 
 pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, constructor: GodotApi.Builtin.Constructor, ctx: *const Context) !Function {
     var self = Function{};
@@ -308,6 +410,7 @@ pub const Parameter = struct {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const StaticStringMap = std.StaticStringMap;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");

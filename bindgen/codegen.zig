@@ -173,6 +173,12 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
         try w.writeLine("");
     }
 
+    // Operators
+    for (builtin.operators.items) |*operator| {
+        try writeBuiltinOperator(w, builtin.name, operator);
+        try w.writeLine("");
+    }
+
     // Enums
     for (builtin.enums.values()) |*@"enum"| {
         try writeEnum(w, @"enum");
@@ -228,6 +234,38 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
         },
     });
     try writeFunctionFooter(w, method);
+}
+
+fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const Context.Function) !void {
+    try writeFunctionHeader(w, operator);
+
+    // Lookup the method
+    try w.print("const op = godot.support.bindVariantOperator(.{s}, .forType({s}), ", .{ operator.operator_name.?, builtin_name });
+    w.indent += 1;
+    if (operator.parameters.getPtr("rhs")) |rhs| {
+        try w.writeAll(".forType(");
+        try writeTypeAtField(w, &rhs.type);
+        try w.writeAll(")");
+    } else {
+        try w.writeAll("null");
+    }
+    w.indent -= 1;
+    try w.writeLine(");");
+
+    // Call the method
+    try w.writeAll("op(");
+    w.indent += 1;
+    try w.writeAll("@ptrCast(self), ");
+    if (operator.parameters.getPtr("rhs")) |_| {
+        try w.writeAll("@ptrCast(&rhs), ");
+    } else {
+        try w.writeAll("null, ");
+    }
+    try w.writeAll("@ptrCast(&result)");
+    w.indent -= 1;
+    try w.writeLine(");");
+
+    try writeFunctionFooter(w, operator);
 }
 
 fn writeClasses(ctx: *const Context) !void {
@@ -730,7 +768,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     }
 
     // Fixed argument slice variable
-    if (!function.is_vararg) {
+    if (!function.is_vararg and function.operator_name == null) {
         // todo: parameter comptime coercisions
         try w.printLine("var args: [{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
@@ -742,7 +780,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     }
 
     // Variadic argument slice variable
-    if (function.is_vararg) {
+    if (function.is_vararg and function.operator_name == null) {
         try w.printLine("var args: [@\"...\".len + {d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
             try w.printLine("args[{d}] = &Variant.init(&{s});", .{ i, param.name });
@@ -797,7 +835,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
         // Void does nothing.
         .void => {},
 
-        // Vararg functions cast to the return type, fixed arity return directly.
+        // Vararg and operator functions cast to the return type, fixed arity return directly.
         else => if (function.is_vararg) {
             try w.writeAll("return result.as(");
             try writeTypeAtReturn(w, &function.return_type);

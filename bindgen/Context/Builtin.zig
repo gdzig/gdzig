@@ -14,6 +14,7 @@ constructors: ArrayList(Function) = .empty,
 enums: StringArrayHashMap(Enum) = .empty,
 fields: StringArrayHashMap(Field) = .empty,
 methods: StringArrayHashMap(Function) = .empty,
+operators: ArrayList(Function) = .empty,
 
 imports: Imports = .empty,
 
@@ -57,6 +58,12 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
             if (member_config) |mc| mc.offset else null,
             ctx,
         ));
+    }
+
+    for (api.operators) |operator| {
+        // Skip + unary operator
+        if (std.mem.eql(u8, "unary+", operator.name)) continue;
+        try self.operators.append(allocator, try Function.fromBuiltinOperator(allocator, self.name, operator, ctx));
     }
 
     // Sort fields by offset
@@ -115,6 +122,7 @@ pub fn deinit(self: *Builtin, allocator: Allocator) void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const StaticStringMap = std.StaticStringMap;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");
@@ -125,5 +133,7 @@ const Enum = Context.Enum;
 const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
+const Type = Context.Type;
 const GodotApi = @import("../GodotApi.zig");
 const docs = @import("docs.zig");
+const formatSlicePascal = @import("../case_utils.zig");

@@ -85,6 +85,20 @@ pub inline fn bindVariantTo(comptime @"type": Variant.Tag) VariantTo {
     return bind(null, callback);
 }
 
+pub inline fn bindVariantOperator(comptime op: Variant.Operator, comptime lhs: Variant.Tag, comptime rhs: ?Variant.Tag) VariantOperatorEvaluator {
+    const callback = struct {
+        fn callback() VariantOperatorEvaluator {
+            return godot.interface.variantGetPtrOperatorEvaluator(
+                @intFromEnum(op),
+                @intFromEnum(lhs),
+                if (rhs) |tag| @intFromEnum(tag) else null,
+            ).?;
+        }
+    }.callback;
+
+    return bind(null, callback);
+}
+
 inline fn bind(
     comptime name: ?[:0]const u8,
     comptime callback: anytype,
@@ -122,3 +136,4 @@ const Destructor = Child(c.GDExtensionPtrDestructor);
 const Function = Child(c.GDExtensionPtrUtilityFunction);
 const VariantFrom = Child(c.GDExtensionVariantFromTypeConstructorFunc);
 const VariantTo = Child(c.GDExtensionTypeFromVariantConstructorFunc);
+const VariantOperatorEvaluator = Child(c.GDExtensionPtrOperatorEvaluator);

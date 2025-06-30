@@ -141,7 +141,9 @@ fn collectBuiltinImports(self: *Context, builtin: GodotApi.Builtin) !void {
         }
     }
     for (builtin.operators) |operator| {
-        try imports.put(self.allocator(), self.correctType(operator.right_type, ""));
+        if (operator.right_type.len > 0) {
+            try imports.put(self.allocator(), self.correctType(operator.right_type, ""));
+        }
         try imports.put(self.allocator(), self.correctType(operator.return_type, ""));
     }
 

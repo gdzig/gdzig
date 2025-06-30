@@ -37,7 +37,7 @@ pub fn _enterTree(self: *Self) void {
     self.color_rect = ColorRect.init();
     self.color_rect.setPosition(.new(400, 400), .{});
     self.color_rect.setSize(.new(100, 100), .{});
-    self.color_rect.setColor(.initRGBA(1, 0, 0, 1));
+    self.color_rect.setColor(Color.initRGBA(1, 0, 0, 1).add(.initRGBA(0, 0.2, 0, 0)));
     self.base.addChild(.upcast(self.color_rect), .{});
 
     godot.connect(signal1_btn, "pressed", self, "emitSignal1");
