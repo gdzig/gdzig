@@ -151,25 +151,26 @@ pub const DocumentContext = struct {
         return true;
     }
 
+    pub fn writeCodeBlockInner(self: DocumentContext, node: Node) anyerror!bool {
+        try bbcodez.fmt.md.writeAllChildrenText(node, self.write_ctx.?);
+        return true;
+    }
+
     pub fn writeCodeblock(self: DocumentContext, node: Node) anyerror!bool {
         try self.writer.writeAll("```");
-        try render(node, self.write_ctx.?);
+        _ = try self.writeCodeBlockInner(node);
         try self.writer.writeAll("```");
-
         return true;
     }
 
     pub fn writeCodeblocks(self: DocumentContext, node: Node) anyerror!bool {
-        var element_list = try node.childrenOfType(self.codegen_ctx.rawAllocator(), .element);
-        defer element_list.deinit(self.codegen_ctx.rawAllocator());
-
-        for (element_list.items) |child| {
+        var it = node.iterator(.{ .type = .element });
+        while (it.next()) |child| {
             const lang = try child.getName();
-            try self.writer.print("```{s}", .{lang});
-            try render(child, self.write_ctx.?);
+            try self.writer.print("\n```{s}", .{lang});
+            _ = try self.writeCodeBlockInner(child);
             try self.writer.writeAll("```");
         }
-
         return true;
     }
 
@@ -323,8 +324,6 @@ test "convertDocsToMarkdown" {
         // std.debug.print("{s}\n", .{output});
     }
 }
-
-const render = bbcodez.fmt.md.render;
 
 const Node = bbcodez.Node;
 const TempDir = temp.TempDir;

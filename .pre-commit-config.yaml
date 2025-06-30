@@ -9,12 +9,6 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
 
-  - repo: https://github.com/batmac/pre-commit-zig
-    rev: v0.3.0
-    hooks:
-      - id: zig-fmt
-      - id: zig-build
-      # - id: zig-build-test
   - repo: local
     hooks:
       - id: zlint
@@ -25,3 +19,10 @@ repos:
           - --fix
         language: system
         types: [zig]
+
+  - repo: https://github.com/batmac/pre-commit-zig
+    rev: v0.3.0
+    hooks:
+      - id: zig-fmt
+      # - id: zig-build
+      # - id: zig-build-test
