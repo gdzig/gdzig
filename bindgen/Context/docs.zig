@@ -62,8 +62,8 @@ pub const DocumentContext = struct {
 
     fn resolveEnum(self: DocumentContext, enum_name: []const u8) ?[]const u8 {
         if (self.current_class) |class_name| {
-            const qualified = std.fmt.allocPrint(self.codegen_ctx.getRawAllocator(), "{s}.{s}", .{ class_name, enum_name }) catch return null;
-            defer self.codegen_ctx.getRawAllocator().free(qualified);
+            const qualified = std.fmt.allocPrint(self.codegen_ctx.rawAllocator(), "{s}.{s}", .{ class_name, enum_name }) catch return null;
+            defer self.codegen_ctx.rawAllocator().free(qualified);
 
             // Check if this qualified name exists in symbol_lookup
             if (self.symbolLookup(qualified)) |link| {
@@ -76,8 +76,8 @@ pub const DocumentContext = struct {
 
     fn resolveMethod(self: *const DocumentContext, method_name: []const u8) ?[]const u8 {
         if (self.current_class) |class_name| {
-            const qualified = std.fmt.allocPrint(self.codegen_ctx.getRawAllocator(), "{s}.{s}", .{ class_name, method_name }) catch return null;
-            defer self.codegen_ctx.getRawAllocator().free(qualified);
+            const qualified = std.fmt.allocPrint(self.codegen_ctx.rawAllocator(), "{s}.{s}", .{ class_name, method_name }) catch return null;
+            defer self.codegen_ctx.rawAllocator().free(qualified);
 
             // Check if this qualified name exists in symbol_lookup
             if (self.symbolLookup(qualified)) |link| {
@@ -160,8 +160,8 @@ pub const DocumentContext = struct {
     }
 
     pub fn writeCodeblocks(self: DocumentContext, node: Node) anyerror!bool {
-        var element_list = try node.childrenOfType(self.codegen_ctx.getRawAllocator(), .element);
-        defer element_list.deinit(self.codegen_ctx.getRawAllocator());
+        var element_list = try node.childrenOfType(self.codegen_ctx.rawAllocator(), .element);
+        defer element_list.deinit(self.codegen_ctx.rawAllocator());
 
         for (element_list.items) |child| {
             const lang = try child.getName();

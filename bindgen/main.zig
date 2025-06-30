@@ -26,7 +26,7 @@ pub fn main() !void {
 
     // Build the codegen context
     const context_start = std.time.nanoTimestamp();
-    var ctx = try Context.build(allocator, godot_api, config);
+    var ctx = try Context.build(&arena, godot_api, config);
     const context_time = std.time.nanoTimestamp() - context_start;
 
     // Generate the code
