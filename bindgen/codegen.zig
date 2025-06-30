@@ -251,11 +251,19 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         , .{class.name});
     }
 
-    // Object pointer
-    try w.writeLine(
-        \\godot_object: *anyopaque,
-        \\
-    );
+    if (class.base) |base| {
+        // Base class
+        try w.printLine(
+            \\base: {0s},
+            \\
+        , .{base});
+    } else {
+        // Object pointer
+        try w.writeLine(
+            \\ptr: *anyopaque,
+            \\
+        );
+    }
 
     // Constants
     for (class.constants.values()) |*constant| {
@@ -272,15 +280,29 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
 
     // Constructor
     if (class.is_instantiable) {
-        try w.printLine(
-            \\/// Allocates an empty {0s}.
-            \\pub fn init() {0s} {{
-            \\    return .{{
-            \\        .godot_object = godot.core.classdbConstructObject(@ptrCast(godot.getClassName({0s}))).?,
-            \\    }};
-            \\}}
-            \\
-        , .{class.name});
+        if (class.base) |_| {
+            try w.printLine(
+                \\/// Allocates an empty {0s}.
+                \\pub fn init() {0s} {{
+                \\    return .{{
+                \\        .base = @bitCast(Object {{
+                \\            .ptr = godot.core.classdbConstructObject(@ptrCast(godot.getClassName({0s}))).?,
+                \\        }}),
+                \\    }};
+                \\}}
+                \\
+            , .{class.name});
+        } else {
+            try w.printLine(
+                \\/// Allocates an empty {0s}.
+                \\pub fn init() {0s} {{
+                \\    return .{{
+                \\        .ptr = godot.core.classdbConstructObject(@ptrCast(godot.getClassName({0s}))).?,
+                \\    }};
+                \\}}
+                \\
+            , .{class.name});
+        }
     }
 
     // Functions
@@ -350,13 +372,23 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     try writeFunctionHeader(w, function);
 
     if (class.is_singleton) {
-        try w.printLine(
-            \\if (instance == null) {{
-            \\    instance = .{{
-            \\        .godot_object = godot.core.globalGetSingleton(@ptrCast(godot.getClassName({0s}))).?,
-            \\    }};
-            \\}}
-        , .{class.name});
+        if (class.base) |_| {
+            try w.printLine(
+                \\if (instance == null) {{
+                \\    instance = @bitCast(Object {{
+                \\        .ptr = godot.core.globalGetSingleton(@ptrCast(godot.getClassName({0s}))).?,
+                \\    }});
+                \\}}
+            , .{class.name});
+        } else {
+            try w.printLine(
+                \\if (instance == null) {{
+                \\    instance = .{{
+                \\        .ptr = godot.core.globalGetSingleton(@ptrCast(godot.getClassName({0s}))).?,
+                \\    }};
+                \\}}
+            , .{class.name});
+        }
     }
 
     if (function.is_vararg) {
@@ -397,12 +429,12 @@ fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function
         try w.writeAll("null");
     } else if (class.getNearestSingleton(ctx)) |singleton| {
         if (class.is_singleton) {
-            try w.writeAll("instance.?.godot_object");
+            try w.writeAll("instance");
         } else {
-            try w.print("{s}.instance.?.godot_object", .{singleton.name});
+            try w.print("{s}.instance", .{singleton.name});
         }
     } else {
-        try w.writeAll("self.godot_object");
+        try w.writeAll("self");
     }
 }
 
@@ -679,7 +711,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
         // Class functions need to cast an object pointer
         .class => {
             try w.writeLine(
-                \\return if (result) |ptr| @bitCast(Object { .godot_object = ptr }) else null;
+                \\return if (result) |ptr| @bitCast(Object { .ptr = ptr }) else null;
             );
         },
 
@@ -966,20 +998,6 @@ fn generateCore(ctx: *Context) !void {
 
         w.indent -= 1;
         try w.writeLine("}");
-    }
-
-    // TODO: move into types and remove
-    for (ctx.all_engine_classes.items) |cls| {
-        const constructor_code =
-            \\pub fn init{0s}() {0s} {{
-            \\    return .{{
-            \\        .godot_object = godot.core.classdbConstructObject(@ptrCast(godot.getClassName({0s}))).?
-            \\    }};
-            \\}}
-        ;
-        if (!ctx.isSingleton(cls)) {
-            try w.printLine(constructor_code, .{cls});
-        }
     }
 
     try buf.flush();

@@ -40,7 +40,8 @@ pub fn getObjectFromInstance(comptime T: type, obj: c.GDExtensionObjectPtr) ?*T 
 
 pub fn unreference(refcounted_obj: anytype) void {
     if (refcounted_obj.unreference()) {
-        core.objectDestroy(refcounted_obj.godot_object);
+        const ptr = meta.asObjectPtr(refcounted_obj);
+        core.objectDestroy(ptr);
     }
 }
 
@@ -100,45 +101,16 @@ pub fn free(ptr: ?*anyopaque) void {
     }
 }
 
-pub fn getGodotObjectPtr(inst: anytype) *const ?*anyopaque {
-    const typeInfo = @typeInfo(@TypeOf(inst));
-    if (typeInfo != .pointer) {
-        @compileError("pointer required");
-    }
-    const T = typeInfo.pointer.child;
-    if (@hasField(T, "godot_object")) {
-        return &inst.godot_object;
-    } else if (@hasField(T, "base")) {
-        return getGodotObjectPtr(&inst.base);
-    }
-}
-
-pub fn cast(comptime T: type, inst: anytype) ?T {
-    if (@typeInfo(@TypeOf(inst)) == .optional) {
-        if (inst) |i| {
-            return .{ .godot_object = i.godot_object };
-        } else {
-            return null;
-        }
-    } else {
-        return .{ .godot_object = inst.godot_object };
-    }
-}
-
-pub fn castSafe(comptime TargetType: type, object: anytype) ?TargetType {
-    const classTag = core.classdbGetClassTag(@ptrCast(getClassName(TargetType)));
-    const casted = core.objectCastTo(object.godot_object, classTag);
-    if (casted) |obj| {
-        return TargetType{ .godot_object = obj };
-    }
-    return null;
-}
-
-pub fn create(comptime T: type) !*T {
+fn create(comptime T: type) !*T {
+    const ptr = core.classdbConstructObject2(@ptrCast(getParentClassName(T))).?;
     const self = try general_allocator.create(T);
-    self.base = .{ .godot_object = core.classdbConstructObject2(@ptrCast(getParentClassName(T))).? };
-    core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
-    core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
+    if (T == core.Object) {
+        self.ptr = ptr;
+    } else {
+        self.base = @bitCast(core.Object{ .ptr = ptr });
+    }
+    core.objectSetInstance(ptr, @ptrCast(getClassName(T)), @ptrCast(self));
+    core.objectSetInstanceBinding(ptr, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
     if (@hasDecl(T, "init")) {
         self.init();
     }
@@ -149,21 +121,13 @@ pub fn create(comptime T: type) !*T {
 fn recreate(comptime T: type, obj: ?*anyopaque) !*T {
     _ = obj;
     @panic("Extension reloading is not currently supported");
-    // const self = try general_allocator.create(T);
-    // self.* = .{};
-    // self.base = .{ .godot_object = obj.? };
-    // core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
-    // core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
-    // if (@hasDecl(T, "init")) {
-    //     self.init();
-    // }
-    // return self;
 }
 
-pub fn destroy(instance: anytype) void {
-    if (@hasField(@TypeOf(instance), "godot_object")) {
-        core.objectFreeInstanceBinding(instance.godot_object, core.p_library);
-        core.objectDestroy(instance.godot_object);
+fn destroy(instance: anytype) void {
+    if (meta.isA(core.Object, @TypeOf(instance))) {
+        const ptr = meta.asObjectPtr(instance);
+        core.objectFreeInstanceBinding(ptr, core.p_library);
+        core.objectDestroy(ptr);
     } else {
         @compileError("only engine object can be destroyed");
     }
@@ -387,7 +351,7 @@ pub fn registerClass(comptime T: type) void {
         pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.C) c.GDExtensionObjectPtr {
             _ = p_userdata;
             const ret = create(T) catch unreachable;
-            return @ptrCast(ret.base.godot_object);
+            return @ptrCast(meta.asObjectPtr(ret));
         }
 
         pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.C) c.GDExtensionClassInstancePtr {
@@ -487,9 +451,9 @@ pub fn MethodBinderT(comptime MethodType: type) type {
                 .@"struct" => {
                     if (@hasDecl(T, "reference") and @hasDecl(T, "unreference")) { //RefCounted
                         const obj = core.refGetObject(p_arg);
-                        return .{ .godot_object = obj };
-                    } else if (@hasField(T, "godot_object")) {
-                        return .{ .godot_object = p_arg };
+                        return @bitCast(core.Object{ .ptr = obj });
+                    } else if (meta.isA(core.Object, T)) {
+                        return @bitCast(core.Object{ .ptr = p_arg.? });
                     } else {
                         return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
                     }
@@ -611,14 +575,14 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 }
 
-pub fn connect(godot_object: anytype, comptime signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
+pub fn connect(obj: anytype, comptime signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
     if (@typeInfo(@TypeOf(instance)) != .pointer) {
         @compileError("pointer type expected for parameter 'instance'");
     }
     // TODO: I think this is a memory leak??
     registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = core.Callable.initObjectMethod(.{ .godot_object = getGodotObjectPtr(instance).*.? }, .fromComptimeLatin1(method_name));
-    _ = godot_object.connect(.fromComptimeLatin1(signal_name), callable, .{});
+    const callable = core.Callable.initObjectMethod(.{ .ptr = getGodotObjectPtr(instance).*.? }, .fromComptimeLatin1(method_name));
+    _ = obj.connect(.fromComptimeLatin1(signal_name), callable, .{});
 }
 
 pub fn init() void {
