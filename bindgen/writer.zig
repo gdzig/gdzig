@@ -25,10 +25,10 @@ pub fn CodeWriter(comptime W: type) type {
 
             for (data) |byte| {
                 // Add indentation at start of line (but not for empty lines)
-                if (self.at_line_start and byte != '\n') {
-                    for (0..self.indent) |_| {
-                        _ = try self.inner.write(" " ** 4);
-                    }
+                if (self.at_line_start) {
+                    if (byte != '\n') for (0..self.indent) |_| {
+                        try self.inner.writeByteNTimes(' ', 4);
+                    };
 
                     _ = switch (self.comment) {
                         .on => try self.inner.write("// "),
@@ -40,7 +40,7 @@ pub fn CodeWriter(comptime W: type) type {
                 }
 
                 // Write the byte
-                _ = try self.inner.write(&[_]u8{byte});
+                _ = try self.inner.writeByte(byte);
                 written += 1;
 
                 // Track if we're at the start of the next line
