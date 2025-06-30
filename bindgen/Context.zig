@@ -16,6 +16,11 @@ pub const Signal = @import("Context/Signal.zig");
 pub const Type = @import("Context/type.zig").Type;
 pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
 
+pub const Symbol = struct {
+    path: []const u8,
+    label: []const u8,
+};
+
 arena: *ArenaAllocator,
 api: GodotApi,
 config: Config,
@@ -41,7 +46,7 @@ enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
 modules: StringArrayHashMap(Module) = .empty,
 
-symbol_lookup: StringHashMap([]const u8) = .empty,
+symbol_lookup: StringHashMap(Symbol) = .empty,
 
 const func_case: case.Case = .camel;
 
@@ -590,12 +595,18 @@ fn symbolTableClasses(self: *Context, classes: anytype) !void {
         if (util.shouldSkipClass(class.name)) continue;
 
         const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.core.{s}", .{class.name});
-        try self.symbol_lookup.putNoClobber(self.allocator(), class.name, doc_name);
+        try self.symbol_lookup.putNoClobber(self.allocator(), class.name, .{
+            .label = class.name,
+            .path = doc_name,
+        });
 
         for (class.enums orelse &.{}) |@"enum"| {
             const enum_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, @"enum".name });
             const enum_doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.{s}.{s}", .{ class.name, enum_name });
-            try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, enum_doc_name);
+            try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, .{
+                .label = enum_name,
+                .path = enum_doc_name,
+            });
         }
 
         for (class.methods orelse &.{}) |method| {
@@ -604,7 +615,10 @@ fn symbolTableClasses(self: *Context, classes: anytype) !void {
                 class.name,
                 case_utils.fmtSliceCaseCamel(method.name),
             });
-            try self.symbol_lookup.putNoClobber(self.allocator(), method_name, method_doc_name);
+            try self.symbol_lookup.putNoClobber(self.allocator(), method_name, .{
+                .label = method_name,
+                .path = method_doc_name,
+            });
         }
     }
 }
@@ -613,14 +627,20 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
     if (self.symbol_lookup.size == 0) {
         logger.debug("Initializing symbol lookup...", .{});
 
-        try self.symbol_lookup.putNoClobber(self.allocator(), "Variant", "Variant");
+        try self.symbol_lookup.putNoClobber(self.allocator(), "Variant", .{
+            .label = "Variant",
+            .path = "Variant",
+        });
 
         try self.symbolTableClasses(self.api.classes);
         try self.symbolTableClasses(self.api.builtin_classes);
 
         for (self.api.global_enums) |@"enum"| {
             const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.global.{s}", .{@"enum".name});
-            try self.symbol_lookup.putNoClobber(self.allocator(), @"enum".name, doc_name);
+            try self.symbol_lookup.putNoClobber(self.allocator(), @"enum".name, .{
+                .label = @"enum".name,
+                .path = doc_name,
+            });
         }
 
         logger.debug("Symbol lookup initialized. Size: {d}", .{self.symbol_lookup.size});

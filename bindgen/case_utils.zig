@@ -7,7 +7,15 @@ fn SliceCase(comptime c: Case) type {
             writer: anytype,
         ) !void {
             var buf: [128]u8 = undefined;
-            const result = try case.bufTo(&buf, c, str);
+
+            const result: []const u8 = blk: {
+                if (c == .camel and case.isSnake(str) and str[0] == '_') {
+                    break :blk try godotMethod(&buf, str);
+                }
+
+                break :blk try case.bufTo(&buf, c, str);
+            };
+
             try writer.writeAll(result);
         }
     };
@@ -32,6 +40,20 @@ pub fn fmtSliceCaseSnake(str: []const u8) Formatter(formatSliceSnake) {
 
 pub fn fmtSliceCaseKebab(str: []const u8) Formatter(formatSliceKebab) {
     return .{ .data = str };
+}
+
+/// Formats a Godot method name.
+///
+/// Will preserve leading underscores on private methods.
+pub fn godotMethod(buf: []u8, input: []const u8) ![]const u8 {
+    // formatting a private method
+    if (case.isSnake(input) and input[0] == '_') {
+        var copy_buf: [128]u8 = undefined;
+        const tmp = try case.bufTo(&copy_buf, .camel, input[1..]);
+        return try std.fmt.bufPrint(buf, "_{s}", .{tmp});
+    }
+
+    return try case.bufTo(buf, .camel, input);
 }
 
 const Case = case.Case;

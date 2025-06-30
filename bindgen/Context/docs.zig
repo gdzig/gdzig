@@ -24,14 +24,14 @@ pub const DocumentContext = struct {
     // TODO: add support for setting a configurable base url
     const link_prefix = "#gdzig.";
 
-    symbol_lookup: StringHashMap([]const u8),
+    symbol_lookup: StringHashMap(Symbol),
     codegen_ctx: *const CodegenContext,
     current_class: ?[]const u8 = null,
     write_ctx: ?*const WriteContext = null,
     // SAFETY: will be initialized in fromWriteContext
     writer: *std.io.AnyWriter = undefined,
 
-    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap([]const u8)) DocumentContext {
+    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol)) DocumentContext {
         return DocumentContext{
             .codegen_ctx = codegen_ctx,
             .current_class = current_class,
@@ -60,41 +60,41 @@ pub const DocumentContext = struct {
         };
     }
 
-    fn resolveEnum(self: DocumentContext, enum_name: []const u8) ?[]const u8 {
+    fn resolveEnum(self: DocumentContext, enum_name: []const u8) ?Symbol {
         if (self.current_class) |class_name| {
             const qualified = std.fmt.allocPrint(self.codegen_ctx.rawAllocator(), "{s}.{s}", .{ class_name, enum_name }) catch return null;
             defer self.codegen_ctx.rawAllocator().free(qualified);
 
             // Check if this qualified name exists in symbol_lookup
-            if (self.symbolLookup(qualified)) |link| {
-                return link;
+            if (self.symbolLookup(qualified)) |symbol| {
+                return symbol;
             }
         }
         // Fall back to global lookup
         return self.symbolLookup(enum_name);
     }
 
-    fn resolveMethod(self: *const DocumentContext, method_name: []const u8) ?[]const u8 {
+    fn resolveMethod(self: *const DocumentContext, method_name: []const u8) ?Symbol {
         if (self.current_class) |class_name| {
             const qualified = std.fmt.allocPrint(self.codegen_ctx.rawAllocator(), "{s}.{s}", .{ class_name, method_name }) catch return null;
             defer self.codegen_ctx.rawAllocator().free(qualified);
 
             // Check if this qualified name exists in symbol_lookup
-            if (self.symbolLookup(qualified)) |link| {
-                return link;
+            if (self.symbolLookup(qualified)) |symbol| {
+                return symbol;
             }
         }
         // Fall back to global lookup
         return self.symbolLookup(method_name);
     }
 
-    pub fn symbolLookup(self: DocumentContext, key: []const u8) ?[]const u8 {
+    pub fn symbolLookup(self: DocumentContext, key: []const u8) ?Symbol {
         return self.symbol_lookup.get(key);
     }
 
-    pub fn writeSymbolLink(self: DocumentContext, symbol_name: []const u8, link: []const u8) anyerror!bool {
+    pub fn writeSymbolLink(self: DocumentContext, symbol: Symbol) anyerror!bool {
         const symbol_link_fmt = std.fmt.comptimePrint("[{{s}}]({s}{{s}})", .{link_prefix});
-        try self.writer.print(symbol_link_fmt, .{ symbol_name, link });
+        try self.writer.print(symbol_link_fmt, .{ symbol.label, symbol.path });
         return true;
     }
 
@@ -113,8 +113,8 @@ pub const DocumentContext = struct {
     pub fn writeEnum(self: DocumentContext, node: Node) anyerror!bool {
         const enum_name = try node.getValue() orelse return false;
 
-        if (self.resolveEnum(enum_name)) |link| {
-            if (try self.writeSymbolLink(enum_name, link)) {
+        if (self.resolveEnum(enum_name)) |symbol| {
+            if (try self.writeSymbolLink(symbol)) {
                 return true;
             }
         }
@@ -140,8 +140,8 @@ pub const DocumentContext = struct {
     pub fn writeMethod(self: DocumentContext, node: Node) anyerror!bool {
         const method_name = try node.getValue() orelse return false;
 
-        if (self.resolveMethod(method_name)) |link| {
-            if (try self.writeSymbolLink(method_name, link)) {
+        if (self.resolveMethod(method_name)) |symbol| {
+            if (try self.writeSymbolLink(symbol)) {
                 return true;
             }
         }
@@ -243,8 +243,8 @@ fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
     const doc_ctx: *DocumentContext = .fromWriteContext(getWriteContext(ctx_ptr));
 
     const node_name = try node.getName();
-    if (doc_ctx.symbolLookup(node_name)) |link| {
-        if (try doc_ctx.writeSymbolLink(node_name, link)) {
+    if (doc_ctx.symbolLookup(node_name)) |sym| {
+        if (try doc_ctx.writeSymbolLink(sym)) {
             return true;
         }
     }
@@ -330,6 +330,7 @@ const Node = bbcodez.Node;
 const TempDir = temp.TempDir;
 const Document = bbcodez.Document;
 const Allocator = std.mem.Allocator;
+const Symbol = CodegenContext.Symbol;
 const Config = @import("../Config.zig");
 const ArrayList = std.ArrayListUnmanaged;
 const GodotApi = @import("../GodotApi.zig");
