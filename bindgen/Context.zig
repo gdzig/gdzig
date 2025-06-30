@@ -615,8 +615,14 @@ fn symbolTableClasses(self: *Context, classes: anytype) !void {
                 class.name,
                 case_utils.fmtSliceCaseCamel(method.name),
             });
+
+            const method_label = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{
+                class.name,
+                case_utils.fmtSliceCaseCamel(method.name),
+            });
+
             try self.symbol_lookup.putNoClobber(self.allocator(), method_name, .{
-                .label = method_name,
+                .label = method_label,
                 .path = method_doc_name,
             });
         }
