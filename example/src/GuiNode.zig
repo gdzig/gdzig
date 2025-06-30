@@ -7,13 +7,13 @@ pub fn _enterTree(self: *Self) void {
     if (Engine.isEditorHint()) return;
 
     var normal_btn = Button.init();
-    self.base.addChild(Node.cast(normal_btn).?, .{});
+    self.base.addChild(.upcast(normal_btn), .{});
     normal_btn.setPosition(Vector2.new(100, 20), .{});
     normal_btn.setSize(Vector2.new(100, 50), .{});
     normal_btn.setText(.fromLatin1("Press Me"));
 
     var toggle_btn = CheckBox.init();
-    self.base.addChild(Node.cast(toggle_btn).?, .{});
+    self.base.addChild(.upcast(toggle_btn), .{});
     toggle_btn.setPosition(.new(320, 20), .{});
     toggle_btn.setSize(.new(100, 50), .{});
     toggle_btn.setText(.fromLatin1("Toggle Me"));
@@ -25,10 +25,10 @@ pub fn _enterTree(self: *Self) void {
     const texture = ResourceLoader.load(res_name, .{}).?;
     defer _ = texture.unreference();
     self.sprite = Sprite2D.init();
-    self.sprite.setTexture(Texture2D.cast(texture).?);
+    self.sprite.setTexture(Texture2D.downcast(texture) catch unreachable);
     self.sprite.setPosition(.new(400, 300));
     self.sprite.setScale(.new(0.6, 0.6));
-    self.base.addChild(Node.cast(self.sprite).?, .{});
+    self.base.addChild(.upcast(self.sprite), .{});
 }
 
 pub fn _exitTree(self: *Self) void {

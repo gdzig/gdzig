@@ -7,6 +7,7 @@ pub const global = @import("bindings/core.zig").global;
 pub const debug = @import("debug.zig");
 pub const heap = @import("heap.zig");
 pub const meta = @import("meta.zig");
+pub const object = @import("object.zig");
 pub const support = @import("support.zig");
 pub const Variant = @import("Variant.zig").Variant;
 
@@ -38,32 +39,6 @@ pub fn getObjectFromInstance(comptime T: type, obj: c.GDExtensionObjectPtr) ?*T 
     }
 }
 
-pub fn unreference(refcounted_obj: anytype) void {
-    if (refcounted_obj.unreference()) {
-        core.objectDestroy(refcounted_obj.godot_object);
-    }
-}
-
-pub fn getClassName(comptime T: type) *core.StringName {
-    const Static = struct {
-        pub fn makeItUniqueForT() i8 {
-            return @sizeOf(T);
-        }
-        pub var class_name: core.StringName = undefined;
-    };
-    return &Static.class_name;
-}
-
-pub fn getParentClassName(comptime T: type) *core.StringName {
-    const Static = struct {
-        pub fn makeItUniqueForT() i8 {
-            return @sizeOf(T);
-        }
-        pub var parent_class_name: core.StringName = undefined;
-    };
-    return &Static.parent_class_name;
-}
-
 pub fn stringNameToAscii(strname: core.StringName, buf: []u8) []const u8 {
     const str = core.String.fromStringName(strname);
     return stringToAscii(str, buf);
@@ -72,11 +47,6 @@ pub fn stringNameToAscii(strname: core.StringName, buf: []u8) []const u8 {
 pub fn stringToAscii(str: core.String, buf: []u8) []const u8 {
     const sz = core.stringToLatin1Chars(@ptrCast(&str), &buf[0], @intCast(buf.len));
     return buf[0..@intCast(sz)];
-}
-
-fn getBaseName(str: [:0]const u8) [:0]const u8 {
-    const pos = std.mem.lastIndexOfScalar(u8, str, '.') orelse return str;
-    return str[pos + 1 ..];
 }
 
 const max_align_t = c_longdouble;
@@ -97,75 +67,6 @@ pub fn alloc(size: u32) ?[*]u8 {
 pub fn free(ptr: ?*anyopaque) void {
     if (ptr) |p| {
         core.memFree(p);
-    }
-}
-
-pub fn getGodotObjectPtr(inst: anytype) *const ?*anyopaque {
-    const typeInfo = @typeInfo(@TypeOf(inst));
-    if (typeInfo != .pointer) {
-        @compileError("pointer required");
-    }
-    const T = typeInfo.pointer.child;
-    if (@hasField(T, "godot_object")) {
-        return &inst.godot_object;
-    } else if (@hasField(T, "base")) {
-        return getGodotObjectPtr(&inst.base);
-    }
-}
-
-pub fn cast(comptime T: type, inst: anytype) ?T {
-    if (@typeInfo(@TypeOf(inst)) == .optional) {
-        if (inst) |i| {
-            return .{ .godot_object = i.godot_object };
-        } else {
-            return null;
-        }
-    } else {
-        return .{ .godot_object = inst.godot_object };
-    }
-}
-
-pub fn castSafe(comptime TargetType: type, object: anytype) ?TargetType {
-    const classTag = core.classdbGetClassTag(@ptrCast(getClassName(TargetType)));
-    const casted = core.objectCastTo(object.godot_object, classTag);
-    if (casted) |obj| {
-        return TargetType{ .godot_object = obj };
-    }
-    return null;
-}
-
-pub fn create(comptime T: type) !*T {
-    const self = try general_allocator.create(T);
-    self.base = .{ .godot_object = core.classdbConstructObject2(@ptrCast(getParentClassName(T))).? };
-    core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
-    core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
-    if (@hasDecl(T, "init")) {
-        self.init();
-    }
-    return self;
-}
-
-//for extension reloading
-fn recreate(comptime T: type, obj: ?*anyopaque) !*T {
-    _ = obj;
-    @panic("Extension reloading is not currently supported");
-    // const self = try general_allocator.create(T);
-    // self.* = .{};
-    // self.base = .{ .godot_object = obj.? };
-    // core.objectSetInstance(self.base.godot_object, @ptrCast(getClassName(T)), @ptrCast(self));
-    // core.objectSetInstanceBinding(self.base.godot_object, core.p_library, @ptrCast(self), @ptrCast(&dummy_callbacks));
-    // if (@hasDecl(T, "init")) {
-    //     self.init();
-    // }
-    // return self;
-}
-
-pub fn destroy(instance: anytype) void {
-    if (@hasField(@TypeOf(instance), "godot_object")) {
-        core.objectFreeInstanceBinding(instance.godot_object, core.p_library);
-        core.objectDestroy(instance.godot_object);
-    } else {
-        @compileError("only engine object can be destroyed");
     }
 }
 
@@ -210,17 +111,14 @@ const ClassUserData = struct {
     class_name: []const u8,
 };
 
-var registered_classes: std.StringHashMap(bool) = undefined;
+var registered_classes: std.StringHashMap(void) = undefined;
 pub fn registerClass(comptime T: type) void {
-    const class_name = comptime getBaseName(@typeName(T));
-    //prevent duplicate registration
-    if (registered_classes.contains(class_name)) return;
-    registered_classes.put(class_name, true) catch unreachable;
+    const class_name = comptime meta.getTypeShortName(T);
 
-    const P = std.meta.FieldType(T, .base);
-    const parent_class_name = comptime getBaseName(@typeName(P));
-    getParentClassName(T).* = core.StringName.fromComptimeLatin1(parent_class_name);
-    getClassName(T).* = core.StringName.fromComptimeLatin1(class_name);
+    if (registered_classes.contains(class_name)) return;
+    registered_classes.put(class_name, {}) catch unreachable;
+
+    meta.getNamePtr(T).* = core.StringName.fromComptimeLatin1(class_name);
 
     const PerClassData = struct {
         pub var class_info = init_blk: {
@@ -256,10 +154,13 @@ pub fn registerClass(comptime T: type) void {
                     .class_name = @typeName(T),
                 })), // Per-class user data, later accessible in instance bindings.
             };
+
             if (ClassInfo.version >= 3) {
                 info.is_runtime = 0;
             }
+
             const t = @TypeOf(info.free_property_list_func);
+
             if (t == c.GDExtensionClassFreePropertyList) {
                 info.free_property_list_func = freePropertyListBind;
             } else if (t == c.GDExtensionClassFreePropertyList2) {
@@ -267,6 +168,7 @@ pub fn registerClass(comptime T: type) void {
             } else {
                 @compileError(".free_property_list_func is an unknown type.");
             }
+
             break :init_blk info;
         };
 
@@ -386,13 +288,13 @@ pub fn registerClass(comptime T: type) void {
 
         pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.C) c.GDExtensionObjectPtr {
             _ = p_userdata;
-            const ret = create(T) catch unreachable;
-            return @ptrCast(ret.base.godot_object);
+            const ret = object.create(T) catch unreachable;
+            return @ptrCast(meta.asObjectPtr(ret));
         }
 
         pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.C) c.GDExtensionClassInstancePtr {
             _ = p_class_userdata;
-            const ret = recreate(T, p_object) catch unreachable;
+            const ret = object.recreate(T, p_object) catch unreachable;
             return @ptrCast(ret);
         }
 
@@ -426,7 +328,7 @@ pub fn registerClass(comptime T: type) void {
     else
         @compileError("Godot 4.2 or higher is required.");
 
-    classdbRegisterExtensionClass(@ptrCast(core.p_library), @ptrCast(getClassName(T)), @ptrCast(getParentClassName(T)), @ptrCast(&PerClassData.class_info));
+    classdbRegisterExtensionClass(@ptrCast(core.p_library), @ptrCast(meta.getNamePtr(T)), @ptrCast(meta.getNamePtr(meta.BaseOf(T))), @ptrCast(&PerClassData.class_info));
 
     if (@hasDecl(T, "_bind_methods")) {
         T._bindMethods();
@@ -472,31 +374,14 @@ pub fn MethodBinderT(comptime MethodType: type) type {
         }
 
         fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
-            switch (@typeInfo(T)) {
-                // .pointer => |pointer| {
-                //     const ObjectType = pointer.child;
-                //     const ObjectTypeName = comptime getBaseName(@typeName(ObjectType));
-                //     const callbacks = @field(ObjectType, "callbacks_" ++ ObjectTypeName);
-                //     if (@hasDecl(ObjectType, "reference") and @hasDecl(ObjectType, "unreference")) { //RefCounted
-                //         const obj = core.refGetObject(p_arg);
-                //         return @ptrCast(@alignCast(core.objectGetInstanceBinding(obj, core.p_library, @ptrCast(&callbacks))));
-                //     } else { //normal Object*
-                //         return @ptrCast(@alignCast(core.objectGetInstanceBinding(p_arg, core.p_library, @ptrCast(&callbacks))));
-                //     }
-                // },
-                .@"struct" => {
-                    if (@hasDecl(T, "reference") and @hasDecl(T, "unreference")) { //RefCounted
-                        const obj = core.refGetObject(p_arg);
-                        return .{ .godot_object = obj };
-                    } else if (@hasField(T, "godot_object")) {
-                        return .{ .godot_object = p_arg };
-                    } else {
-                        return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
-                    }
-                },
-                else => {
-                    return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
-                },
+            // TODO: I think this does not increment refcount on user-defined RefCounted types
+            if (comptime meta.isRefCounted(T) and meta.isWrappedPointer(T)) {
+                const obj = core.refGetObject(p_arg);
+                return @bitCast(core.Object{ .ptr = obj.? });
+            } else if (comptime meta.isObject(T) and meta.isWrappedPointer(T)) {
+                return @bitCast(core.Object{ .ptr = @constCast(p_arg.?) });
+            } else {
+                return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
             }
         }
 
@@ -524,15 +409,15 @@ pub fn MethodBinderT(comptime MethodType: type) type {
     };
 }
 
-var registered_methods: std.StringHashMap(bool) = undefined;
+var registered_methods: std.StringHashMap(void) = undefined;
 pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     //prevent duplicate registration
-    const fullname = std.mem.concat(general_allocator, u8, &[_][]const u8{ getBaseName(@typeName(T)), "::", name }) catch unreachable;
+    const fullname = std.mem.concat(general_allocator, u8, &[_][]const u8{ meta.getTypeShortName(T), "::", name }) catch unreachable;
     if (registered_methods.contains(fullname)) {
         general_allocator.free(fullname);
         return;
     }
-    registered_methods.put(fullname, true) catch unreachable;
+    registered_methods.put(fullname, {}) catch unreachable;
 
     const p_method = @field(T, name);
     const MethodBinder = MethodBinderT(@TypeOf(p_method));
@@ -552,7 +437,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
         MethodBinder.arg_properties[i] = c.GDExtensionPropertyInfo{
             .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ArgsTuple[i].type)),
             .name = @ptrCast(@constCast(&core.StringName.init())),
-            .class_name = getClassName(MethodBinder.ArgsTuple[i].type),
+            .class_name = meta.getNamePtr(MethodBinder.ArgsTuple[i].type),
             .hint = @intFromEnum(global.PropertyHint.property_hint_none),
             .hint_string = @ptrCast(@constCast(&core.String.init())),
             .usage = @bitCast(global.PropertyUsageFlags.property_usage_none),
@@ -577,18 +462,18 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
         .default_arguments = null,
     };
 
-    core.classdbRegisterExtensionClassMethod(core.p_library, getClassName(T), &MethodBinder.method_info);
+    core.classdbRegisterExtensionClassMethod(core.p_library, meta.getNamePtr(T), &MethodBinder.method_info);
 }
 
-var registered_signals: std.StringHashMap(bool) = undefined;
+var registered_signals: std.StringHashMap(void) = undefined;
 pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, arguments: []const PropertyInfo) void {
     //prevent duplicate registration
-    const fullname = std.mem.concat(general_allocator, u8, &[_][]const u8{ getBaseName(@typeName(T)), "::", signal_name }) catch unreachable;
+    const fullname = std.mem.concat(general_allocator, u8, &[_][]const u8{ meta.getTypeShortName(T), "::", signal_name }) catch unreachable;
     if (registered_signals.contains(fullname)) {
         general_allocator.free(fullname);
         return;
     }
-    registered_signals.put(fullname, true) catch unreachable;
+    registered_signals.put(fullname, {}) catch unreachable;
 
     var propertyies: [32]c.GDExtensionPropertyInfo = undefined;
     if (arguments.len > 32) {
@@ -605,26 +490,26 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 
     if (arguments.len > 0) {
-        core.classdbRegisterExtensionClassSignal(core.p_library, getClassName(T), &core.StringName.fromLatin1(signal_name), &propertyies[0], @intCast(arguments.len));
+        core.classdbRegisterExtensionClassSignal(core.p_library, meta.getNamePtr(T), &core.StringName.fromLatin1(signal_name), &propertyies[0], @intCast(arguments.len));
     } else {
-        core.classdbRegisterExtensionClassSignal(core.p_library, getClassName(T), &core.StringName.fromLatin1(signal_name), null, 0);
+        core.classdbRegisterExtensionClassSignal(core.p_library, meta.getNamePtr(T), &core.StringName.fromLatin1(signal_name), null, 0);
     }
 }
 
-pub fn connect(godot_object: anytype, comptime signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
+pub fn connect(obj: anytype, comptime signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
     if (@typeInfo(@TypeOf(instance)) != .pointer) {
         @compileError("pointer type expected for parameter 'instance'");
     }
     // TODO: I think this is a memory leak??
     registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = core.Callable.initObjectMethod(.{ .godot_object = getGodotObjectPtr(instance).*.? }, .fromComptimeLatin1(method_name));
-    _ = godot_object.connect(.fromComptimeLatin1(signal_name), callable, .{});
+    const callable = core.Callable.initObjectMethod(.{ .ptr = meta.asObjectPtr(instance) }, .fromComptimeLatin1(method_name));
+    _ = obj.connect(.fromComptimeLatin1(signal_name), callable, .{});
 }
 
 pub fn init() void {
-    registered_classes = std.StringHashMap(bool).init(general_allocator);
-    registered_methods = std.StringHashMap(bool).init(general_allocator);
-    registered_signals = std.StringHashMap(bool).init(general_allocator);
+    registered_classes = std.StringHashMap(void).init(general_allocator);
+    registered_methods = std.StringHashMap(void).init(general_allocator);
+    registered_signals = std.StringHashMap(void).init(general_allocator);
 }
 
 pub fn deinit() void {

@@ -23,7 +23,7 @@ pub fn init(self: *Self) void {
 
     self.fps_counter = Label.init();
     self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{});
-    self.base.addChild(Node.cast(self.fps_counter).?, .{});
+    self.base.addChild(.upcast(self.fps_counter), .{});
 }
 
 pub fn deinit(self: *Self) void {
@@ -47,7 +47,7 @@ pub fn _process(self: *Self, delta: f64) void {
 
 fn clearScene(self: *Self) void {
     if (self.example_node) |n| {
-        godot.destroy(n);
+        godot.object.destroy(n);
         //n.queue_free(); //ok
     }
 }
@@ -64,9 +64,9 @@ pub fn onItemFocused(self: *Self, idx: i64) void {
     self.clearScene();
     switch (idx) {
         inline 0...Examples.len - 1 => |i| {
-            const n = godot.create(Examples[i].T) catch unreachable;
-            self.example_node = godot.cast(Node, n.base);
-            self.panel.addChild(Node.cast(self.example_node.?).?, .{});
+            const n = godot.object.create(Examples[i].T) catch unreachable;
+            self.example_node = .upcast(n);
+            self.panel.addChild(self.example_node.?, .{});
             self.panel.grabFocus();
         },
         else => {},
@@ -107,9 +107,9 @@ pub fn _enterTree(self: *Self) void {
     self.panel.setHSizeFlags(.{ .size_fill = true });
     self.panel.setVSizeFlags(.{ .size_fill = true });
     self.panel.setFocusMode(.focus_all);
-    sp.addChild(Node.cast(itemList).?, .{});
-    sp.addChild(Node.cast(self.panel).?, .{});
-    self.base.addChild(Node.cast(sp).?, .{});
+    sp.addChild(.upcast(itemList), .{});
+    sp.addChild(.upcast(self.panel), .{});
+    self.base.addChild(.upcast(sp), .{});
 
     const vprt = self.base.getViewport().?;
     const tex = vprt.getTexture().?;

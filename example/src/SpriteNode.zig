@@ -41,10 +41,10 @@ pub fn _ready(self: *Self) void {
             .scale = Vector2.set(s),
             .gd_sprite = Sprite2D.init(),
         };
-        spr.gd_sprite.setTexture(Texture2D.cast(tex).?);
+        spr.gd_sprite.setTexture(Texture2D.downcast(tex) catch unreachable);
         spr.gd_sprite.setRotation(self.randfRange(f32, 0, std.math.pi));
         spr.gd_sprite.setScale(spr.scale);
-        self.base.addChild(Node.cast(spr.gd_sprite).?, .{});
+        self.base.addChild(.upcast(spr.gd_sprite), .{});
         self.sprites.append(spr) catch unreachable;
     }
 }

@@ -1,6 +1,6 @@
 /// Returns the base type of T.
 pub fn BaseOf(comptime T: type) type {
-    if (!@hasField(T, "base")) {
+    if (comptime !@hasField(T, "base")) {
         const message = fmt.comptimePrint("expected a Godot class, found '{0s}'. did you remember to add the 'base' struct field?", @typeName(T));
         @compileError(message);
     }
@@ -19,7 +19,7 @@ pub fn depthOf(comptime T: type) comptime_int {
 
 /// Returns the type hierarchy of T as an array of types, in ascending order, starting with the parent of T.
 pub fn ancestorsOf(comptime T: type) [depthOf(T)]type {
-    if (depthOf(T) == 0) {
+    if (comptime depthOf(T) == 0) {
         return [0]type{};
     }
 
@@ -37,10 +37,18 @@ pub fn selfAndAncestorsOf(comptime T: type) [1 + depthOf(T)]type {
 
 /// Is U a child of T
 pub fn isA(comptime T: type, comptime U: type) bool {
-    @setEvalBranchQuota(10_000);
     const Dereffed = Deref(U);
+
+    if (comptime @typeInfo(Dereffed) != .@"struct") {
+        return false;
+    }
+    if (comptime T == U) {
+        return true;
+    }
+
+    @setEvalBranchQuota(10_000);
     inline for (selfAndAncestorsOf(Dereffed)) |V| {
-        if (T == V) {
+        if (comptime T == V) {
             return true;
         }
     }
@@ -50,7 +58,7 @@ pub fn isA(comptime T: type, comptime U: type) bool {
 /// Is U a child of any of the types in types
 pub fn isAny(comptime types: anytype, comptime U: type) bool {
     inline for (0..types.len) |i| {
-        if (isA(types[i], U)) {
+        if (comptime isA(types[i], U)) {
             return true;
         }
     }
@@ -60,9 +68,9 @@ pub fn isAny(comptime types: anytype, comptime U: type) bool {
 pub fn cast(comptime T: type, value: anytype) ?T {
     const U = if (@TypeOf(value) == type) value else @TypeOf(value);
 
-    if (isA(T, U)) {
+    if (comptime isA(T, U)) {
         return upcast(T, value);
-    } else if (isA(U, T)) {
+    } else if (comptime isA(U, T)) {
         return downcast(T, value);
     } else {
         @compileError("cannot cast from '" ++ @typeName(U) ++ "' to " ++ @typeName(T));
@@ -70,16 +78,17 @@ pub fn cast(comptime T: type, value: anytype) ?T {
 }
 
 pub fn upcast(comptime T: type, value: anytype) T {
-    assertIs(T, @TypeOf(value));
-
     const Dereffed = Deref(@TypeOf(value));
-
-    if (Dereffed == T) {
+    if (comptime Dereffed == T) {
         return value;
     }
+    assertIs(T, Dereffed);
 
-    comptime var instances: Tuple(&selfAndAncestorsOf(Dereffed)) = undefined;
-    instances[0] = value;
+    var instances: Tuple(&selfAndAncestorsOf(Dereffed)) = undefined;
+    instances[0] = switch (@typeInfo(@TypeOf(value))) {
+        .pointer => value.*,
+        else => value,
+    };
     inline for (1..instances.len) |i| {
         instances[i] = @field(instances[i - 1], "base");
         if (@TypeOf(instances[i]) == T) {
@@ -88,13 +97,35 @@ pub fn upcast(comptime T: type, value: anytype) T {
     }
 }
 
-pub fn downcast(comptime T: type, value: anytype) ?T {
-    _ = value;
-    @panic("todo: fieldParentPtr-based casting");
+pub fn downcast(comptime T: type, value: anytype) !T {
+    // Compile time type check (can't cast an Animal to a Motorcycle)
+    assertIs(@TypeOf(value), T);
+
+    // Runtime cast
+    const name = getNamePtr(T);
+    const tag = godot.core.classdbGetClassTag(@ptrCast(name));
+    const result = godot.core.objectCastTo(asObjectPtr(value), tag);
+
+    return if (result) |ptr|
+        return @bitCast(Object{ .ptr = ptr })
+    else
+        return error.InvalidCast;
 }
 
-pub fn isObject(value: anytype) bool {
-    return isA(Object, @TypeOf(value));
+pub fn isObject(comptime T: type) bool {
+    return isA(Object, T);
+}
+
+/// This
+pub fn isWrappedPointer(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"struct" => |s| s.fields.len == 1 and @typeInfo(s.fields[0].type) == .pointer,
+        else => false,
+    };
+}
+
+pub fn isRefCounted(comptime T: type) bool {
+    return isA(RefCounted, T);
 }
 
 pub fn asObject(value: anytype) Object {
@@ -103,6 +134,10 @@ pub fn asObject(value: anytype) Object {
 
 pub fn asObjectPtr(value: anytype) *anyopaque {
     return upcast(Object, value).ptr;
+}
+
+pub fn asRefCounted(value: anytype) RefCounted {
+    return upcast(RefCounted, value);
 }
 
 pub fn isPathLike(comptime T: type) bool {
@@ -126,6 +161,23 @@ pub fn Deref(comptime T: type) type {
     };
 }
 
+pub fn getTypeShortName(comptime T: type) [:0]const u8 {
+    const full = @typeName(T);
+    const pos = std.mem.lastIndexOfScalar(u8, full, '.') orelse return full;
+    return full[pos + 1 ..];
+}
+
+pub fn getNamePtr(comptime T: type) *StringName {
+    const Static = struct {
+        comptime {
+            _ = T;
+        }
+
+        pub var name: StringName = undefined;
+    };
+    return &Static.name;
+}
+
 const std = @import("std");
 const fmt = std.fmt;
 const Tuple = std.meta.Tuple;
@@ -133,222 +185,131 @@ const Tuple = std.meta.Tuple;
 const godot = @import("root.zig");
 const assertIs = godot.debug.assertIs;
 const Object = godot.core.Object;
+const RefCounted = godot.core.RefCounted;
+const StringName = godot.core.StringName;
 
 const tests = struct {
-    const Any = struct {
-        pub const init: @This() = .{};
-    };
-    const Animal = struct {
-        base: Any,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Feline = struct {
-        base: Animal,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Cat = struct {
-        base: Feline,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Lion = struct {
-        base: Feline,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Canine = struct {
-        base: Animal,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Dog = struct {
-        base: Canine,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Wolf = struct {
-        base: Canine,
-        pub const init: @This() = .{ .base = .init };
-    };
-    const Vehicle = struct {
-        base: Any,
-        pub const init: @This() = .{ .base = .init };
-    };
-
     const testing = std.testing;
+    const Node = godot.core.Node;
+    const Node3D = godot.core.Node3D;
+    const Resource = godot.core.Resource;
 
     test "BaseOf" {
-        try testing.expectEqual(Any, BaseOf(Animal));
-        try testing.expectEqual(Animal, BaseOf(Feline));
-        try testing.expectEqual(Feline, BaseOf(Cat));
-        try testing.expectEqual(Feline, BaseOf(Lion));
-        try testing.expectEqual(Animal, BaseOf(Canine));
-        try testing.expectEqual(Canine, BaseOf(Dog));
-        try testing.expectEqual(Canine, BaseOf(Wolf));
-        try testing.expectEqual(Any, BaseOf(Vehicle));
+        try testing.expectEqual(Object, BaseOf(Node));
+        try testing.expectEqual(Node, BaseOf(Node3D));
+
+        try testing.expectEqual(Object, BaseOf(RefCounted));
+        try testing.expectEqual(RefCounted, BaseOf(Resource));
     }
 
     test "depthOf" {
-        try testing.expectEqual(0, depthOf(Any));
-        try testing.expectEqual(1, depthOf(Animal));
-        try testing.expectEqual(1, depthOf(Vehicle));
-        try testing.expectEqual(2, depthOf(Canine));
-        try testing.expectEqual(2, depthOf(Feline));
-        try testing.expectEqual(3, depthOf(Cat));
-        try testing.expectEqual(3, depthOf(Dog));
-        try testing.expectEqual(3, depthOf(Lion));
-        try testing.expectEqual(3, depthOf(Wolf));
+        try testing.expectEqual(0, depthOf(Object));
+        try testing.expectEqual(1, depthOf(Node));
+        try testing.expectEqual(2, depthOf(Node3D));
+        try testing.expectEqual(1, depthOf(RefCounted));
+        try testing.expectEqual(2, depthOf(Resource));
     }
 
     test "ancestorsOf" {
-        comptime {
-            try testing.expectEqualSlices(type, &.{}, &ancestorsOf(Any));
-            try testing.expectEqualSlices(type, &.{Any}, &ancestorsOf(Animal));
-            try testing.expectEqualSlices(type, &.{Any}, &ancestorsOf(Vehicle));
-            try testing.expectEqualSlices(type, &.{ Animal, Any }, &ancestorsOf(Feline));
-            try testing.expectEqualSlices(type, &.{ Animal, Any }, &ancestorsOf(Canine));
-            try testing.expectEqualSlices(type, &.{ Feline, Animal, Any }, &ancestorsOf(Cat));
-            try testing.expectEqualSlices(type, &.{ Feline, Animal, Any }, &ancestorsOf(Lion));
-            try testing.expectEqualSlices(type, &.{ Canine, Animal, Any }, &ancestorsOf(Dog));
-            try testing.expectEqualSlices(type, &.{ Canine, Animal, Any }, &ancestorsOf(Wolf));
-        }
+        comptime try testing.expectEqualSlices(type, &.{}, &ancestorsOf(Object));
+        comptime try testing.expectEqualSlices(type, &.{Object}, &ancestorsOf(Node));
+        comptime try testing.expectEqualSlices(type, &.{Object}, &ancestorsOf(RefCounted));
+        comptime try testing.expectEqualSlices(type, &.{ Node, Object }, &ancestorsOf(Node3D));
+        comptime try testing.expectEqualSlices(type, &.{ RefCounted, Object }, &ancestorsOf(Resource));
     }
 
     test "selfAndAncestorsOf" {
-        comptime {
-            try testing.expectEqualSlices(type, &.{Any}, &selfAndAncestorsOf(Any));
-            try testing.expectEqualSlices(type, &.{ Animal, Any }, &selfAndAncestorsOf(Animal));
-            try testing.expectEqualSlices(type, &.{ Vehicle, Any }, &selfAndAncestorsOf(Vehicle));
-            try testing.expectEqualSlices(type, &.{ Feline, Animal, Any }, &selfAndAncestorsOf(Feline));
-            try testing.expectEqualSlices(type, &.{ Canine, Animal, Any }, &selfAndAncestorsOf(Canine));
-            try testing.expectEqualSlices(type, &.{ Cat, Feline, Animal, Any }, &selfAndAncestorsOf(Cat));
-            try testing.expectEqualSlices(type, &.{ Lion, Feline, Animal, Any }, &selfAndAncestorsOf(Lion));
-            try testing.expectEqualSlices(type, &.{ Dog, Canine, Animal, Any }, &selfAndAncestorsOf(Dog));
-            try testing.expectEqualSlices(type, &.{ Wolf, Canine, Animal, Any }, &selfAndAncestorsOf(Wolf));
-        }
+        comptime try testing.expectEqualSlices(type, &.{Object}, &selfAndAncestorsOf(Object));
+        comptime try testing.expectEqualSlices(type, &.{ Node, Object }, &selfAndAncestorsOf(Node));
+        comptime try testing.expectEqualSlices(type, &.{ RefCounted, Object }, &selfAndAncestorsOf(RefCounted));
+        comptime try testing.expectEqualSlices(type, &.{ Node3D, Node, Object }, &selfAndAncestorsOf(Node3D));
+        comptime try testing.expectEqualSlices(type, &.{ Resource, RefCounted, Object }, &selfAndAncestorsOf(Resource));
     }
 
     test "isA" {
-        {
-            try testing.expect(isA(Any, Any));
-            try testing.expect(isA(Animal, Animal));
-            try testing.expect(isA(Vehicle, Vehicle));
-            try testing.expect(isA(Feline, Feline));
-            try testing.expect(isA(Canine, Canine));
-            try testing.expect(isA(Cat, Cat));
-            try testing.expect(isA(Lion, Lion));
-            try testing.expect(isA(Dog, Dog));
-            try testing.expect(isA(Wolf, Wolf));
+        try testing.expect(comptime isA(Object, Object));
+        try testing.expect(comptime isA(Node, Node));
+        try testing.expect(comptime isA(RefCounted, RefCounted));
+        try testing.expect(comptime isA(Node3D, Node3D));
+        try testing.expect(comptime isA(Resource, Resource));
 
-            try testing.expect(isA(Any, Animal));
-            try testing.expect(isA(Any, Vehicle));
-            try testing.expect(isA(Animal, Feline));
-            try testing.expect(isA(Animal, Canine));
-            try testing.expect(isA(Feline, Cat));
-            try testing.expect(isA(Feline, Lion));
-            try testing.expect(isA(Canine, Dog));
-            try testing.expect(isA(Canine, Wolf));
+        try testing.expect(comptime isA(Object, Node));
+        try testing.expect(comptime isA(Object, RefCounted));
+        try testing.expect(comptime isA(Node, Node3D));
+        try testing.expect(comptime isA(RefCounted, Resource));
 
-            try testing.expect(isA(Any, Animal));
-            try testing.expect(isA(Any, Vehicle));
-            try testing.expect(isA(Any, Feline));
-            try testing.expect(isA(Any, Canine));
-            try testing.expect(isA(Any, Cat));
-            try testing.expect(isA(Any, Lion));
-            try testing.expect(isA(Any, Dog));
-            try testing.expect(isA(Any, Wolf));
+        try testing.expect(comptime isA(Object, Node));
+        try testing.expect(comptime isA(Object, RefCounted));
+        try testing.expect(comptime isA(Object, Node3D));
+        try testing.expect(comptime isA(Object, Resource));
 
-            try testing.expect(!isA(Vehicle, Animal));
-            try testing.expect(!isA(Vehicle, Feline));
-            try testing.expect(!isA(Vehicle, Canine));
-            try testing.expect(!isA(Vehicle, Cat));
-            try testing.expect(!isA(Vehicle, Lion));
-            try testing.expect(!isA(Vehicle, Dog));
-            try testing.expect(!isA(Vehicle, Wolf));
+        try testing.expect(comptime !isA(RefCounted, Node));
+        try testing.expect(comptime !isA(RefCounted, Node3D));
+        try testing.expect(comptime !isA(Node, RefCounted));
+        try testing.expect(comptime !isA(Node, Resource));
+        try testing.expect(comptime !isA(Node3D, RefCounted));
+        try testing.expect(comptime !isA(Node3D, Resource));
 
-            try testing.expect(isA(Any, *Animal));
-            try testing.expect(isA(Any, *const Animal));
+        try testing.expect(comptime isA(Object, *Node));
+        try testing.expect(comptime isA(Object, *const Node));
 
-            try testing.expect(isA(Any, ?Animal));
-            try testing.expect(isA(Any, ?*Animal));
-            try testing.expect(isA(Any, ?*const Animal));
+        try testing.expect(comptime isA(Object, ?Node));
+        try testing.expect(comptime isA(Object, ?*Node));
+        try testing.expect(comptime isA(Object, ?*const Node));
 
-            try testing.expect(isA(Any, *Vehicle));
-            try testing.expect(isA(Any, *const Vehicle));
+        try testing.expect(comptime isA(Object, *RefCounted));
+        try testing.expect(comptime isA(Object, *const RefCounted));
 
-            try testing.expect(isA(Any, ?Vehicle));
-            try testing.expect(isA(Any, ?*Vehicle));
-            try testing.expect(isA(Any, ?*const Vehicle));
+        try testing.expect(comptime isA(Object, ?RefCounted));
+        try testing.expect(comptime isA(Object, ?*RefCounted));
+        try testing.expect(comptime isA(Object, ?*const RefCounted));
 
-            try testing.expect(isA(Animal, *Feline));
-            try testing.expect(isA(Animal, *const Feline));
+        try testing.expect(comptime isA(Node, *Node3D));
+        try testing.expect(comptime isA(Node, *const Node3D));
 
-            try testing.expect(isA(Animal, ?Feline));
-            try testing.expect(isA(Animal, ?*Feline));
-            try testing.expect(isA(Animal, ?*const Feline));
+        try testing.expect(comptime isA(Node, ?Node3D));
+        try testing.expect(comptime isA(Node, ?*Node3D));
+        try testing.expect(comptime isA(Node, ?*const Node3D));
 
-            try testing.expect(isA(Animal, *Canine));
-            try testing.expect(isA(Animal, *const Canine));
+        try testing.expect(comptime isA(RefCounted, *Resource));
+        try testing.expect(comptime isA(RefCounted, *const Resource));
 
-            try testing.expect(isA(Animal, ?Canine));
-            try testing.expect(isA(Animal, ?*Canine));
-            try testing.expect(isA(Animal, ?*const Canine));
-
-            try testing.expect(isA(Feline, *Cat));
-            try testing.expect(isA(Feline, *const Cat));
-
-            try testing.expect(isA(Feline, ?Cat));
-            try testing.expect(isA(Feline, ?*Cat));
-            try testing.expect(isA(Feline, ?*const Cat));
-
-            try testing.expect(isA(Feline, *Lion));
-            try testing.expect(isA(Feline, *const Lion));
-
-            try testing.expect(isA(Feline, ?Lion));
-            try testing.expect(isA(Feline, ?*Lion));
-            try testing.expect(isA(Feline, ?*const Lion));
-
-            try testing.expect(isA(Canine, *Dog));
-            try testing.expect(isA(Canine, *const Dog));
-
-            try testing.expect(isA(Canine, ?Dog));
-            try testing.expect(isA(Canine, ?*Dog));
-            try testing.expect(isA(Canine, ?*const Dog));
-
-            try testing.expect(isA(Canine, *Wolf));
-            try testing.expect(isA(Canine, *const Wolf));
-
-            try testing.expect(isA(Canine, ?Wolf));
-            try testing.expect(isA(Canine, ?*Wolf));
-            try testing.expect(isA(Canine, ?*const Wolf));
-        }
+        try testing.expect(comptime isA(RefCounted, ?Resource));
+        try testing.expect(comptime isA(RefCounted, ?*Resource));
+        try testing.expect(comptime isA(RefCounted, ?*const Resource));
     }
 
     test "isAny" {
-        comptime {
-            try testing.expect(isAny(.{ Animal, Vehicle }, Animal));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Vehicle));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Feline));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Canine));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Cat));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Lion));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Dog));
-            try testing.expect(isAny(.{ Animal, Vehicle }, Wolf));
+        try testing.expect(isAny(.{ Node, RefCounted }, Node));
+        try testing.expect(isAny(.{ Node, RefCounted }, RefCounted));
+        try testing.expect(isAny(.{ Node, RefCounted }, Node3D));
+        try testing.expect(isAny(.{ Node, RefCounted }, Resource));
 
-            try testing.expect(!isAny(.{ Feline, Vehicle }, Wolf));
-        }
+        try testing.expect(!isAny(.{ Node3D, Node }, Resource));
     }
 
     test "upcast" {
-        try testing.expectEqual(Any.init, upcast(Any, Any.init));
-        try testing.expectEqual(Any.init, upcast(Any, Animal.init));
-        try testing.expectEqual(Any.init, upcast(Any, Canine.init));
-        try testing.expectEqual(Any.init, upcast(Any, Wolf.init));
+        const object = Object{ .ptr = @ptrCast(@constCast(&.{})) };
+        const node = Node{ .base = object };
+        const node3D = Node3D{ .base = node };
+        const ref_counted = RefCounted{ .base = object };
+        const resource = Resource{ .base = ref_counted };
 
-        try testing.expectEqual(Animal.init, upcast(Animal, Animal.init));
-        try testing.expectEqual(Animal.init, upcast(Animal, Canine.init));
-        try testing.expectEqual(Animal.init, upcast(Animal, Wolf.init));
+        try testing.expectEqual(object, upcast(Object, object));
+        try testing.expectEqual(object, upcast(Object, node));
+        try testing.expectEqual(object, upcast(Object, node3D));
+        try testing.expectEqual(object, upcast(Object, ref_counted));
+        try testing.expectEqual(object, upcast(Object, resource));
 
-        try testing.expectEqual(Canine.init, upcast(Canine, Canine.init));
-        try testing.expectEqual(Canine.init, upcast(Canine, Wolf.init));
+        try testing.expectEqual(node, upcast(Node, node));
+        try testing.expectEqual(node, upcast(Node, node3D));
 
-        try testing.expectEqual(Wolf.init, upcast(Wolf, Wolf.init));
+        try testing.expectEqual(ref_counted, upcast(RefCounted, ref_counted));
+        try testing.expectEqual(ref_counted, upcast(RefCounted, resource));
+
+        try testing.expectEqual(node3D, upcast(Node3D, node3D));
+
+        try testing.expectEqual(resource, upcast(Resource, resource));
     }
 };
 

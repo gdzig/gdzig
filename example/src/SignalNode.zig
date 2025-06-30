@@ -20,25 +20,25 @@ pub fn _enterTree(self: *Self) void {
     signal1_btn.setPosition(.new(100, 20), .{});
     signal1_btn.setSize(.new(100, 50), .{});
     signal1_btn.setText(.fromLatin1("Signal1"));
-    self.base.addChild(Node.cast(signal1_btn).?, .{});
+    self.base.addChild(.upcast(signal1_btn), .{});
 
     var signal2_btn = Button.init();
     signal2_btn.setPosition(.new(250, 20), .{});
     signal2_btn.setSize(.new(100, 50), .{});
     signal2_btn.setText(.fromLatin1("Signal2"));
-    self.base.addChild(Node.cast(signal2_btn).?, .{});
+    self.base.addChild(.upcast(signal2_btn), .{});
 
     var signal3_btn = Button.init();
     signal3_btn.setPosition(.new(400, 20), .{});
     signal3_btn.setSize(.new(100, 50), .{});
     signal3_btn.setText(.fromLatin1("Signal3"));
-    self.base.addChild(Node.cast(signal3_btn).?, .{});
+    self.base.addChild(.upcast(signal3_btn), .{});
 
     self.color_rect = ColorRect.init();
     self.color_rect.setPosition(.new(400, 400), .{});
     self.color_rect.setSize(.new(100, 100), .{});
     self.color_rect.setColor(.initRGBA(1, 0, 0, 1));
-    self.base.addChild(Node.cast(self.color_rect).?, .{});
+    self.base.addChild(.upcast(self.color_rect), .{});
 
     godot.connect(signal1_btn, "pressed", self, "emitSignal1");
     godot.connect(signal2_btn, "pressed", self, "emitSignal2");

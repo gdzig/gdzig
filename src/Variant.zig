@@ -38,13 +38,13 @@ pub const Variant = extern struct {
             // TODO: GDExtensionInstanceBindingCallbacks?
             const instance: *Object = @ptrCast(@alignCast(godot.coreobjectGetInstanceBinding(ptr, godot.core.p_library, null)));
 
-            if (meta.Child(T) == Object) {
+            if (std.meta.Child(T) == Object) {
                 return instance;
             } else {
-                const class_name = godot.getClassName(meta.Child(T));
+                const class_name = godot.getClassName(std.meta.Child(T));
                 const class_tag = godot.core.classdbGetClassTag(@ptrCast(class_name));
                 // TODO: this can return null if its not the right type; return type should be optional depending on T, right? or return error?
-                const casted = godot.core.objectCastTo(instance.godot_object, class_tag);
+                const casted = godot.core.objectCastTo(meta.asObjectPtr(instance), class_tag);
                 const binding = godot.core.objectGetInstanceBinding(casted, godot.core.p_library, null);
 
                 return @ptrCast(@alignCast(binding));
@@ -224,7 +224,8 @@ pub const Variant = extern struct {
 const std = @import("std");
 const Atomic = std.atomic.Value;
 const mem = std.mem;
-const meta = std.meta;
+
+const meta = @import("meta.zig");
 
 const precision = @import("build_options").precision;
 
