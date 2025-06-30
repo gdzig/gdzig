@@ -887,36 +887,26 @@ fn writeInterface(ctx: *Context) !void {
         \\
     );
 
-    try w.writeLine(
-        \\inline for (&.{
-    );
-    w.indent += 1;
     for (ctx.builtins.values()) |builtin| {
         try w.printLine(
-            \\.{{ builtin.{0s}, "{1s}" }},
+            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(builtin.{0s})), @ptrCast("{1s}"), 1);
         , .{ builtin.name, builtin.name_api });
     }
     for (ctx.classes.values()) |class| {
         try w.printLine(
-            \\.{{ class.{0s}, "{1s}" }},
+            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(class.{0s})), @ptrCast("{1s}"), 1);
         , .{ class.name, class.name_api });
     }
     for (ctx.enums.values()) |@"enum"| {
         try w.printLine(
-            \\.{{ global.{0s}, "{1s}" }},
+            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(global.{0s})), @ptrCast("{1s}"), 1);
         , .{ @"enum".name, @"enum".name_api });
     }
     for (ctx.flags.values()) |flag| {
         try w.printLine(
-            \\.{{ global.{0s}, "{1s}" }},
+            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(global.{0s})), @ptrCast("{1s}"), 1);
         , .{ flag.name, flag.name_api });
     }
-    w.indent -= 1;
-    try w.writeLine(
-        \\}) |pair| {
-        \\  self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(pair[0])), @ptrCast(pair[1]), 1);
-        \\}
-    );
 
     w.indent -= 1;
     try w.writeLine(
