@@ -401,8 +401,10 @@ fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function
         } else {
             try w.print("{s}.instance.?.godot_object", .{singleton.name});
         }
+    } else if (function.self == .constant) {
+        try w.writeAll("@as(Object, @bitCast(self.*)).godot_object");
     } else {
-        try w.writeAll("self.godot_object");
+        try w.writeAll("@as(Object, @bitCast(self)).godot_object");
     }
 }
 
@@ -668,7 +670,9 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
                 try w.writeLine("?*anyopaque = null;");
             } else {
                 try writeTypeAtReturn(w, &function.return_type);
-                try w.writeLine(" = undefined;");
+                try w.writeAll(" = std.mem.zeroes(");
+                try writeTypeAtReturn(w, &function.return_type);
+                try w.writeLine(");");
             }
         }
     }
@@ -679,7 +683,10 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
         // Class functions need to cast an object pointer
         .class => {
             try w.writeLine(
-                \\return if (result) |ptr| @bitCast(Object { .godot_object = ptr }) else null;
+                // 1. Classes are just transparent wrappers around an *anyopaque
+                // 2. Return types for classes are ?T
+                // 3. Ergo, ?T is the same as ?*anyopaque
+                \\return @bitCast(Object { .godot_object = @ptrCast(result) });
             );
         },
 
@@ -712,6 +719,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
 
 fn writeImports(w: *Writer, imports: *const Context.Imports) !void {
     try w.writeLine(
+        \\const std = @import("std");
         \\const gdext = @import("gdextension");
         \\const godot = @import("../root.zig");
     );

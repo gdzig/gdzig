@@ -110,6 +110,13 @@ pub fn _enterTree(self: *Self) void {
     sp.addChild(Node.cast(itemList).?, .{});
     sp.addChild(Node.cast(self.panel).?, .{});
     self.base.addChild(Node.cast(sp).?, .{});
+
+    const vprt = self.base.getViewport().?;
+    const tex = vprt.getTexture().?;
+    const img = tex.getImage().?;
+    std.debug.print("IMG Available {any} \n", .{img});
+    const data = img.getData();
+    std.debug.print("Size {d} \n", .{data.size()});
 }
 
 pub fn _exitTree(self: *Self) void {
