@@ -36,7 +36,7 @@ pub const Variant = extern struct {
             variantTo(@ptrCast(&ptr), @ptrCast(@constCast(&self)));
 
             // TODO: GDExtensionInstanceBindingCallbacks?
-            const instance: *Object = @ptrCast(@alignCast(godot.coreobjectGetInstanceBinding(ptr, godot.core.p_library, null)));
+            const instance: *Object = @ptrCast(@alignCast(godot.core.objectGetInstanceBinding(ptr, godot.core.p_library, null)));
 
             if (meta.Child(T) == Object) {
                 return instance;
