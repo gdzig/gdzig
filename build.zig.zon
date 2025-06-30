@@ -28,8 +28,12 @@
             .hash = "simdjzon-0.0.1-7uNSgGddBQBshResiWQfzBc8Mt2w6WUDlsrF3HDJpWwL",
         },
         .bbcodez = .{
-            .url = "git+https://github.com/doubleword-labs/bbcodez.git#64ea274bedbc0ce6a02839069bef8c008a3dfc58",
-            .hash = "bbcodez-0.0.0-YlrOBucFAQAObiQNN-tw5fNPP_j0ybrI50dZbiQw3038",
+            .url = "git+https://github.com/doubleword-labs/bbcodez.git#97fa74ff956d84a607691028e6d21c3bd22f9abd",
+            .hash = "bbcodez-0.0.0-YlrOBqYMAQCpsVpqoi_Ld1TS5qtCwNrbZD7CjWHN0HHH",
+        },
+        .temp = .{
+            .url = "git+https://github.com/abhinav/temp.zig#382a711f253d54a88f222650e6c03b62411373c6",
+            .hash = "temp-0.3.0-Ogl1FSSBAAB2WXv3QbTYO3NYfVFoYTBkZsVK3MYvbxFE",
         },
     },
     .minimum_zig_version = "0.14.0",

@@ -29,6 +29,7 @@ pub fn build(b: *Build) !void {
     const vector_z = buildVectorZ(b, opt);
     const zimdjson = buildZimdjson(b);
     const bbcodez = buildBbcodez(b);
+    const temp = buildTemp(b);
 
     const headers = installHeaders(b, opt);
 
@@ -46,6 +47,7 @@ pub fn build(b: *Build) !void {
     bindgen.mod.addImport("mvzr", mvzr.mod);
     bindgen.mod.addImport("zimdjson", zimdjson.mod);
     bindgen.mod.addImport("bbcodez", bbcodez.mod);
+    bindgen.mod.addImport("temp", temp.mod);
 
     gdzig.mod.addImport("gdextension", gdextension.mod);
     gdzig.mod.addImport("vector", vector_z.mod);
@@ -132,6 +134,16 @@ fn buildBbcodez(
 ) GdzDependency {
     const dep = b.dependency("bbcodez", .{});
     const mod = dep.module("bbcodez");
+
+    return .{ .dep = dep, .mod = mod };
+}
+
+// Dependency: temp
+fn buildTemp(
+    b: *Build,
+) GdzDependency {
+    const dep = b.dependency("temp", .{});
+    const mod = dep.module("temp");
 
     return .{ .dep = dep, .mod = mod };
 }

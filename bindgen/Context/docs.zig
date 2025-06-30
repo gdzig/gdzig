@@ -186,6 +186,25 @@ pub const DocumentContext = struct {
     }
 };
 
+const self_closing_tags: std.StaticStringMap(void) = .initComptime(.{
+    .{"method"},
+    .{"member"},
+    .{"constant"},
+    .{"enum"},
+    .{"annotation"},
+    // TODO: segfaults for some reason?
+    // .{"param"},
+    .{"bool"},
+    .{"int"},
+    .{"float"},
+    .{"br"},
+});
+
+fn isSelfClosing(user_data: ?*anyopaque, token: Token) bool {
+    const self: *const DocumentContext = @ptrCast(@alignCast(user_data));
+    return self_closing_tags.has(token.name) or self.symbol_lookup.contains(token.name);
+}
+
 pub const Options = struct {
     current_class: ?[]const u8 = null,
 };
@@ -197,6 +216,10 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *cons
         .verbatim_tags = verbatim_tags,
         .tokenizer_options = TokenizerOptions{
             .equals_required_in_parameters = false,
+        },
+        .parser_options = ParserOptions{
+            .is_self_closing_fn = isSelfClosing,
+            .user_data = @constCast(@ptrCast(&doc_ctx)),
         },
     });
     defer doc.deinit();
@@ -248,43 +271,78 @@ const verbatim_tags = &[_][]const u8{
 };
 
 test "convertDocsToMarkdown" {
-    const bbcode =
-        \\Converts one or more arguments of any type to string in the best way possible and prints them to the console.
-        \\The following BBCode tags are supported: [code]b[/code], [code]i[/code], [code]u[/code], [code]s[/code], [code]indent[/code], [code]code[/code], [code]url[/code], [code]center[/code], [code]right[/code], [code]color[/code], [code]bgcolor[/code], [code]fgcolor[/code].
-        \\URL tags only support URLs wrapped by a URL tag, not URLs with a different title.
-        \\When printing to standard output, the supported subset of BBCode is converted to ANSI escape codes for the terminal emulator to display. Support for ANSI escape codes varies across terminal emulators, especially for italic and strikethrough. In standard output, [code]code[/code] is represented with faint text but without any font change. Unsupported tags are left as-is in standard output.
-        \\[codeblocks]
-        \\[gdscript skip-lint]
-        \\print_rich("[color=green][b]Hello world![/b][/color]") # Prints "Hello world!", in green with a bold font.
-        \\[/gdscript]
-        \\[csharp skip-lint]
-        \\GD.PrintRich("[color=green][b]Hello world![/b][/color]"); // Prints "Hello world!", in green with a bold font.
-        \\[/csharp]
-        \\[/codeblocks]
-        \\[b]Note:[/b] Consider using [method push_error] and [method push_warning] to print error and warning messages instead of [method print] or [method print_rich]. This distinguishes them from print messages used for debugging purposes, while also displaying a stack trace when an error or warning is printed.
-        \\[b]Note:[/b] On Windows, only Windows 10 and later correctly displays ANSI escape codes in standard output.
-        \\[b]Note:[/b] Output displayed in the editor supports clickable [code skip-lint][url=address]text[/url][/code] tags. The [code skip-lint][url][/code] tag's [code]address[/code] value is handled by [method OS.shell_open] when clicked.
-    ;
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
 
-    const output = try convertDocsToMarkdown(testing.allocator, bbcode);
-    defer testing.allocator.free(output);
+    var td: TempDir = try .create(arena.allocator(), .{});
+    defer td.deinit();
 
-    std.debug.print("{s}\n", .{output});
+    const bindings_output = try td.open(.{});
+    var config: Config = try .testConfig(bindings_output);
+    defer config.deinit();
+
+    const godot_api = try GodotApi.parseFromReader(&arena, config.extension_api.reader().any());
+    defer godot_api.deinit();
+
+    const ctx: CodegenContext = try .build(&arena, godot_api.value, config);
+
+    {
+        const bbcode =
+            \\Converts one or more arguments of any type to string in the best way possible and prints them to the console.
+            \\The following BBCode tags are supported: [code]b[/code], [code]i[/code], [code]u[/code], [code]s[/code], [code]indent[/code], [code]code[/code], [code]url[/code], [code]center[/code], [code]right[/code], [code]color[/code], [code]bgcolor[/code], [code]fgcolor[/code].
+            \\URL tags only support URLs wrapped by a URL tag, not URLs with a different title.
+            \\When printing to standard output, the supported subset of BBCode is converted to ANSI escape codes for the terminal emulator to display. Support for ANSI escape codes varies across terminal emulators, especially for italic and strikethrough. In standard output, [code]code[/code] is represented with faint text but without any font change. Unsupported tags are left as-is in standard output.
+            \\[codeblocks]
+            \\[gdscript skip-lint]
+            \\print_rich("[color=green][b]Hello world![/b][/color]") # Prints "Hello world!", in green with a bold font.
+            \\[/gdscript]
+            \\[csharp skip-lint]
+            \\GD.PrintRich("[color=green][b]Hello world![/b][/color]"); // Prints "Hello world!", in green with a bold font.
+            \\[/csharp]
+            \\[/codeblocks]
+            \\[b]Note:[/b] Consider using [method push_error] and [method push_warning] to print error and warning messages instead of [method print] or [method print_rich]. This distinguishes them from print messages used for debugging purposes, while also displaying a stack trace when an error or warning is printed.
+            \\[b]Note:[/b] On Windows, only Windows 10 and later correctly displays ANSI escape codes in standard output.
+            \\[b]Note:[/b] Output displayed in the editor supports clickable [code skip-lint][url=address]text[/url][/code] tags. The [code skip-lint][url][/code] tag's [code]address[/code] value is handled by [method OS.shell_open] when clicked.
+        ;
+
+        const output = try convertDocsToMarkdown(testing.allocator, bbcode, &ctx, .{});
+        defer testing.allocator.free(output);
+
+        // std.debug.print("{s}\n", .{output});
+    }
+    {
+        const bbcode =
+            \\Most basic 3D game object, with a [Transform3D] and visibility settings. All other 3D game objects inherit from [Node3D]. Use [Node3D] as a parent node to move, scale, rotate and show/hide children in a 3D project.\nAffine operations (rotate, scale, translate) happen in parent's local coordinate system, unless the [Node3D] object is set as top-level. Affine operations in this coordinate system correspond to direct affine operations on the [Node3D]'s transform. The word local below refers to this coordinate system. The coordinate system that is attached to the [Node3D] object itself is referred to as object-local coordinate system.\n[b]Note:[/b] Unless otherwise specified, all methods that have angle parameters must have angles specified as [i]radians[/i]. To convert degrees to radians, use [method @GlobalScope.deg_to_rad].\n[b]Note:[/b] Be aware that \"Spatial\" nodes are now called \"Node3D\" starting with Godot 4. Any Godot 3.x references to \"Spatial\" nodes refer to \"Node3D\" in Godot 4.
+        ;
+
+        const output = try convertDocsToMarkdown(testing.allocator, bbcode, &ctx, .{
+            .current_class = "Node3D",
+        });
+        defer testing.allocator.free(output);
+
+        // std.debug.print("{s}\n", .{output});
+    }
 }
 
 const render = bbcodez.fmt.md.render;
 
 const Node = bbcodez.Node;
+const TempDir = temp.TempDir;
 const Document = bbcodez.Document;
 const Allocator = std.mem.Allocator;
+const Config = @import("../Config.zig");
 const ArrayList = std.ArrayListUnmanaged;
+const GodotApi = @import("../GodotApi.zig");
 const WriteContext = bbcodez.fmt.md.WriteContext;
+const ParserOptions = bbcodez.parser.Options;
 const TokenizerOptions = bbcodez.tokenizer.Options;
+const Token = bbcodez.tokenizer.TokenResult.Token;
 const CodegenContext = @import("../Context.zig");
 const StringHashMap = std.StringHashMapUnmanaged;
 
 const std = @import("std");
 const testing = std.testing;
+const temp = @import("temp");
 const bbcodez = @import("bbcodez");
 
 const logger = std.log.scoped(.docs);
