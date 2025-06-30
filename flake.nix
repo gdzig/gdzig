@@ -31,12 +31,15 @@
         inherit (pkgs) lib stdenv;
       in {
         default = pkgs.mkShell {
-          buildInputs = [
-            zigPinned
-            zlsPinned
-          ] ++ lib.optionals stdenv.isLinux [
-            pkgs.godot
-          ];
+          buildInputs =
+            [
+              pkgs.lldb
+              zigPinned
+              zlsPinned
+            ]
+            ++ lib.optionals stdenv.isLinux [
+              pkgs.godot
+            ];
         };
       }
     );

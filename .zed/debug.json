@@ -1,0 +1,18 @@
+[
+  {
+    "label": "Debug Example",
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "godot",
+    "args": ["--path", "${ZED_WORKTREE_ROOT}/example/project"],
+    "build": "Build Example"
+  },
+  {
+    "label": "Debug Bindgen",
+    "adapter": "CodeLLDB",
+    "request": "launch",
+    "program": "${ZED_WORKTREE_ROOT}/zig-out/bin/bindgen",
+    "args": ["vendor", "zig-out/bindings", "float", "64", "verbose"],
+    "build": "Build Bindgen"
+  }
+]

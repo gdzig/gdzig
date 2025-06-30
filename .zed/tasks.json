@@ -1,25 +1,37 @@
 [
   {
-    "label": "run example",
-    "command": "cd example; zig build run",
-    "reveal_target": "dock",
-    "use_new_terminal": false
-  },
-  {
-    "label": "run tests",
-    "command": "zig build test",
-    "reveal_target": "dock",
-    "use_new_terminal": false
-  },
-  {
-    "label": "generate bindings",
+    "label": "Build Bindings",
     "command": "zig build bindings",
     "reveal_target": "dock",
     "use_new_terminal": false
   },
   {
-    "label": "generate documentation",
+    "label": "Build Bindgen",
+    "command": "zig build bindgen",
+    "reveal_target": "dock",
+    "use_new_terminal": false
+  },
+  {
+    "label": "Build Docs",
     "command": "zig build docs",
+    "reveal_target": "dock",
+    "use_new_terminal": false
+  },
+  {
+    "label": "Build Example",
+    "command": "cd example; zig build",
+    "reveal_target": "dock",
+    "use_new_terminal": false
+  },
+  {
+    "label": "Run Example",
+    "command": "cd example; zig build run",
+    "reveal_target": "dock",
+    "use_new_terminal": false
+  },
+  {
+    "label": "Run Tests",
+    "command": "zig build test",
     "reveal_target": "dock",
     "use_new_terminal": false
   }
