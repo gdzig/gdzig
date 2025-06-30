@@ -65,18 +65,6 @@ pub fn isAny(comptime types: anytype, comptime U: type) bool {
     return false;
 }
 
-pub fn cast(comptime T: type, value: anytype) ?T {
-    const U = if (@TypeOf(value) == type) value else @TypeOf(value);
-
-    if (comptime isA(T, U)) {
-        return upcast(T, value);
-    } else if (comptime isA(U, T)) {
-        return downcast(T, value);
-    } else {
-        @compileError("cannot cast from '" ++ @typeName(U) ++ "' to " ++ @typeName(T));
-    }
-}
-
 pub fn upcast(comptime T: type, value: anytype) T {
     const Dereffed = Deref(@TypeOf(value));
     if (comptime Dereffed == T) {
