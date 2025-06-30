@@ -585,49 +585,38 @@ pub fn isSingleton(self: *const Context, class_name: []const u8) bool {
     return self.singletons.contains(class_name);
 }
 
+fn symbolTableClasses(self: *Context, classes: anytype) !void {
+    for (classes) |class| {
+        if (util.shouldSkipClass(class.name)) continue;
+
+        const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.core.{s}", .{class.name});
+        try self.symbol_lookup.putNoClobber(self.allocator(), class.name, doc_name);
+
+        for (class.enums orelse &.{}) |@"enum"| {
+            const enum_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, @"enum".name });
+            const enum_doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.{s}.{s}", .{ class.name, enum_name });
+            try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, enum_doc_name);
+        }
+
+        for (class.methods orelse &.{}) |method| {
+            const method_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, method.name });
+            const method_doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.{0s}.{0s}.{1s}", .{
+                class.name,
+                case_utils.fmtSliceCaseCamel(method.name),
+            });
+            try self.symbol_lookup.putNoClobber(self.allocator(), method_name, method_doc_name);
+        }
+    }
+}
+
 pub fn buildSymbolLookupTable(self: *Context) !void {
     if (self.symbol_lookup.size == 0) {
         logger.debug("Initializing symbol lookup...", .{});
 
         try self.symbol_lookup.putNoClobber(self.allocator(), "Variant", "Variant");
 
-        for (self.api.classes) |class| {
-            if (util.shouldSkipClass(class.name)) continue;
-
-            const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.core.{s}", .{class.name});
-            try self.symbol_lookup.putNoClobber(self.allocator(), class.name, doc_name);
-
-            for (class.enums orelse &.{}) |@"enum"| {
-                const enum_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, @"enum".name });
-                const enum_doc_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ doc_name, enum_name });
-                try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, enum_doc_name);
-            }
-
-            for (class.methods orelse &.{}) |method| {
-                const method_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, method.name });
-                const method_doc_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ doc_name, method.name });
-                try self.symbol_lookup.putNoClobber(self.allocator(), method_name, method_doc_name);
-            }
-        }
-
-        for (self.api.builtin_classes) |builtin| {
-            if (util.shouldSkipClass(builtin.name)) continue;
-
-            const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.core.{s}", .{builtin.name});
-            try self.symbol_lookup.putNoClobber(self.allocator(), builtin.name, doc_name);
-
-            for (builtin.enums orelse &.{}) |@"enum"| {
-                const enum_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ builtin.name, @"enum".name });
-                const enum_doc_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ doc_name, enum_name });
-                try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, enum_doc_name);
-            }
-
-            for (builtin.methods orelse &.{}) |method| {
-                const method_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ builtin.name, method.name });
-                const method_doc_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ doc_name, method.name });
-                try self.symbol_lookup.putNoClobber(self.allocator(), method_name, method_doc_name);
-            }
-        }
+        try self.symbolTableClasses(self.api.classes);
+        try self.symbolTableClasses(self.api.builtin_classes);
 
         for (self.api.global_enums) |@"enum"| {
             const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.global.{s}", .{@"enum".name});
@@ -646,6 +635,7 @@ const StringHashMap = std.StringHashMapUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");
+const case_utils = @import("case_utils.zig");
 
 const GodotApi = @import("GodotApi.zig");
 const util = @import("util.zig");
