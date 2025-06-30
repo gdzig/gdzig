@@ -28,7 +28,9 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
 
             // Fill in any missing bit positions with placeholder fields
             while (position < expected_position) : (position += 1) {
-                std.debug.print("{s} expected position: {} Actual: {}\n", .{ self.name, expected_position, position });
+                if (ctx.config.verbosity == .verbose) {
+                    std.debug.print("{s} expected position: {} Actual: {}\n", .{ self.name, expected_position, position });
+                }
                 const name = try std.fmt.allocPrint(allocator, "@\"{d}\"", .{position});
                 try self.fields.put(allocator, name, .{
                     .name = name,
@@ -132,7 +134,6 @@ pub const Const = struct {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayListUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Context = @import("../Context.zig");
 
