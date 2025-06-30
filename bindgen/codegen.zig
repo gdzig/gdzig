@@ -175,7 +175,7 @@ fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *c
     try writeFunctionHeader(w, constructor);
     try w.printLine(
         \\const constructor = godot.support.bindConstructor({s}, {d});
-        \\constructor(@ptrCast(&out), @ptrCast(&args));
+        \\constructor(@ptrCast(&result), @ptrCast(&args));
     , .{
         builtin_name,
         constructor.index.?,
@@ -199,7 +199,7 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
     try writeFunctionHeader(w, method);
     try w.printLine(
         \\const method = godot.support.bindBuiltinMethod({s}, "{s}", {d});
-        \\method({s}, @ptrCast(&args), @ptrCast(&out), args.len);
+        \\method({s}, @ptrCast(&args), @ptrCast(&result), args.len);
     , .{
         builtin_name,
         method.name_api,
@@ -359,6 +359,10 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
         , .{class.name});
     }
 
+    if (function.is_vararg) {
+        try w.writeLine("var err: gdext.GDExtensionCallError = undefined;");
+    }
+
     try w.printLine("const method = godot.support.bindClassMethod({s}, \"{s}\", {d});", .{
         function.base.?,
         function.name_api,
@@ -366,34 +370,20 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     });
 
     if (function.is_vararg) {
-        // For non-void, non-variant returns: call with Variant pointer, then convert to expected type
-        if (function.return_type != .variant and function.return_type != .void) {
-            try w.writeLine("var variant: Variant = .nil;");
-        }
-
-        try w.writeLine("var err: gdext.GDExtensionCallError = undefined;");
-        try w.writeLine("godot.core.objectMethodBindCall(method, ");
+        try w.writeAll("godot.core.objectMethodBindCall(method, ");
         try writeClassFunctionObjectPtr(w, class, function, ctx);
         try w.printLine(", @ptrCast(@alignCast(&args[0])), args.len, {s}, &err);", .{
-            if (function.return_type == .variant)
-                "@ptrCast(&out)"
-            else if (function.return_type != .void)
-                "@ptrCast(&variant)"
+            if (function.return_type != .void)
+                "@ptrCast(&result)"
             else
                 "null",
         });
-
-        if (function.return_type != .variant and function.return_type != .void) {
-            try w.writeAll("out = variant.as(");
-            try writeTypeAtReturn(w, &function.return_type);
-            try w.writeLine(");");
-        }
     } else {
         try w.writeAll("godot.core.objectMethodBindPtrcall(method, ");
         try writeClassFunctionObjectPtr(w, class, function, ctx);
         try w.printLine(", @ptrCast(&args), {s});", .{
             if (function.return_type != .void)
-                "@ptrCast(&out)"
+                "@ptrCast(&result)"
             else
                 "null",
         });
@@ -428,7 +418,7 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
         for (base.functions.values()) |*function| {
             if (function.mode == .final) continue;
             try w.printLine(
-                \\if (@hasDecl(T, "{0s}") and @import("std").meta.eql(@as(*StringName, @ptrCast(@constCast(p_name))).*, StringName.fromComptimeLatin1("{0s}"))) {{
+                \\if (@hasDecl(T, "{0s}") and @import("std").meta.eql(@as(*StringName, @ptrCast(@constCast(p_name))).*, StringName.fromComptimeLatin1("{1s}"))) {{
                 \\    const MethodBinder = struct {{
                 \\        pub fn {0s}(p_instance: gdext.GDExtensionClassInstancePtr, p_args: [*c]const gdext.GDExtensionConstTypePtr, p_ret: gdext.GDExtensionTypePtr) callconv(.C) void {{
                 \\            const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
@@ -437,7 +427,7 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
                 \\    }};
                 \\    return MethodBinder.{0s};
                 \\}}
-            , .{function.name});
+            , .{ function.name, function.name_api });
         }
     }
 
@@ -671,9 +661,9 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     // Return variable
     if (function.return_type != .void) {
         if (function.is_vararg) {
-            try w.writeLine("var out: godot.Variant = undefined;");
+            try w.writeLine("var result: godot.Variant = .nil;");
         } else {
-            try w.writeAll("var out: ");
+            try w.writeAll("var result: ");
             try writeTypeAtReturn(w, &function.return_type);
             try w.writeLine(" = undefined;");
         }
@@ -686,13 +676,20 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
         // Fixed arity functions
         if (!function.is_vararg) {
             try w.writeLine(
-                \\return out;
+                \\return result;
             );
         }
 
-        // Variadic functions
-        if (function.is_vararg) {
-            try w.writeAll("return out.as(");
+        // Variadic functions that return Variant
+        if (function.is_vararg and function.return_type == .variant) {
+            try w.writeLine(
+                \\return result;
+            );
+        }
+
+        // Variadic functions that return other values
+        if (function.is_vararg and function.return_type != .variant) {
+            try w.writeAll("return result.as(");
             try writeTypeAtReturn(w, &function.return_type);
             try w.writeLine(");");
         }
@@ -763,7 +760,7 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
     , .{
         function.name,
         function.hash.?,
-        if (function.return_type != .void) "@ptrCast(&out)" else "null",
+        if (function.return_type != .void) "@ptrCast(&result)" else "null",
     });
 
     try writeFunctionFooter(w, function);
