@@ -521,7 +521,7 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
                 \\if (@hasDecl(T, "{0s}") and @import("std").meta.eql(@as(*StringName, @ptrCast(@constCast(p_name))).*, StringName.fromComptimeLatin1("{1s}"))) {{
                 \\    const MethodBinder = struct {{
                 \\        pub fn {0s}(p_instance: godot.c.GDExtensionClassInstancePtr, p_args: [*c]const godot.c.GDExtensionConstTypePtr, p_ret: godot.c.GDExtensionTypePtr) callconv(.C) void {{
-                \\            const MethodBinder = godot.MethodBinderT(@TypeOf(T.{0s}));
+                \\            const MethodBinder = godot.support.MethodBinderT(@TypeOf(T.{0s}));
                 \\            MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
                 \\        }}
                 \\    }};

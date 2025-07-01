@@ -122,10 +122,87 @@ inline fn bind(
     return Binding.function.?;
 }
 
+pub fn MethodBinderT(comptime MethodType: type) type {
+    return struct {
+        pub const ReturnType = @typeInfo(MethodType).@"fn".return_type;
+        pub const ArgCount = @typeInfo(MethodType).@"fn".params.len;
+        pub const ArgsTuple = std.meta.fields(std.meta.ArgsTuple(MethodType));
+        pub var arg_properties: [ArgCount + 1]c.GDExtensionPropertyInfo = undefined;
+        pub var arg_metadata: [ArgCount + 1]c.GDExtensionClassMethodArgumentMetadata = undefined;
+        pub var method_name: StringName = undefined;
+        pub var method_info: c.GDExtensionClassMethodInfo = undefined;
+
+        pub fn bindCall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstVariantPtr, p_argument_count: c.GDExtensionInt, p_return: c.GDExtensionVariantPtr, p_error: [*c]c.GDExtensionCallError) callconv(.C) void {
+            _ = p_error;
+            const method: *MethodType = @ptrCast(@alignCast(p_method_userdata));
+            if (ArgCount == 0) {
+                if (ReturnType == void or ReturnType == null) {
+                    @call(.auto, method, .{});
+                } else {
+                    @as(*Variant, @ptrCast(p_return)).* = Variant.init(@call(.auto, method, .{}));
+                }
+            } else {
+                var variants: [ArgCount - 1]Variant = undefined;
+                var args: std.meta.ArgsTuple(MethodType) = undefined;
+                args[0] = @ptrCast(@alignCast(p_instance));
+                inline for (0..ArgCount - 1) |i| {
+                    if (i < p_argument_count) {
+                        godot.interface.variantNewCopy(@ptrCast(&variants[i]), @ptrCast(p_args[i]));
+                    }
+
+                    args[i + 1] = variants[i].as(ArgsTuple[i + 1].type);
+                }
+                if (ReturnType == void or ReturnType == null) {
+                    @call(.auto, method, args);
+                } else {
+                    @as(*Variant, @ptrCast(p_return)).* = Variant.init(@call(.auto, method, args));
+                }
+            }
+        }
+
+        fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
+            // TODO: I think this does not increment refcount on user-defined RefCounted types
+            if (comptime meta.isRefCounted(T) and meta.isWrappedPointer(T)) {
+                const obj = godot.interface.refGetObject(p_arg);
+                return @bitCast(Object{ .ptr = obj.? });
+            } else if (comptime meta.isObject(T) and meta.isWrappedPointer(T)) {
+                return @bitCast(Object{ .ptr = @constCast(p_arg.?) });
+            } else {
+                return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
+            }
+        }
+
+        pub fn bindPtrcall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.C) void {
+            const method: *MethodType = @ptrCast(@alignCast(p_method_userdata));
+            if (ArgCount == 0) {
+                if (ReturnType == void or ReturnType == null) {
+                    @call(.auto, method, .{});
+                } else {
+                    @as(*ReturnType.?, @ptrCast(@alignCast(p_return))).* = @call(.auto, method, .{});
+                }
+            } else {
+                var args: std.meta.ArgsTuple(MethodType) = undefined;
+                args[0] = @ptrCast(@alignCast(p_instance));
+                inline for (1..ArgCount) |i| {
+                    args[i] = ptrToArg(ArgsTuple[i].type, p_args[i - 1]);
+                }
+                if (ReturnType == void or ReturnType == null) {
+                    @call(.auto, method, args);
+                } else {
+                    @as(*ReturnType.?, @ptrCast(@alignCast(p_return))).* = @call(.auto, method, args);
+                }
+            }
+        }
+    };
+}
+
 const std = @import("std");
 const Child = std.meta.Child;
 
 const godot = @import("gdzig.zig");
+const meta = godot.meta;
+const Object = godot.class.Object;
+const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const c = godot.c;
 

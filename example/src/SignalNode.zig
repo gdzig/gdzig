@@ -54,7 +54,7 @@ pub fn _exitTree(self: *Self) void {
 
 pub fn onSignal1(_: *Self, name: StringName, position: Vector3) void {
     var buf: [256]u8 = undefined;
-    const n = godot.stringNameToAscii(name, &buf);
+    const n = godot.string.stringNameToAscii(name, &buf);
     std.debug.print("signal1 received : name = {s} position={any}\n", .{ n, position });
 }
 
@@ -85,7 +85,7 @@ const ColorRect = godot.class.ColorRect;
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
 const Node = godot.class.Node;
-const PropertyInfo = godot.PropertyInfo;
+const PropertyInfo = godot.object.PropertyInfo;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const Vector2 = godot.builtin.Vector2;
