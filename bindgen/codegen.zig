@@ -997,7 +997,7 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
         \\const function = godot.support.bindFunction("{s}", {d});
         \\function({s}, @ptrCast(&args), args.len);
     , .{
-        function.name,
+        function.name_api,
         function.hash.?,
         if (function.return_type != .void) "@ptrCast(&result)" else "null",
     });
