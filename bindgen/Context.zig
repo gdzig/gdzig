@@ -617,13 +617,23 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
         }
 
         for (self.api.utility_functions) |function| {
-            var buf: [128]u8 = undefined;
-            const function_name = try case_utils.godotMethodCamel(&buf, function.name);
+            const function_name = try std.fmt.allocPrint(self.allocator(), "{s}", .{
+                case_utils.fmtSliceCaseCamel(function.name),
+            });
             const function_path = try std.fmt.allocPrint(self.allocator(), "general.{s}", .{
                 function_name,
             });
+
             try self.symbol_lookup.putNoClobber(self.allocator(), function.name, .{
-                .label = try self.allocator().dupe(u8, function_name),
+                .label = function_name,
+                .path = function_path,
+            });
+
+            const global_scope_key = try std.fmt.allocPrint(self.allocator(), "@GlobalScope.{s}", .{
+                function.name,
+            });
+            try self.symbol_lookup.putNoClobber(self.allocator(), global_scope_key, .{
+                .label = function_name,
                 .path = function_path,
             });
         }
