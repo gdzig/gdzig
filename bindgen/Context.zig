@@ -550,29 +550,33 @@ pub fn isSingleton(self: *const Context, class_name: []const u8) bool {
     return self.singletons.contains(class_name);
 }
 
-fn symbolTableClasses(self: *Context, classes: anytype) !void {
+fn symbolTableClasses(self: *Context, classes: anytype, module: []const u8) !void {
     for (classes) |class| {
         if (util.shouldSkipClass(class.name)) continue;
 
-        const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.core.{s}", .{class.name});
+        const class_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}.{s}", .{
+            module,
+            case_utils.fmtSliceCaseSnake(class.name),
+            class.name,
+        });
         try self.symbol_lookup.putNoClobber(self.allocator(), class.name, .{
             .label = class.name,
-            .path = doc_name,
+            .path = class_path,
         });
 
         for (class.enums orelse &.{}) |@"enum"| {
             const enum_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, @"enum".name });
-            const enum_doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.{s}.{s}", .{ class.name, enum_name });
+            const enum_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class_path, enum_name });
             try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, .{
                 .label = enum_name,
-                .path = enum_doc_name,
+                .path = enum_path,
             });
         }
 
         for (class.methods orelse &.{}) |method| {
             const method_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, method.name });
-            const method_doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.{0s}.{0s}.{1s}", .{
-                class.name,
+            const method_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{
+                class_path,
                 case_utils.fmtSliceCaseCamel(method.name),
             });
 
@@ -583,7 +587,7 @@ fn symbolTableClasses(self: *Context, classes: anytype) !void {
 
             try self.symbol_lookup.putNoClobber(self.allocator(), method_name, .{
                 .label = method_label,
-                .path = method_doc_name,
+                .path = method_path,
             });
         }
     }
@@ -595,17 +599,32 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
 
         try self.symbol_lookup.putNoClobber(self.allocator(), "Variant", .{
             .label = "Variant",
-            .path = "Variant",
+            .path = "builtin.variant.Variant",
         });
 
-        try self.symbolTableClasses(self.api.classes);
-        try self.symbolTableClasses(self.api.builtin_classes);
+        try self.symbolTableClasses(self.api.classes, "class");
+        try self.symbolTableClasses(self.api.builtin_classes, "builtin");
 
         for (self.api.global_enums) |@"enum"| {
-            const doc_name = try std.fmt.allocPrint(self.allocator(), "bindings.global.{s}", .{@"enum".name});
+            const enum_path = try std.fmt.allocPrint(self.allocator(), "global.{s}.{s}", .{
+                case_utils.fmtSliceCaseSnake(@"enum".name),
+                @"enum".name,
+            });
             try self.symbol_lookup.putNoClobber(self.allocator(), @"enum".name, .{
                 .label = @"enum".name,
-                .path = doc_name,
+                .path = enum_path,
+            });
+        }
+
+        for (self.api.utility_functions) |function| {
+            var buf: [128]u8 = undefined;
+            const function_name = try case_utils.godotMethodCamel(&buf, function.name);
+            const function_path = try std.fmt.allocPrint(self.allocator(), "general.{s}", .{
+                function_name,
+            });
+            try self.symbol_lookup.putNoClobber(self.allocator(), function.name, .{
+                .label = try self.allocator().dupe(u8, function_name),
+                .path = function_path,
             });
         }
 

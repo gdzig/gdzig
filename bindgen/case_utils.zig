@@ -10,7 +10,7 @@ fn SliceCase(comptime c: Case) type {
 
             const result: []const u8 = blk: {
                 if (c == .camel and case.isSnake(str) and str[0] == '_') {
-                    break :blk try godotMethod(&buf, str);
+                    break :blk try godotMethodCamel(&buf, str);
                 }
 
                 break :blk try case.bufTo(&buf, c, str);
@@ -45,7 +45,7 @@ pub fn fmtSliceCaseKebab(str: []const u8) Formatter(formatSliceKebab) {
 /// Formats a Godot method name.
 ///
 /// Will preserve leading underscores on private methods.
-pub fn godotMethod(buf: []u8, input: []const u8) ![]const u8 {
+pub fn godotMethodCamel(buf: []u8, input: []const u8) ![]const u8 {
     // formatting a private method
     if (case.isSnake(input) and input[0] == '_') {
         var copy_buf: [128]u8 = undefined;
