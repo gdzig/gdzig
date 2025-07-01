@@ -99,6 +99,21 @@ pub inline fn bindVariantOperator(comptime op: Variant.Operator, comptime lhs: V
     return bind(null, callback);
 }
 
+pub inline fn bindZigFunction(comptime T: type, comptime function: []const u8) void {
+    _ = T; // autofix
+    _ = function; // autofix
+    const callback = struct {
+        fn callback() VariantOperatorEvaluator {
+            return godot.interface.variantGetPtrOperatorEvaluator(
+                @intFromEnum(op),
+                @intFromEnum(lhs),
+                if (rhs) |tag| @intFromEnum(tag) else null,
+            ).?;
+        }
+    }.callback;
+    _ = callback; // autofix
+}
+
 inline fn bind(
     comptime name: ?[:0]const u8,
     comptime callback: anytype,
@@ -160,18 +175,6 @@ pub fn MethodBinderT(comptime MethodType: type) type {
             }
         }
 
-        fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
-            // TODO: I think this does not increment refcount on user-defined RefCounted types
-            if (comptime meta.isRefCounted(T) and meta.isWrappedPointer(T)) {
-                const obj = godot.interface.refGetObject(p_arg);
-                return @bitCast(Object{ .ptr = obj.? });
-            } else if (comptime meta.isObject(T) and meta.isWrappedPointer(T)) {
-                return @bitCast(Object{ .ptr = @constCast(p_arg.?) });
-            } else {
-                return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
-            }
-        }
-
         pub fn bindPtrcall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.C) void {
             const method: *MethodType = @ptrCast(@alignCast(p_method_userdata));
             if (ArgCount == 0) {
@@ -191,6 +194,18 @@ pub fn MethodBinderT(comptime MethodType: type) type {
                 } else {
                     @as(*ReturnType.?, @ptrCast(@alignCast(p_return))).* = @call(.auto, method, args);
                 }
+            }
+        }
+
+        fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
+            // TODO: I think this does not increment refcount on user-defined RefCounted types
+            if (comptime meta.isRefCounted(T) and meta.isWrappedPointer(T)) {
+                const obj = godot.interface.refGetObject(p_arg);
+                return @bitCast(Object{ .ptr = obj.? });
+            } else if (comptime meta.isObject(T) and meta.isWrappedPointer(T)) {
+                return @bitCast(Object{ .ptr = @constCast(p_arg.?) });
+            } else {
+                return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
             }
         }
     };
