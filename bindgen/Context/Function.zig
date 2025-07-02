@@ -23,10 +23,12 @@ self: union(enum) {
     static: void,
     /// This function takes a singleton instance.
     singleton: void,
-    /// This function takes a constant instance.
+    /// This function takes a constant self pointer.
     constant: []const u8,
-    /// This function takes a mutable self instance.
+    /// This function takes a mutable self pointer.
     mutable: []const u8,
+    /// This function takes self by value.
+    value: []const u8,
 } = .static,
 is_vararg: bool = false,
 
@@ -244,7 +246,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     else if (api.is_const)
         .{ .constant = class_name }
     else
-        .{ .mutable = class_name };
+        .{ .value = class_name };
     self.is_vararg = api.is_vararg;
 
     for (api.arguments orelse &.{}) |arg| {
@@ -305,7 +307,7 @@ pub fn fromClassSetter(allocator: Allocator, class_name: []const u8, is_singleto
     self.name = try case.allocTo(allocator, .camel, name);
     self.name_api = name;
     self.base = class_name;
-    self.self = if (is_singleton) .singleton else .{ .mutable = class_name };
+    self.self = if (is_singleton) .singleton else .{ .value = class_name };
     self.is_vararg = false;
     self.return_type = .void;
 

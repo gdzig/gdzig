@@ -106,11 +106,13 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
             var inherited: Function = function.*;
 
             // Update the self type to this class
-            if (inherited.self == .constant) {
-                inherited.self = .{ .constant = self.name };
-            } else if (inherited.self == .mutable) {
-                inherited.self = .{ .mutable = self.name };
-            }
+            inherited.self = switch (inherited.self) {
+                .static => .static,
+                .singleton => .singleton,
+                .constant => |_| .{ .constant = self.name },
+                .mutable => |_| .{ .mutable = self.name },
+                .value => |_| .{ .value = self.name },
+            };
 
             // Convert the function to a singleton function if we are a singleton and the parent is not
             if (self.is_singleton and inherited.self != .static and inherited.self != .singleton) {

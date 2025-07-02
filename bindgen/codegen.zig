@@ -231,6 +231,7 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
             .singleton => @panic("singleton builtins not supported"),
             .constant => "@ptrCast(@constCast(self))",
             .mutable => "@ptrCast(self)",
+            .value => "@ptrCast(@constCast(&self))",
         },
     });
     try writeFunctionFooter(w, method);
@@ -689,15 +690,19 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
 
     // Self parameter
     switch (function.self) {
+        .static, .singleton => {},
         .constant => |self| {
             try w.print("self: *const {0s}", .{self});
             is_first = false;
         },
         .mutable => |self| {
+            try w.print("self: *{0s}", .{self});
+            is_first = false;
+        },
+        .value => |self| {
             try w.print("self: {0s}", .{self});
             is_first = false;
         },
-        else => {},
     }
 
     // Positional parameters
