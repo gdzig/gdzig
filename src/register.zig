@@ -258,7 +258,7 @@ pub fn registerClass(comptime T: type) void {
 
     classdbRegisterExtensionClass(@ptrCast(godot.interface.library), @ptrCast(meta.getNamePtr(T)), @ptrCast(meta.getNamePtr(meta.BaseOf(T))), @ptrCast(&PerClassData.class_info));
 
-    if (@hasDecl(T, "_bind_methods")) {
+    if (@hasDecl(T, "_bindMethods")) {
         T._bindMethods();
     }
 }
