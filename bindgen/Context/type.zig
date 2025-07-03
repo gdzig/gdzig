@@ -129,6 +129,38 @@ pub const Type = union(enum) {
 
         self.* = .void;
     }
+
+    pub fn format(self: Type, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .array => |elem| if (elem) |t| {
+                try writer.writeAll("[");
+                try t.format(fmt, options, writer);
+                try writer.writeAll("]");
+            },
+            .basic => |name| try writer.writeAll(name),
+            .class => |name| try writer.writeAll(name),
+            .@"enum" => |name| try writer.writeAll(name),
+            .flag => |name| try writer.writeAll(name),
+            .@"union" => |types| {
+                try writer.writeAll("union(");
+                for (types, 0..) |t, i| {
+                    if (i > 0) try writer.writeAll(", ");
+                    try t.format(fmt, options, writer);
+                }
+                try writer.writeAll(")");
+            },
+            .void => try writer.writeAll("void"),
+            .string => try writer.writeAll("string"),
+            .node_path => try writer.writeAll("node_path"),
+            .string_name => try writer.writeAll("string_name"),
+            .variant => try writer.writeAll("variant"),
+            .pointer => |t| {
+                try writer.writeAll("pointer(");
+                try t.format(fmt, options, writer);
+                try writer.writeAll(")");
+            },
+        }
+    }
 };
 
 const std = @import("std");
