@@ -118,6 +118,7 @@ pub const Builtin = struct {
         name: []const u8,
         type: []const u8,
         value: []const u8,
+        description: []const u8,
     };
 
     pub const Member = struct {
