@@ -41,8 +41,7 @@ pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Constant, ctx: *c
                     for (args.items, 0..) |arg, i| {
                         var pval = arg;
                         if (std.mem.eql(u8, pval, "inf")) {
-                            // TODO: precision
-                            pval = "std.math.inf(f32)";
+                            pval = comptime "std.math.inf(" ++ if (std.mem.eql(u8, build_options.precision, "double")) "f64" else "f32" ++ ")";
                         }
 
                         try writer.writeAll(pval);
@@ -195,6 +194,7 @@ const case = @import("case");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const Function = Context.Function;
+const build_options = @import("build_options");
 
 const Context = @import("../Context.zig");
 const Type = Context.Type;
