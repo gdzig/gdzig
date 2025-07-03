@@ -161,6 +161,55 @@ pub const Type = union(enum) {
             },
         }
     }
+
+    pub fn eql(self: Type, other: Type) bool {
+        return switch (self) {
+            .@"enum", .flag, .basic, .class => |name| switch (other) {
+                .@"enum" => |other_name| std.mem.eql(u8, name, other_name),
+                .flag => |other_name| std.mem.eql(u8, name, other_name),
+                .basic => |other_name| std.mem.eql(u8, name, other_name),
+                .class => |other_name| std.mem.eql(u8, name, other_name),
+                else => false,
+            },
+            .@"union" => |types| switch (other) {
+                .@"union" => |other_types| {
+                    if (types.len != other_types.len) return false;
+
+                    for (types, other_types) |t, ot| {
+                        if (!t.eql(ot)) return false;
+                    }
+
+                    return true;
+                },
+                else => false,
+            },
+            .array => @panic("type.eql for array type not implemented"),
+            .void => switch (other) {
+                .void => true,
+                else => false,
+            },
+            .string => switch (other) {
+                .string => true,
+                else => false,
+            },
+            .node_path => switch (other) {
+                .node_path => true,
+                else => false,
+            },
+            .string_name => switch (other) {
+                .string_name => true,
+                else => false,
+            },
+            .variant => switch (other) {
+                .variant => true,
+                else => false,
+            },
+            .pointer => |t| switch (other) {
+                .pointer => |other_t| t.eql(other_t.*),
+                else => false,
+            },
+        };
+    }
 };
 
 const std = @import("std");
