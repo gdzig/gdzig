@@ -40,7 +40,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     }
 
     for (api.constants orelse &.{}) |constant| {
-        try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, constant, ctx, self.constructors));
+        try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, self.name, constant, ctx, self.constructors));
     }
 
     for (api.enums orelse &.{}) |@"enum"| {

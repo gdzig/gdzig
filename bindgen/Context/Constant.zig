@@ -12,12 +12,15 @@ name: []const u8 = "_",
 type: Type = .void,
 value: []const u8 = "{}",
 
-pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Constant, ctx: *const Context, constructors: ArrayList(Function)) !Constant {
+pub fn fromBuiltin(allocator: Allocator, builtin_name: []const u8, api: GodotApi.Builtin.Constant, ctx: *const Context, constructors: ArrayList(Function)) !Constant {
     var self: Constant = .{};
     errdefer self.deinit(allocator);
 
     self.name = try case.allocTo(allocator, .snake, api.name);
     self.type = try Type.from(allocator, api.type, false, ctx);
+    self.doc = try docs.convertDocsToMarkdown(allocator, api.description, ctx, .{
+        .current_class = builtin_name,
+    });
     self.value = blk: {
         // default value with value constructor
         if (std.mem.indexOf(u8, api.value, "(")) |idx| {
@@ -189,13 +192,14 @@ pub fn deinit(self: *Constant, allocator: Allocator) void {
     self.* = .{};
 }
 
-const std = @import("std");
-const case = @import("case");
+const Type = Context.Type;
+const Function = Context.Function;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
-const Function = Context.Function;
-const build_options = @import("build_options");
-
 const Context = @import("../Context.zig");
-const Type = Context.Type;
 const GodotApi = @import("../GodotApi.zig");
+
+const std = @import("std");
+const case = @import("case");
+const docs = @import("docs.zig");
+const build_options = @import("build_options");
