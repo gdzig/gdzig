@@ -32,6 +32,10 @@ self: union(enum) {
 } = .static,
 is_vararg: bool = false,
 
+/// When true, this constructor can be implemented via direct struct initialization
+/// instead of calling the GDExtension API, which enables comptime initialization.
+can_init_directly: bool = false,
+
 /// This maps the API's operator name to a function name
 const operator_fn_names: StaticStringMap([]const u8) = .initComptime(.{
     .{ "+", "add" },
@@ -364,8 +368,10 @@ pub const Mode = enum {
 
 pub const Parameter = struct {
     name: []const u8 = "_",
+    name_api: []const u8 = "_",
     type: Type = .void,
     default: ?[]const u8 = null,
+    field_name: ?[]const u8 = null,
 
     pub fn fromNameType(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, ctx: *const Context) !Parameter {
         const name = blk: {
@@ -380,6 +386,7 @@ pub const Parameter = struct {
 
         return Parameter{
             .name = name,
+            .name_api = api_name,
             .type = @"type",
         };
     }

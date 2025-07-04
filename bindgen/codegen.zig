@@ -195,13 +195,19 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
 
 fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *const Context.Function) !void {
     try writeFunctionHeader(w, constructor);
-    try w.printLine(
-        \\const constructor = godot.support.bindConstructor({s}, {d});
-        \\constructor(@ptrCast(&result), @ptrCast(&args));
-    , .{
-        builtin_name,
-        constructor.index.?,
-    });
+    if (constructor.can_init_directly) {
+        for (constructor.parameters.values()) |param| {
+            try w.printLine("result.{s} = {s};", .{ param.field_name.?, param.name });
+        }
+    } else {
+        try w.printLine(
+            \\const constructor = godot.support.bindConstructor({s}, {d});
+            \\constructor(@ptrCast(&result), @ptrCast(&args));
+        , .{
+            builtin_name,
+            constructor.index.?,
+        });
+    }
     try writeFunctionFooter(w, constructor);
 }
 
@@ -773,7 +779,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     }
 
     // Fixed argument slice variable
-    if (!function.is_vararg and function.operator_name == null) {
+    if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
         // todo: parameter comptime coercisions
         try w.printLine("var args: [{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
@@ -810,9 +816,13 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
                 try w.writeLine("?*anyopaque = null;");
             } else {
                 try writeTypeAtReturn(w, &function.return_type);
-                try w.writeAll(" = std.mem.zeroes(");
-                try writeTypeAtReturn(w, &function.return_type);
-                try w.writeLine(");");
+                if (function.can_init_directly) {
+                    try w.writeLine(" = undefined;");
+                } else {
+                    try w.writeAll(" = std.mem.zeroes(");
+                    try writeTypeAtReturn(w, &function.return_type);
+                    try w.writeLine(");");
+                }
             }
         }
     }

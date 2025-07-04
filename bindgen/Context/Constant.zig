@@ -12,14 +12,14 @@ name: []const u8 = "_",
 type: Type = .void,
 value: []const u8 = "{}",
 
-pub fn fromBuiltin(allocator: Allocator, builtin_name: []const u8, api: GodotApi.Builtin.Constant, ctx: *const Context, constructors: ArrayList(Function)) !Constant {
+pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.Builtin.Constant, ctx: *const Context) !Constant {
     var self: Constant = .{};
     errdefer self.deinit(allocator);
 
     self.name = try case.allocTo(allocator, .snake, api.name);
     self.type = try Type.from(allocator, api.type, false, ctx);
     self.doc = try docs.convertDocsToMarkdown(allocator, api.description, ctx, .{
-        .current_class = builtin_name,
+        .current_class = builtin.name_api,
     });
     self.value = blk: {
         // default value with value constructor
@@ -34,7 +34,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin_name: []const u8, api: GodotApi
             const arg_count = args.items.len;
 
             // find constructor with same arg count
-            for (constructors.items) |function| {
+            for (builtin.constructors.items) |function| {
                 if (function.parameters.count() == arg_count) {
                     var output: ArrayList(u8) = .empty;
                     var writer = output.writer(allocator);
@@ -193,7 +193,7 @@ pub fn deinit(self: *Constant, allocator: Allocator) void {
 }
 
 const Type = Context.Type;
-const Function = Context.Function;
+const Builtin = Context.Builtin;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const Context = @import("../Context.zig");

@@ -2,6 +2,7 @@ const Field = @This();
 
 doc: ?[]const u8 = null,
 name: []const u8 = "_",
+name_api: []const u8 = "_",
 type: Type = .void,
 offset: ?usize = null,
 
@@ -11,6 +12,7 @@ pub fn init(allocator: Allocator, doc: ?[]const u8, name: []const u8, @"type": [
 
     self.doc = if (doc) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{}) else null;
     self.name = try allocator.dupe(u8, name);
+    self.name_api = try allocator.dupe(u8, name);
     self.type = try Type.from(allocator, meta orelse @"type", meta != null, ctx);
     self.offset = offset;
 

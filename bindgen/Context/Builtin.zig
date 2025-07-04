@@ -39,10 +39,6 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         try self.constructors.append(allocator, try Function.fromBuiltinConstructor(allocator, self.name, constructor, ctx));
     }
 
-    for (api.constants orelse &.{}) |constant| {
-        try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, self.name, constant, ctx, self.constructors));
-    }
-
     for (api.enums orelse &.{}) |@"enum"| {
         try self.enums.put(allocator, @"enum".name, try Enum.fromBuiltin(allocator, @"enum"));
     }
@@ -60,10 +56,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         ));
     }
 
-    for (api.operators) |operator| {
-        // Skip + unary operator
-        if (std.mem.eql(u8, "unary+", operator.name)) continue;
-        try self.operators.append(allocator, try Function.fromBuiltinOperator(allocator, self.name, operator, ctx));
+    for (api.constants orelse &.{}) |constant| {
+        try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, &self, constant, ctx));
     }
 
     // Sort fields by offset
@@ -77,8 +71,49 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         self.fields.sort(Ctx{ .fields = self.fields.values() });
     }
 
+    for (api.operators) |operator| {
+        // Skip + unary operator
+        if (std.mem.eql(u8, "unary+", operator.name)) continue;
+        try self.operators.append(allocator, try Function.fromBuiltinOperator(allocator, self.name, operator, ctx));
+    }
+
     for (api.methods orelse &.{}) |method| {
         try self.methods.put(allocator, method.name, try Function.fromBuiltinMethod(allocator, self.name, method, ctx));
+    }
+
+    // find if there is a constructor
+    // where every parameter matches the name
+    // and type of each field
+    const field_count = self.fields.count();
+    if (field_count > 0) {
+        for (self.constructors.items) |*function| {
+            if (function.parameters.count() == field_count) {
+                for (0..field_count) |i| {
+                    const field = self.fields.entries.get(i);
+                    const param = function.parameters.entries.get(i);
+
+                    if (!std.mem.eql(u8, field.value.name_api, param.value.name_api)) {
+                        continue;
+                    }
+
+                    if (!field.value.type.eql(param.value.type)) {
+                        continue;
+                    }
+                }
+
+                function.can_init_directly = true;
+
+                for (0..field_count) |i| {
+                    const field = self.fields.entries.get(i).value;
+                    var param = function.parameters.entries.get(i);
+                    param.value.field_name = field.name;
+
+                    function.parameters.entries.set(i, param);
+                }
+
+                break;
+            }
+        }
     }
 
     return self;
