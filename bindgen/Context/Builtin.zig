@@ -56,10 +56,6 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         ));
     }
 
-    for (api.constants orelse &.{}) |constant| {
-        try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, &self, constant, ctx));
-    }
-
     // Sort fields by offset
     {
         const Ctx = struct {
@@ -79,6 +75,10 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
     for (api.methods orelse &.{}) |method| {
         try self.methods.put(allocator, method.name, try Function.fromBuiltinMethod(allocator, self.name, method, ctx));
+    }
+
+    for (api.constants orelse &.{}) |constant| {
+        try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, &self, constant, ctx));
     }
 
     // find if there is a constructor

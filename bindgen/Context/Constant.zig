@@ -16,7 +16,15 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
     var self: Constant = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try case.allocTo(allocator, .snake, api.name);
+    self.name = name: {
+        const name = try case.allocTo(allocator, .snake, api.name);
+        if (builtin.methods.contains(name)) {
+            const n = try std.fmt.allocPrint(allocator, "{s}_", .{name});
+            std.debug.assert(!builtin.methods.contains(n));
+            break :name n;
+        }
+        break :name name;
+    };
     self.type = try Type.from(allocator, api.type, false, ctx);
     self.doc = try docs.convertDocsToMarkdown(allocator, api.description, ctx, .{
         .current_class = builtin.name_api,

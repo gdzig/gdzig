@@ -374,11 +374,7 @@ pub const Parameter = struct {
     field_name: ?[]const u8 = null,
 
     pub fn fromNameType(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, ctx: *const Context) !Parameter {
-        const name = blk: {
-            const camel = try case.allocTo(allocator, .camel, api_name);
-            defer allocator.free(camel);
-            break :blk try std.fmt.allocPrint(allocator, "{s}_", .{camel});
-        };
+        const name = try std.fmt.allocPrint(allocator, "p_{s}", .{case_utils.fmtSliceCaseSnake(api_name)});
         errdefer allocator.free(name);
 
         const @"type" = try Type.from(allocator, api_type, is_meta, ctx);
@@ -423,6 +419,7 @@ const StaticStringMap = std.StaticStringMap;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");
+const case_utils = @import("../case_utils.zig");
 
 const Context = @import("../Context.zig");
 const Type = Context.Type;
