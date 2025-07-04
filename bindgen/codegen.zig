@@ -197,7 +197,15 @@ fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *c
     try writeFunctionHeader(w, constructor);
     if (constructor.can_init_directly) {
         for (constructor.parameters.values()) |param| {
-            try w.printLine("result.{s} = {s};", .{ param.field_name.?, param.name });
+            try w.printLine(
+                \\result.{0s} = blk: {{
+                \\    switch (@typeInfo(@TypeOf({1s}))) {{
+                \\        .int => break :blk @intCast({1s}),
+                \\        .float => break :blk @floatCast({1s}),
+                \\        else => break :blk {1s},
+                \\    }}
+                \\}};
+            , .{ param.field_name.?, param.name });
         }
     } else {
         try w.printLine(
