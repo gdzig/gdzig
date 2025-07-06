@@ -44,7 +44,7 @@ pub const Variant = extern struct {
                 const class_name = godot.getClassName(std.meta.Child(T));
                 const class_tag = godot.interface.classdbGetClassTag(@ptrCast(class_name));
                 // TODO: this can return null if its not the right type; return type should be optional depending on T, right? or return error?
-                const casted = godot.interface.objectCastTo(meta.asObjectPtr(instance), class_tag);
+                const casted = godot.interface.objectCastTo(@ptrCast(meta.asObject(instance)), class_tag);
                 const binding = godot.interface.objectGetInstanceBinding(casted, godot.interface.library, null);
 
                 return @ptrCast(@alignCast(binding));
@@ -102,7 +102,7 @@ pub const Variant = extern struct {
         }
 
         pub fn forType(comptime T: type) Variant.Tag {
-            return switch (meta.Deref(T)) {
+            return switch (meta.Child(T)) {
                 AABB => .aabb,
                 Array => .array,
                 Basis => .basis,
@@ -326,7 +326,6 @@ const tests = struct {
             try testing.expectEqual(tag, Tag.forType(T));
             try testing.expectEqual(tag, Tag.forType(*T));
             try testing.expectEqual(tag, Tag.forType(*const T));
-            try testing.expectEqual(tag, Tag.forType(?T));
             try testing.expectEqual(tag, Tag.forType(?*T));
             try testing.expectEqual(tag, Tag.forType(?*const T));
         }

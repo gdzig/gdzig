@@ -1,7 +1,7 @@
 const Self = @This();
 
-base: Control,
-sprite: Sprite2D,
+base: *Control,
+sprite: *Sprite2D = undefined,
 
 pub fn _enterTree(self: *Self) void {
     if (Engine.isEditorHint()) return;

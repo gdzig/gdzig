@@ -1,7 +1,7 @@
 const Self = @This();
 
-base: Control, //this makes @Self a valid gdextension class
-color_rect: ColorRect = undefined,
+base: *Control, //this makes @Self a valid gdextension class
+color_rect: *ColorRect = undefined,
 
 pub fn _bindMethods() void {
     godot.registerSignal(Self, "signal1", &[_]PropertyInfo{

@@ -164,9 +164,9 @@ pub fn MethodBinderT(comptime MethodType: type) type {
             // TODO: I think this does not increment refcount on user-defined RefCounted types
             if (comptime meta.isRefCounted(T) and meta.isWrappedPointer(T)) {
                 const obj = godot.interface.refGetObject(p_arg);
-                return @bitCast(Object{ .ptr = obj.? });
+                return @ptrCast(obj.?);
             } else if (comptime meta.isObject(T) and meta.isWrappedPointer(T)) {
-                return @bitCast(Object{ .ptr = @constCast(p_arg.?) });
+                return @ptrCast(@constCast(p_arg.?));
             } else {
                 return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
             }

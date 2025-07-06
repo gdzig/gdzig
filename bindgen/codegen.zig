@@ -324,29 +324,23 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
 
     // Declaration start
     try w.printLine(
-        \\pub const {0s} = extern struct {{
+        \\pub const {0s} = opaque {{
     , .{class.name});
     w.indent += 1;
+
+    // Base class
+    if (class.base) |base| {
+        try w.printLine(
+            \\pub const Base = {0s};
+            \\
+        , .{base});
+    }
 
     // Singleton storage
     if (class.is_singleton) {
         try w.printLine(
-            \\pub var instance: ?{0s} = null;
+            \\pub var instance: ?*{0s} = null;
         , .{class.name});
-    }
-
-    if (class.base) |base| {
-        // Base class
-        try w.printLine(
-            \\base: {0s},
-            \\
-        , .{base});
-    } else {
-        // Object pointer
-        try w.writeLine(
-            \\ptr: *anyopaque,
-            \\
-        );
     }
 
     // Constants
@@ -367,12 +361,8 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         if (class.base) |_| {
             try w.printLine(
                 \\/// Allocates an empty {0s}.
-                \\pub fn init() {0s} {{
-                \\    return .{{
-                \\        .base = @bitCast(Object {{
-                \\            .ptr = godot.interface.classdbConstructObject(@ptrCast(godot.meta.getNamePtr({0s}))).?,
-                \\        }}),
-                \\    }};
+                \\pub fn init() *{0s} {{
+                \\    return @ptrCast(godot.interface.classdbConstructObject(@ptrCast(godot.meta.getNamePtr({0s}))).?);
                 \\}}
                 \\
             , .{class.name});
@@ -380,9 +370,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
             try w.printLine(
                 \\/// Allocates an empty {0s}.
                 \\pub fn init() {0s} {{
-                \\    return .{{
-                \\        .ptr = godot.interface.classdbConstructObject(@ptrCast(godot.meta.getNamePtr({0s}))).?,
-                \\    }};
+                \\    return @ptrCast(godot.interface.classdbConstructObject(@ptrCast(godot.meta.getNamePtr({0s}))).?);
                 \\}}
                 \\
             , .{class.name});
@@ -408,7 +396,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\/// Upcasts a child type to a `{0s}`.
         \\///
         \\/// This is a zero cost, compile time operation.
-        \\pub fn upcast(value: anytype) {0s} {{
+        \\pub fn upcast(value: anytype) *{0s} {{
         \\    return godot.meta.upcast({0s}, value);
         \\}}
         \\
@@ -417,7 +405,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\/// This operation will fail at compile time if {0s} does not inherit from `@TypeOf(value)`. However,
         \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
         \\/// and may return `null`.
-        \\pub fn downcast(value: anytype) !{0s} {{
+        \\pub fn downcast(value: anytype) !*{0s} {{
         \\    return godot.meta.downcast({0s}, value);
         \\}}
         \\
@@ -453,23 +441,11 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     try writeFunctionHeader(w, function);
 
     if (class.is_singleton) {
-        if (class.base) |_| {
-            try w.printLine(
-                \\if (instance == null) {{
-                \\    instance = @bitCast(Object {{
-                \\        .ptr = godot.interface.globalGetSingleton(@ptrCast(godot.meta.getNamePtr({0s}))).?,
-                \\    }});
-                \\}}
-            , .{class.name});
-        } else {
-            try w.printLine(
-                \\if (instance == null) {{
-                \\    instance = .{{
-                \\        .ptr = godot.interface.globalGetSingleton(@ptrCast(godot.meta.getNamePtr({0s}))).?,
-                \\    }};
-                \\}}
-            , .{class.name});
-        }
+        try w.printLine(
+            \\if (instance == null) {{
+            \\    instance = @ptrCast(godot.interface.globalGetSingleton(@ptrCast(godot.meta.getNamePtr({0s}))).?);
+            \\}}
+        , .{class.name});
     }
 
     if (function.is_vararg) {
@@ -510,14 +486,14 @@ fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function
         try w.writeAll("null");
     } else if (class.getNearestSingleton(ctx)) |singleton| {
         if (class.is_singleton) {
-            try w.writeAll("@as(Object, @bitCast(instance.?)).ptr");
+            try w.writeAll("@ptrCast(instance)");
         } else {
-            try w.print("@as(Object, @bitCast({s}.instance.?)).ptr", .{singleton.name});
+            try w.print("@ptrCast({s}.instance)", .{singleton.name});
         }
     } else if (function.self == .constant) {
-        try w.writeAll("@as(Object, @bitCast(self.*)).ptr");
+        try w.writeAll("@ptrCast(@constCast(self))");
     } else {
-        try w.writeAll("@as(Object, @bitCast(self)).ptr");
+        try w.writeAll("@ptrCast(self)");
     }
 }
 
@@ -841,10 +817,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
         // Class functions need to cast an object pointer
         .class => {
             try w.writeLine(
-                // 1. Classes are just transparent wrappers around an *anyopaque
-                // 2. Return types for classes are ?T
-                // 3. Ergo, ?T is the same as ?*anyopaque
-                \\return @bitCast(Object { .ptr = @ptrCast(result) });
+                \\return @ptrCast(result);
             );
         },
 
@@ -1031,6 +1004,7 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
 fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
+        .class => |name| try w.print("*{0s}", .{name}),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
@@ -1048,7 +1022,7 @@ fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
 fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
-        .class => |name| try w.print("?{0s}", .{name}),
+        .class => |name| try w.print("?*{0s}", .{name}),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
@@ -1068,6 +1042,7 @@ fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
 fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
+        .class => |name| try w.print("*{0s}", .{name}),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
@@ -1087,9 +1062,7 @@ fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
 fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
-        .class => |name| {
-            try w.writeAll(name);
-        },
+        .class => |name| try w.print("*{0s}", .{name}),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");

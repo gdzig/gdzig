@@ -217,7 +217,7 @@ pub fn registerClass(comptime T: type) void {
         pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.C) c.GDExtensionObjectPtr {
             _ = p_userdata;
             const ret = object.create(T) catch unreachable;
-            return @ptrCast(meta.asObjectPtr(ret));
+            return @ptrCast(meta.asObject(ret));
         }
 
         pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.C) c.GDExtensionClassInstancePtr {
@@ -239,8 +239,7 @@ pub fn registerClass(comptime T: type) void {
         }
 
         pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.C) c.GDExtensionClassCallVirtual {
-            const Base = std.meta.FieldType(T, .base);
-            const virtual_bind = @field(Base, "getVirtualDispatch");
+            const virtual_bind = @field(meta.BaseOf(T), "getVirtualDispatch");
             return virtual_bind(T, p_class_userdata, p_name);
         }
 

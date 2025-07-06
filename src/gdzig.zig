@@ -55,3 +55,7 @@ pub const registerClass = register.registerClass;
 pub const registerMethod = register.registerMethod;
 pub const registerPlugin = register.registerPlugin;
 pub const registerSignal = register.registerSignal;
+
+test {
+    std.testing.refAllDecls(@This());
+}

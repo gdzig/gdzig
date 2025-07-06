@@ -1,17 +1,30 @@
+/// Returns true if the type is a Godot "class" type.
+pub fn isClass(comptime T: type) bool {
+    return comptime switch (@typeInfo(T)) {
+        .@"struct" => @hasField(T, "base") and isClass(Child(@FieldType(T, "base"))),
+        .@"opaque" => T == Object or @hasDecl(T, "Base") and isClass(T.Base),
+        else => false,
+    };
+}
+
 /// Returns the base type of T.
 pub fn BaseOf(comptime T: type) type {
-    if (comptime !@hasField(T, "base")) {
-        const message = fmt.comptimePrint("expected a Godot class, found '{0s}'. did you remember to add the 'base' struct field?", @typeName(T));
-        @compileError(message);
+    if (comptime !isClass(T)) {
+        @compileError("expected a Godot class, found '" ++ @typeName(T) ++ "'. did you remember to add the 'base' struct field?");
     }
-    return @FieldType(T, "base");
+
+    return switch (@typeInfo(T)) {
+        .@"struct" => Child(@FieldType(T, "base")),
+        .@"opaque" => T.Base,
+        else => unreachable,
+    };
 }
 
 /// Returns how many levels of inheritance T has.
 pub fn depthOf(comptime T: type) comptime_int {
     comptime var i = 0;
     comptime var Cur = T;
-    inline while (@hasField(Cur, "base")) : (i += 1) {
+    inline while (isClass(Cur) and Cur != Object) : (i += 1) {
         Cur = BaseOf(Cur);
     }
     return i;
@@ -37,9 +50,7 @@ pub fn selfAndAncestorsOf(comptime T: type) [1 + depthOf(T)]type {
 
 /// Is U a child of T
 pub fn isA(comptime T: type, comptime U: type) bool {
-    const Dereffed = Deref(U);
-
-    if (comptime @typeInfo(Dereffed) != .@"struct") {
+    if (comptime @typeInfo(T) != .@"struct" and @typeInfo(T) != .@"opaque") {
         return false;
     }
     if (comptime T == U) {
@@ -47,11 +58,12 @@ pub fn isA(comptime T: type, comptime U: type) bool {
     }
 
     @setEvalBranchQuota(10_000);
-    inline for (selfAndAncestorsOf(Dereffed)) |V| {
+    inline for (selfAndAncestorsOf(T)) |V| {
         if (comptime T == V) {
             return true;
         }
     }
+
     return false;
 }
 
@@ -65,37 +77,67 @@ pub fn isAny(comptime types: anytype, comptime U: type) bool {
     return false;
 }
 
-pub fn upcast(comptime T: type, value: anytype) T {
-    const Dereffed = Deref(@TypeOf(value));
-    if (comptime Dereffed == T) {
-        return value;
-    }
-    assertIs(T, Dereffed);
+/// Upcast a value to a parent type in the class hierarchy.
+/// Returns the same pointer type as the input (e.g., ?*T for optional, *T for non-optional).
+pub inline fn upcast(comptime T: type, value: anytype) switch (@typeInfo(@TypeOf(value))) {
+    .optional => ?*T,
+    else => *T,
+} {
+    const ValueType = @TypeOf(value);
+    assertIs(T, Child(ValueType));
 
-    var instances: Tuple(&selfAndAncestorsOf(Dereffed)) = undefined;
-    instances[0] = switch (@typeInfo(@TypeOf(value))) {
-        .pointer => value.*,
-        else => value,
-    };
-    inline for (1..instances.len) |i| {
-        instances[i] = @field(instances[i - 1], "base");
-        if (@TypeOf(instances[i]) == T) {
-            return instances[i];
+    // Initialize our traversal pointer - handle both value and pointer inputs
+    var current_ptr: if (@typeInfo(ValueType) == .optional) ?*anyopaque else *anyopaque =
+        if (@typeInfo(ValueType) != .pointer)
+            @ptrCast(&value) // Take address of value
+        else
+            @ptrCast(value); // Already a pointer
+
+    // Walk up the inheritance hierarchy from child to parent
+    inline for (selfAndAncestorsOf(Child(ValueType))) |CurrentType| {
+        const typed_ptr = @as(if (@typeInfo(ValueType) == .optional) ?*CurrentType else *CurrentType, @ptrCast(@alignCast(current_ptr)));
+
+        // Handle null optionals
+        if (@typeInfo(ValueType) == .optional and typed_ptr == null) {
+            return null;
+        }
+
+        // Found our target type - return the properly typed pointer
+        if (comptime CurrentType == T) {
+            return typed_ptr;
+        }
+
+        // Move to the next level up in the hierarchy
+        switch (@typeInfo(CurrentType)) {
+            .@"struct" => {
+                const base_field = @field(typed_ptr, "base");
+                current_ptr = if (@typeInfo(@TypeOf(base_field)) == .pointer)
+                    @ptrCast(base_field) // base is already a pointer
+                else
+                    @ptrCast(&base_field); // base is a value, take its address
+            },
+            .@"opaque" => {
+                // Opaque types don't change pointer location
+                current_ptr = @ptrCast(current_ptr);
+            },
+            else => unreachable,
         }
     }
+
+    unreachable;
 }
 
-pub fn downcast(comptime T: type, value: anytype) !T {
+pub fn downcast(comptime T: type, value: anytype) !*T {
     // Compile time type check (can't cast an Animal to a Motorcycle)
-    assertIs(@TypeOf(value), T);
+    assertIs(Child(@TypeOf(value)), T);
 
     // Runtime cast
     const name = getNamePtr(T);
     const tag = godot.interface.classdbGetClassTag(@ptrCast(name));
-    const result = godot.interface.objectCastTo(asObjectPtr(value), tag);
+    const result = godot.interface.objectCastTo(@ptrCast(asObject(value)), tag);
 
     return if (result) |ptr|
-        return @bitCast(Object{ .ptr = ptr })
+        return @ptrCast(ptr)
     else
         return error.InvalidCast;
 }
@@ -116,12 +158,8 @@ pub fn isRefCounted(comptime T: type) bool {
     return isA(RefCounted, T);
 }
 
-pub fn asObject(value: anytype) Object {
+pub fn asObject(value: anytype) *Object {
     return upcast(Object, value);
-}
-
-pub fn asObjectPtr(value: anytype) *anyopaque {
-    return upcast(Object, value).ptr;
 }
 
 pub fn asRefCounted(value: anytype) RefCounted {
@@ -141,10 +179,10 @@ pub fn isVariantLike(comptime T: type) bool {
     return isAny(.{godot.builtin.Variant}, T);
 }
 
-pub fn Deref(comptime T: type) type {
-    return switch (@typeInfo(T)) {
-        .pointer => |p| Deref(p.child),
-        .optional => |p| Deref(p.child),
+pub fn Child(comptime T: type) type {
+    return deref: switch (@typeInfo(T)) {
+        .optional => |info| continue :deref @typeInfo(info.child),
+        .pointer => |info| info.child,
         else => T,
     };
 }
@@ -241,28 +279,24 @@ const tests = struct {
         try testing.expect(comptime isA(Object, *Node));
         try testing.expect(comptime isA(Object, *const Node));
 
-        try testing.expect(comptime isA(Object, ?Node));
         try testing.expect(comptime isA(Object, ?*Node));
         try testing.expect(comptime isA(Object, ?*const Node));
 
         try testing.expect(comptime isA(Object, *RefCounted));
         try testing.expect(comptime isA(Object, *const RefCounted));
 
-        try testing.expect(comptime isA(Object, ?RefCounted));
         try testing.expect(comptime isA(Object, ?*RefCounted));
         try testing.expect(comptime isA(Object, ?*const RefCounted));
 
         try testing.expect(comptime isA(Node, *Node3D));
         try testing.expect(comptime isA(Node, *const Node3D));
 
-        try testing.expect(comptime isA(Node, ?Node3D));
         try testing.expect(comptime isA(Node, ?*Node3D));
         try testing.expect(comptime isA(Node, ?*const Node3D));
 
         try testing.expect(comptime isA(RefCounted, *Resource));
         try testing.expect(comptime isA(RefCounted, *const Resource));
 
-        try testing.expect(comptime isA(RefCounted, ?Resource));
         try testing.expect(comptime isA(RefCounted, ?*Resource));
         try testing.expect(comptime isA(RefCounted, ?*const Resource));
     }
@@ -277,11 +311,11 @@ const tests = struct {
     }
 
     test "upcast" {
-        const object = Object{ .ptr = @ptrCast(@constCast(&.{})) };
-        const node = Node{ .base = object };
-        const node3D = Node3D{ .base = node };
-        const ref_counted = RefCounted{ .base = object };
-        const resource = Resource{ .base = ref_counted };
+        const object: *Object = @ptrFromInt(0xAAAAAAAAAAAAAAAA);
+        const node: *Node = @ptrFromInt(0xAAAAAAAAAAAAAAAA);
+        const node3D: *Node3D = @ptrFromInt(0xAAAAAAAAAAAAAAAA);
+        const ref_counted: *RefCounted = @ptrFromInt(0xAAAAAAAAAAAAAAAA);
+        const resource: *Resource = @ptrFromInt(0xAAAAAAAAAAAAAAAA);
 
         try testing.expectEqual(object, upcast(Object, object));
         try testing.expectEqual(object, upcast(Object, node));

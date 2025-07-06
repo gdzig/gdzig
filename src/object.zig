@@ -1,29 +1,63 @@
+const std = @import("std");
+
+const godot = @import("gdzig.zig");
+const c = godot.c;
+const Callable = godot.builtin.Callable;
+const debug = godot.debug;
+const meta = godot.meta;
+const Object = godot.class.Object;
+const PropertyHint = godot.global.PropertyHint;
+const PropertyUsageFlags = godot.global.PropertyUsageFlags;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+
+fn assertCanInitialize(comptime T: type) void {
+    comptime {
+        if (@hasDecl(T, "init")) return;
+        for (@typeInfo(T).@"struct".fields) |field| {
+            if (std.mem.eql(u8, "base", field.name)) continue;
+            if (field.default_value_ptr == null) {
+                @compileError("The type '" ++ meta.getTypeShortName(T) ++ "' should either have an 'fn init(base: *" ++ meta.getTypeShortName(meta.BaseOf(T)) ++ ") " ++ meta.getTypeShortName(T) ++ "' function, or a default value for the field '" ++ field.name ++ "', but it has neither.");
+            }
+        }
+    }
+}
+
 /// Create a Godot object.
 pub fn create(comptime T: type) !*T {
-    // TODO: I don't think this class can handle nested user types (MyType { base: Node } and MyTypeSubtype { base: MyType })
-    debug.assertIsObject(T);
+    comptime debug.assertIsObject(T);
 
-    const class_name = meta.getNamePtr(T);
-    const base_name = meta.getNamePtr(meta.BaseOf(T));
-
-    // TODO: shouldn't we use Godot's allocator? can this be done without a double allocation?
-    const ptr = godot.interface.classdbConstructObject2(@ptrCast(base_name)).?;
-    const self = try godot.heap.general_allocator.create(T);
-
-    // Store the pointer on base type
-    if (T == godot.class.Object) {
-        self.ptr = ptr;
-    } else {
-        self.base = @bitCast(godot.class.Object{ .ptr = ptr });
+    // If this is an engine type, just return it.
+    if (comptime @typeInfo(T) == .@"opaque") {
+        return @ptrCast(godot.interface.classdbConstructObject2(@ptrCast(meta.getNamePtr(T))).?);
     }
 
-    godot.interface.objectSetInstance(ptr, @ptrCast(class_name), @ptrCast(self));
-    godot.interface.objectSetInstanceBinding(ptr, godot.interface.library, @ptrCast(self), @ptrCast(&dummy_callbacks));
+    // Assert that we can initialize the user type
+    comptime {
+        if (!@hasDecl(T, "init")) {
+            for (@typeInfo(T).@"struct".fields) |field| {
+                if (std.mem.eql(u8, "base", field.name)) continue;
+                if (field.default_value_ptr == null) {
+                    @compileError("The type '" ++ meta.getTypeShortName(T) ++ "' should either have an 'fn init(base: *" ++ meta.getTypeShortName(meta.BaseOf(T)) ++ ") " ++ meta.getTypeShortName(T) ++ "' function, or a default value for the field '" ++ field.name ++ "', but it has neither.");
+                }
+            }
+        }
+    }
 
-    // TODO: doesn't Godot call `_init`? shouldn't we let `init` call `heap.create()`?
-    //       Proper hierarchy of control is not clear here
+    // Construct the base object
+    const base_name = meta.getNamePtr(meta.BaseOf(T));
+    const base: *meta.BaseOf(T) = @ptrCast(godot.interface.classdbConstructObject2(@ptrCast(base_name)).?);
+
+    // Allocate the user object, and link it to the base object
+    const class_name = meta.getNamePtr(T);
+    const self: *T = try godot.heap.general_allocator.create(T);
+    godot.interface.objectSetInstance(@ptrCast(base), @ptrCast(class_name), @ptrCast(self));
+
+    // Initialize the user object
     if (@hasDecl(T, "init")) {
-        self.init();
+        self.* = T.init(base);
+    } else {
+        self.* = .{ .base = base };
     }
 
     return self;
@@ -40,7 +74,7 @@ pub fn recreate(comptime T: type, ptr: ?*anyopaque) !*T {
 pub fn destroy(instance: anytype) void {
     debug.assertIsObject(@TypeOf(instance));
 
-    const ptr = meta.asObjectPtr(instance);
+    const ptr: *anyopaque = @ptrCast(meta.asObject(instance));
     godot.interface.objectFreeInstanceBinding(ptr, godot.interface.library);
     godot.interface.objectDestroy(ptr);
 }
@@ -48,7 +82,7 @@ pub fn destroy(instance: anytype) void {
 /// Unreference a Godot object.
 pub fn unreference(instance: anytype) void {
     if (meta.asRefCounted(instance).unreference()) {
-        godot.interface.objectDestroy(meta.asObjectPtr(instance));
+        godot.interface.objectDestroy(@ptrCast(meta.asObject(instance)));
     }
 }
 
@@ -58,7 +92,7 @@ pub fn connect(obj: anytype, comptime signal_name: [:0]const u8, instance: anyty
     }
     // TODO: I think this is a memory leak??
     godot.register.registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = Callable.initObjectMethod(.{ .ptr = meta.asObjectPtr(instance) }, .fromComptimeLatin1(method_name));
+    const callable = Callable.initObjectMethod(@ptrCast(meta.asObject(instance)), .fromComptimeLatin1(method_name));
     _ = obj.connect(.fromComptimeLatin1(signal_name), callable, .{});
 }
 
@@ -102,16 +136,3 @@ fn instanceBindingFreeCallback(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque) c
 fn instanceBindingReferenceCallback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExtensionBool) callconv(.C) c.GDExtensionBool {
     return 1;
 }
-
-const std = @import("std");
-
-const godot = @import("gdzig.zig");
-const c = godot.c;
-const Callable = godot.builtin.Callable;
-const debug = godot.debug;
-const meta = godot.meta;
-const Object = godot.class.Object;
-const PropertyHint = godot.global.PropertyHint;
-const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;

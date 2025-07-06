@@ -1,6 +1,6 @@
 const Self = @This();
 
-base: Control,
+base: *Control,
 rng: std.Random = undefined,
 sprites: std.ArrayList(Sprite) = undefined,
 
@@ -8,7 +8,7 @@ const Sprite = struct {
     pos: Vector2,
     vel: Vector2,
     scale: Vector2,
-    gd_sprite: Sprite2D,
+    gd_sprite: *Sprite2D,
 };
 
 pub fn newSpritesNode() *Self {
