@@ -29,7 +29,8 @@ pub fn main() !void {
 
     // Generate the code
     const codegen_start = std.time.nanoTimestamp();
-    try codegen.generate(&ctx);
+    const codegen: Codegen = .init(&ctx);
+    try codegen.generate();
     const codegen_time = std.time.nanoTimestamp() - codegen_start;
 
     // Format the code
@@ -58,7 +59,7 @@ pub fn main() !void {
 
 const std = @import("std");
 
-const codegen = @import("codegen.zig");
+const Codegen = @import("Codegen.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("GodotApi.zig");

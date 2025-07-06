@@ -210,6 +210,29 @@ pub const Type = union(enum) {
             },
         };
     }
+
+    pub fn getName(self: Type) ?[]const u8 {
+        return switch (self) {
+            inline .basic, .class, .@"enum", .flag => |name| name,
+            .@"union" => |types| {
+                if (types.len == 0) return "void";
+                if (types.len == 1) return types[0].getName();
+                return "union";
+            },
+            .array => |array| {
+                if (array) |arr| {
+                    return arr.getName();
+                }
+                return null;
+            },
+            .void => "void",
+            .string => "String",
+            .node_path => "NodePath",
+            .string_name => "StringName",
+            .variant => "Variant",
+            .pointer => |t| t.getName(),
+        };
+    }
 };
 
 const std = @import("std");

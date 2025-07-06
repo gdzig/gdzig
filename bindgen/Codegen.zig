@@ -1,12 +1,22 @@
-pub fn generate(ctx: *Context) !void {
-    try writeBuiltins(ctx);
-    try writeClasses(ctx);
-    try writeGlobals(ctx);
-    try writeInterface(ctx);
-    try writeModules(ctx);
+const Codegen = @This();
+
+ctx: *const Context,
+
+pub fn init(ctx: *const Context) Codegen {
+    return Codegen{ .ctx = ctx };
 }
 
-fn writeBuiltins(ctx: *const Context) !void {
+pub fn generate(self: Codegen) !void {
+    try self.writeBuiltins();
+    try self.writeClasses();
+    try self.writeGlobals();
+    try self.writeInterfaces();
+    try self.writeModules();
+}
+
+fn writeBuiltins(self: Codegen) !void {
+    const ctx = self.ctx;
+
     // builtin.zig
     {
         const file = try ctx.config.output.createFile("builtin.zig", .{});
@@ -39,13 +49,15 @@ fn writeBuiltins(ctx: *const Context) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeBuiltin(&writer, builtin, ctx);
+        try self.writeBuiltin(&writer, builtin);
 
         try buf.flush();
     }
 }
 
-fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context) !void {
+fn writeBuiltin(self: Codegen, w: *Writer, builtin: *const Context.Builtin) !void {
+    const ctx = self.ctx;
+
     try writeDocBlock(w, builtin.doc);
 
     // Declaration start
@@ -283,7 +295,9 @@ fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const C
     try writeFunctionFooter(w, operator);
 }
 
-fn writeClasses(ctx: *const Context) !void {
+fn writeClasses(self: Codegen) !void {
+    const ctx = self.ctx;
+
     // class.zig
     {
         const file = try ctx.config.output.createFile("class.zig", .{});
@@ -580,7 +594,9 @@ fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
     }
 }
 
-fn writeGlobals(ctx: *const Context) !void {
+fn writeGlobals(self: Codegen) !void {
+    const ctx = self.ctx;
+
     // global.zig
     {
         const file = try ctx.config.output.createFile("global.zig", .{});
@@ -827,12 +843,43 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
                 if (function.can_init_directly) {
                     try w.writeLine(" = undefined;");
                 } else {
-                    try w.writeAll(" = std.mem.zeroes(");
-                    try writeTypeAtReturn(w, &function.return_type);
-                    try w.writeLine(");");
+                    try writeTypeInit(w, &function.return_type, function);
                 }
             }
         }
+    }
+}
+
+fn writeTypeInit(w: *Writer, @"type": *const Context.Type, function: *const Context.Function) !void {
+    switch (@"type".*) {
+        inline .class, .basic => {
+            const type_name = @"type".getName().?;
+
+            const return_type_same_as_parent = blk: {
+                if (function.base) |base| {
+                    break :blk std.mem.eql(u8, base, type_name);
+                }
+
+                break :blk false;
+            };
+
+            const is_init_function = std.mem.eql(u8, function.name, "init");
+            const can_call_init = !std.zig.isPrimitive(type_name) and !(is_init_function and return_type_same_as_parent);
+
+            // this assumes that an init function exists on the parent type
+            if (can_call_init) {
+                try w.writeLine(" = .init();");
+            } else {
+                try w.writeAll(" = std.mem.zeroes(");
+                try writeTypeAtReturn(w, @"type");
+                try w.writeLine(");");
+            }
+        },
+        else => {
+            try w.writeAll(" = std.mem.zeroes(");
+            try writeTypeAtReturn(w, @"type");
+            try w.writeLine(");");
+        },
     }
 }
 
@@ -901,7 +948,9 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
     }
 }
 
-fn writeInterface(ctx: *Context) !void {
+fn writeInterfaces(self: Codegen) !void {
+    const ctx = self.ctx;
+
     const file = try ctx.config.output.createFile("Interface.zig", .{});
     defer file.close();
 
@@ -989,7 +1038,9 @@ fn writeInterface(ctx: *Context) !void {
     try file.sync();
 }
 
-fn writeModules(ctx: *const Context) !void {
+fn writeModules(self: Codegen) !void {
+    const ctx = self.ctx;
+
     for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
         defer ctx.rawAllocator().free(filename);

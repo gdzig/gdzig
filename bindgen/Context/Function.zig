@@ -180,6 +180,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     }
 
     self.return_type = try .from(allocator, builtin_name, false, ctx);
+    self.base = builtin_name;
 
     return self;
 }
@@ -201,6 +202,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
     else
         .{ .mutable = builtin_name };
     self.is_vararg = api.is_vararg;
+    self.base = builtin_name;
 
     for (api.arguments orelse &.{}) |arg| {
         const parameter: Parameter = if (arg.default_value.len > 0)
