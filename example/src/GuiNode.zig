@@ -1,7 +1,21 @@
+const std = @import("std");
+
+const godot = @import("gdzig");
+const Button = godot.class.Button;
+const CheckBox = godot.class.CheckBox;
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const Node = godot.class.Node;
+const ResourceLoader = godot.class.ResourceLoader;
+const Sprite2D = godot.class.Sprite2D;
+const String = godot.builtin.String;
+const Texture2D = godot.class.Texture2D;
+const Vector2 = godot.builtin.Vector2;
+
 const Self = @This();
 
-base: Control,
-sprite: Sprite2D,
+base: *Control,
+sprite: *Sprite2D,
 
 pub fn _enterTree(self: *Self) void {
     if (Engine.isEditorHint()) return;
@@ -44,16 +58,3 @@ pub fn onToggled(self: *Self, toggled_on: bool) void {
     _ = self;
     std.debug.print("on_toggled {any}\n", .{toggled_on});
 }
-
-const std = @import("std");
-const godot = @import("gdzig");
-const Button = godot.class.Button;
-const CheckBox = godot.class.CheckBox;
-const Control = godot.class.Control;
-const Engine = godot.class.Engine;
-const Node = godot.class.Node;
-const ResourceLoader = godot.class.ResourceLoader;
-const Sprite2D = godot.class.Sprite2D;
-const String = godot.builtin.String;
-const Texture2D = godot.class.Texture2D;
-const Vector2 = godot.builtin.Vector2;

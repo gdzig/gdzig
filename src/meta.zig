@@ -1,17 +1,39 @@
+const std = @import("std");
+const fmt = std.fmt;
+const Tuple = std.meta.Tuple;
+
+const godot = @import("gdzig.zig");
+const assertIs = godot.debug.assertIs;
+const Object = godot.class.Object;
+const RefCounted = godot.class.RefCounted;
+const StringName = godot.builtin.StringName;
+
 /// Returns the base type of T.
 pub fn BaseOf(comptime T: type) type {
-    if (comptime !@hasField(T, "base")) {
-        const message = fmt.comptimePrint("expected a Godot class, found '{0s}'. did you remember to add the 'base' struct field?", @typeName(T));
-        @compileError(message);
+    switch (@typeInfo(T)) {
+        .@"struct" => {
+            if (comptime !@hasField(T, "base")) {
+                const message = fmt.comptimePrint("expected a Godot class, found '{0s}'. did you remember to add the 'base' struct field?", @typeName(T));
+                @compileError(message);
+            }
+            return @FieldType(T, "base");
+        },
+        .@"opaque" => {
+            return T.Base;
+        },
+        else => @compileError("expected a Godot class, found a " ++ @tagName(@typeInfo(T))),
     }
-    return @FieldType(T, "base");
+}
+
+pub fn isGodotType(comptime T: type) bool {
+    return (@typeInfo(T) == .@"struct" and @hasField(T, "base")) or (@typeInfo(T) == .@"opaque" and @hasDecl(T, "Base"));
 }
 
 /// Returns how many levels of inheritance T has.
 pub fn depthOf(comptime T: type) comptime_int {
     comptime var i = 0;
     comptime var Cur = T;
-    inline while (@hasField(Cur, "base")) : (i += 1) {
+    inline while (isGodotType(Cur)) : (i += 1) {
         Cur = BaseOf(Cur);
     }
     return i;
@@ -65,9 +87,9 @@ pub fn isAny(comptime types: anytype, comptime U: type) bool {
     return false;
 }
 
-pub fn upcast(comptime T: type, value: anytype) T {
+pub fn upcast(comptime T: type, value: anytype) *T {
     const Dereffed = Deref(@TypeOf(value));
-    if (comptime Dereffed == T) {
+    if (comptime Dereffed == *T) {
         return value;
     }
     assertIs(T, Dereffed);
@@ -85,7 +107,7 @@ pub fn upcast(comptime T: type, value: anytype) T {
     }
 }
 
-pub fn downcast(comptime T: type, value: anytype) !T {
+pub fn downcast(comptime T: type, value: anytype) !*T {
     // Compile time type check (can't cast an Animal to a Motorcycle)
     assertIs(@TypeOf(value), T);
 
@@ -165,16 +187,6 @@ pub fn getNamePtr(comptime T: type) *StringName {
     };
     return &Static.name;
 }
-
-const std = @import("std");
-const fmt = std.fmt;
-const Tuple = std.meta.Tuple;
-
-const godot = @import("gdzig.zig");
-const assertIs = godot.debug.assertIs;
-const Object = godot.class.Object;
-const RefCounted = godot.class.RefCounted;
-const StringName = godot.builtin.StringName;
 
 const tests = struct {
     const testing = std.testing;

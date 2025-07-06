@@ -1,6 +1,17 @@
+const std = @import("std");
+
+const godot = @import("gdzig");
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const Node = godot.class.Node;
+const ResourceLoader = godot.class.ResourceLoader;
+const Sprite2D = godot.class.Sprite2D;
+const Texture2D = godot.class.Texture2D;
+const Vector2 = godot.builtin.Vector2;
+
 const Self = @This();
 
-base: Control,
+base: *Control,
 rng: std.Random = undefined,
 sprites: std.ArrayList(Sprite) = undefined,
 
@@ -74,13 +85,3 @@ pub fn _physicsProcess(self: *Self, delta: f64) void {
         spr.gd_sprite.setPosition(spr.pos);
     }
 }
-
-const std = @import("std");
-const godot = @import("gdzig");
-const Control = godot.class.Control;
-const Engine = godot.class.Engine;
-const Node = godot.class.Node;
-const ResourceLoader = godot.class.ResourceLoader;
-const Sprite2D = godot.class.Sprite2D;
-const Texture2D = godot.class.Texture2D;
-const Vector2 = godot.builtin.Vector2;

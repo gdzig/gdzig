@@ -1,3 +1,16 @@
+const std = @import("std");
+
+const godot = @import("gdzig.zig");
+const c = godot.c;
+const Callable = godot.builtin.Callable;
+const debug = godot.debug;
+const meta = godot.meta;
+const Object = godot.class.Object;
+const PropertyHint = godot.global.PropertyHint;
+const PropertyUsageFlags = godot.global.PropertyUsageFlags;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+
 /// Create a Godot object.
 pub fn create(comptime T: type) !*T {
     // TODO: I don't think this class can handle nested user types (MyType { base: Node } and MyTypeSubtype { base: MyType })
@@ -8,14 +21,7 @@ pub fn create(comptime T: type) !*T {
 
     // TODO: shouldn't we use Godot's allocator? can this be done without a double allocation?
     const ptr = godot.interface.classdbConstructObject2(@ptrCast(base_name)).?;
-    const self = try godot.heap.general_allocator.create(T);
-
-    // Store the pointer on base type
-    if (T == godot.class.Object) {
-        self.ptr = ptr;
-    } else {
-        self.base = @bitCast(godot.class.Object{ .ptr = ptr });
-    }
+    const self: *T = @ptrCast(try godot.heap.general_allocator.create(T));
 
     godot.interface.objectSetInstance(ptr, @ptrCast(class_name), @ptrCast(self));
     godot.interface.objectSetInstanceBinding(ptr, godot.interface.library, @ptrCast(self), @ptrCast(&dummy_callbacks));
@@ -102,16 +108,3 @@ fn instanceBindingFreeCallback(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque) c
 fn instanceBindingReferenceCallback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExtensionBool) callconv(.C) c.GDExtensionBool {
     return 1;
 }
-
-const std = @import("std");
-
-const godot = @import("gdzig.zig");
-const c = godot.c;
-const Callable = godot.builtin.Callable;
-const debug = godot.debug;
-const meta = godot.meta;
-const Object = godot.class.Object;
-const PropertyHint = godot.global.PropertyHint;
-const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;

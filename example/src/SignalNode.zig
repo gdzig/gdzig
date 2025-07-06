@@ -1,7 +1,22 @@
+const std = @import("std");
+
+const godot = @import("gdzig");
+const Button = godot.class.Button;
+const Color = godot.builtin.Color;
+const ColorRect = godot.class.ColorRect;
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const Node = godot.class.Node;
+const PropertyInfo = godot.object.PropertyInfo;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+const Vector2 = godot.builtin.Vector2;
+const Vector3 = godot.builtin.Vector3;
+
 const Self = @This();
 
-base: Control, //this makes @Self a valid gdextension class
-color_rect: ColorRect = undefined,
+base: *Control, //this makes @Self a valid gdextension class
+color_rect: *ColorRect = undefined,
 
 pub fn _bindMethods() void {
     godot.registerSignal(Self, "signal1", &[_]PropertyInfo{
@@ -76,17 +91,3 @@ pub fn emitSignal2(self: *Self) void {
 pub fn emitSignal3(self: *Self) void {
     _ = self.base.emitSignal(.fromComptimeLatin1("signal3"), .{});
 }
-
-const std = @import("std");
-const godot = @import("gdzig");
-const Button = godot.class.Button;
-const Color = godot.builtin.Color;
-const ColorRect = godot.class.ColorRect;
-const Control = godot.class.Control;
-const Engine = godot.class.Engine;
-const Node = godot.class.Node;
-const PropertyInfo = godot.object.PropertyInfo;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
-const Vector2 = godot.builtin.Vector2;
-const Vector3 = godot.builtin.Vector3;

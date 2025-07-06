@@ -9,7 +9,7 @@
         },
         .godot_cpp = .{
             .url = "https://github.com/godotengine/godot-cpp/archive/refs/heads/4.4.tar.gz",
-            .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
+            .hash = "N-V-__8AAF1xewAGur2pXH-rm8f-x1O-LSbVfrcrmBoxFYt9",
         },
         .mvzr = .{
             .url = "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.4.tar.gz",
