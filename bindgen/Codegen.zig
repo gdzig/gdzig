@@ -1,4 +1,5 @@
 const Codegen = @This();
+const logger = std.log.scoped(.codegen);
 
 ctx: *const Context,
 
@@ -870,6 +871,10 @@ fn writeTypeInit(w: *Writer, @"type": *const Context.Type, function: *const Cont
             if (can_call_init) {
                 try w.writeLine(" = .init();");
             } else {
+                if (!std.zig.isPrimitive(@"type".getName().?)) {
+                    logger.warn("Zero initialization for type '{s}'", .{@"type"});
+                }
+
                 try w.writeAll(" = std.mem.zeroes(");
                 try writeTypeAtReturn(w, @"type");
                 try w.writeLine(");");
