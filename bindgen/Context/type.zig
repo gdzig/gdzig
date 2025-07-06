@@ -214,11 +214,7 @@ pub const Type = union(enum) {
     pub fn getName(self: Type) ?[]const u8 {
         return switch (self) {
             inline .basic, .class, .@"enum", .flag => |name| name,
-            .@"union" => |types| {
-                if (types.len == 0) return "void";
-                if (types.len == 1) return types[0].getName();
-                return "union";
-            },
+            .@"union" => std.debug.panic("Can't get name for union type", .{}),
             .array => |array| {
                 if (array) |arr| {
                     return arr.getName();
