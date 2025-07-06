@@ -58,8 +58,9 @@ fn writeBuiltins(self: Codegen) !void {
 
 fn writeBuiltin(self: Codegen, w: *Writer, builtin: *const Context.Builtin) !void {
     const ctx = self.ctx;
+    _ = ctx; // autofix
 
-    try writeDocBlock(w, builtin.doc);
+    try self.writeDocBlock(w, builtin.doc);
 
     // Declaration start
     try w.printLine(
@@ -96,14 +97,14 @@ fn writeBuiltin(self: Codegen, w: *Writer, builtin: *const Context.Builtin) !voi
     } else if (builtin.fields.count() > 0) {
         for (builtin.fields.values()) |*field| {
             if (field.offset != null) {
-                try writeField(w, field);
+                try self.writeField(w, field);
             }
         }
     }
 
     // Constants
     for (builtin.constants.values()) |*constant| {
-        try writeConstant(w, constant);
+        try self.writeConstant(w, constant);
     }
     if (builtin.constants.count() > 0) {
         try w.writeLine("");
@@ -170,31 +171,31 @@ fn writeBuiltin(self: Codegen, w: *Writer, builtin: *const Context.Builtin) !voi
 
     // Constructors
     for (builtin.constructors.items) |*constructor| {
-        try writeBuiltinConstructor(w, builtin.name, constructor);
+        try self.writeBuiltinConstructor(w, builtin.name, constructor);
         try w.writeLine("");
     }
 
     // Destructor
     if (builtin.has_destructor) {
-        try writeBuiltinDestructor(w, builtin);
+        try self.writeBuiltinDestructor(w, builtin);
         try w.writeLine("");
     }
 
     // Methods
     for (builtin.methods.values()) |*method| {
-        try writeBuiltinMethod(w, builtin.name, method);
+        try self.writeBuiltinMethod(w, builtin.name, method);
         try w.writeLine("");
     }
 
     // Operators
     for (builtin.operators.items) |*operator| {
-        try writeBuiltinOperator(w, builtin.name, operator);
+        try self.writeBuiltinOperator(w, builtin.name, operator);
         try w.writeLine("");
     }
 
     // Enums
     for (builtin.enums.values()) |*@"enum"| {
-        try writeEnum(w, @"enum");
+        try self.writeEnum(w, @"enum");
         try w.writeLine("");
     }
 
@@ -203,11 +204,11 @@ fn writeBuiltin(self: Codegen, w: *Writer, builtin: *const Context.Builtin) !voi
     try w.writeLine("};");
 
     // Imports
-    try writeImports(w, "..", &builtin.imports, ctx);
+    try self.writeImports(w, "..", &builtin.imports);
 }
 
-fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *const Context.Function) !void {
-    try writeFunctionHeader(w, constructor);
+fn writeBuiltinConstructor(self: Codegen, w: *Writer, builtin_name: []const u8, constructor: *const Context.Function) !void {
+    try self.writeFunctionHeader(w, constructor);
     if (constructor.can_init_directly) {
         for (constructor.parameters.values()) |param| {
             try w.printLine(
@@ -229,10 +230,11 @@ fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *c
             constructor.index.?,
         });
     }
-    try writeFunctionFooter(w, constructor);
+    try self.writeFunctionFooter(w, constructor);
 }
 
-fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
+fn writeBuiltinDestructor(self: Codegen, w: *Writer, builtin: *const Context.Builtin) !void {
+    _ = self; // autofix
     try w.printLine(
         \\pub fn deinit(self: *{0s}) void {{
         \\    const method = godot.support.bindDestructor({0s});
@@ -244,8 +246,8 @@ fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
     });
 }
 
-fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Context.Function) !void {
-    try writeFunctionHeader(w, method);
+fn writeBuiltinMethod(self: Codegen, w: *Writer, builtin_name: []const u8, method: *const Context.Function) !void {
+    try self.writeFunctionHeader(w, method);
     try w.printLine(
         \\const method = godot.support.bindBuiltinMethod({s}, "{s}", {d});
         \\method({s}, @ptrCast(&args), @ptrCast(&result), args.len);
@@ -261,18 +263,18 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
             .value => "@ptrCast(@constCast(&self))",
         },
     });
-    try writeFunctionFooter(w, method);
+    try self.writeFunctionFooter(w, method);
 }
 
-fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const Context.Function) !void {
-    try writeFunctionHeader(w, operator);
+fn writeBuiltinOperator(self: Codegen, w: *Writer, builtin_name: []const u8, operator: *const Context.Function) !void {
+    try self.writeFunctionHeader(w, operator);
 
     // Lookup the method
     try w.print("const op = godot.support.bindVariantOperator(.{s}, .forType({s}), ", .{ operator.operator_name.?, builtin_name });
     w.indent += 1;
     if (operator.parameters.getPtr("rhs")) |rhs| {
         try w.writeAll(".forType(");
-        try writeTypeAtField(w, &rhs.type);
+        try self.writeTypeAtField(w, &rhs.type);
         try w.writeAll(")");
     } else {
         try w.writeAll("null");
@@ -293,7 +295,7 @@ fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const C
     w.indent -= 1;
     try w.writeLine(");");
 
-    try writeFunctionFooter(w, operator);
+    try self.writeFunctionFooter(w, operator);
 }
 
 fn writeClasses(self: Codegen) !void {
@@ -328,14 +330,14 @@ fn writeClasses(self: Codegen) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeClass(&writer, class, ctx);
+        try self.writeClass(&writer, class);
 
         try buf.flush();
     }
 }
 
-fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
-    try writeDocBlock(w, class.doc);
+fn writeClass(self: Codegen, w: *Writer, class: *const Context.Class) !void {
+    try self.writeDocBlock(w, class.doc);
 
     // Declaration start
     try w.printLine(
@@ -366,7 +368,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
 
     // Constants
     for (class.constants.values()) |*constant| {
-        try writeConstant(w, constant);
+        try self.writeConstant(w, constant);
     }
     if (class.constants.count() > 0) {
         try w.writeLine("");
@@ -407,7 +409,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     // Functions
     for (class.functions.values()) |*function| {
         if (function.mode != .final) continue;
-        try writeClassFunction(w, class, function, ctx);
+        try self.writeClassFunction(w, class, function);
         try w.writeLine("");
     }
 
@@ -441,18 +443,18 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     });
 
     // Virtual dispatch
-    try writeClassVirtualDispatch(w, class, ctx);
+    try self.writeClassVirtualDispatch(w, class);
     try w.writeLine("");
 
     // Enums
     for (class.enums.values()) |*@"enum"| {
-        try writeEnum(w, @"enum");
+        try self.writeEnum(w, @"enum");
         try w.writeLine("");
     }
 
     // Flags
     for (class.flags.values()) |*flag| {
-        try writeFlag(w, flag);
+        try self.writeFlag(w, flag);
         try w.writeLine("");
     }
 
@@ -461,11 +463,11 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     try w.writeLine("};");
 
     // Imports
-    try writeImports(w, "..", &class.imports, ctx);
+    try self.writeImports(w, "..", &class.imports);
 }
 
-fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, function);
+fn writeClassFunction(self: Codegen, w: *Writer, class: *const Context.Class, function: *const Context.Function) !void {
+    try self.writeFunctionHeader(w, function);
 
     if (class.is_singleton) {
         if (class.base) |_| {
@@ -499,7 +501,7 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
 
     if (function.is_vararg) {
         try w.writeAll("godot.interface.objectMethodBindCall(method, ");
-        try writeClassFunctionObjectPtr(w, class, function, ctx);
+        try self.writeClassFunctionObjectPtr(w, class, function);
         try w.printLine(", @ptrCast(@alignCast(&args[0])), args.len, {s}, &err);", .{
             if (function.return_type != .void)
                 "@ptrCast(&result)"
@@ -508,7 +510,7 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
         });
     } else {
         try w.writeAll("godot.interface.objectMethodBindPtrcall(method, ");
-        try writeClassFunctionObjectPtr(w, class, function, ctx);
+        try self.writeClassFunctionObjectPtr(w, class, function);
         try w.printLine(", @ptrCast(&args), {s});", .{
             if (function.return_type != .void)
                 "@ptrCast(&result)"
@@ -517,13 +519,13 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
         });
     }
 
-    try writeFunctionFooter(w, function);
+    try self.writeFunctionFooter(w, function);
 }
 
-fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+fn writeClassFunctionObjectPtr(self: Codegen, w: *Writer, class: *const Context.Class, function: *const Context.Function) !void {
     if (function.self == .static) {
         try w.writeAll("null");
-    } else if (class.getNearestSingleton(ctx)) |singleton| {
+    } else if (class.getNearestSingleton(self.ctx)) |singleton| {
         if (class.is_singleton) {
             try w.writeAll("@as(Object, @bitCast(instance.?)).ptr");
         } else {
@@ -536,7 +538,7 @@ fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function
     }
 }
 
-fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
+fn writeClassVirtualDispatch(self: Codegen, w: *Writer, class: *const Context.Class) !void {
     try w.writeLine(
         \\pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: godot.c.GDExtensionConstStringNamePtr) godot.c.GDExtensionClassCallVirtual {
     );
@@ -544,7 +546,7 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
 
     // Inherited virtual/abstract functions
     var cur: ?*const Context.Class = class;
-    while (cur) |base| : (cur = base.getBasePtr(ctx)) {
+    while (cur) |base| : (cur = base.getBasePtr(self.ctx)) {
         for (base.functions.values()) |*function| {
             if (function.mode == .final) continue;
             try w.printLine(
@@ -580,14 +582,15 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
     );
 }
 
-fn writeConstant(w: *Writer, constant: *const Context.Constant) !void {
-    try writeDocBlock(w, constant.doc);
+fn writeConstant(self: Codegen, w: *Writer, constant: *const Context.Constant) !void {
+    try self.writeDocBlock(w, constant.doc);
     try w.print("pub const {s}: ", .{constant.name});
-    try writeTypeAtField(w, &constant.type);
+    try self.writeTypeAtField(w, &constant.type);
     try w.printLine(" = {s};", .{constant.value});
 }
 
-fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
+fn writeDocBlock(self: Codegen, w: *Writer, docs: ?[]const u8) !void {
+    _ = self; // autofix
     if (docs) |d| {
         w.comment = .doc;
         try w.writeLine(d);
@@ -635,7 +638,7 @@ fn writeGlobals(self: Codegen) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeEnum(&writer, @"enum");
+        try self.writeEnum(&writer, @"enum");
 
         try buf.flush();
     }
@@ -650,37 +653,37 @@ fn writeGlobals(self: Codegen) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeFlag(&writer, flag);
+        try self.writeFlag(&writer, flag);
 
         try buf.flush();
     }
 }
 
-fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
-    try writeDocBlock(w, @"enum".doc);
+fn writeEnum(self: Codegen, w: *Writer, @"enum": *const Context.Enum) !void {
+    try self.writeDocBlock(w, @"enum".doc);
     try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
     var values = @"enum".values.valueIterator();
     while (values.next()) |value| {
-        try writeDocBlock(w, value.doc);
+        try self.writeDocBlock(w, value.doc);
         try w.printLine("{s} = {d},", .{ value.name, value.value });
     }
     w.indent -= 1;
     try w.writeLine("};");
 }
 
-fn writeField(w: *Writer, field: *const Context.Field) !void {
-    try writeDocBlock(w, field.doc);
+fn writeField(self: Codegen, w: *Writer, field: *const Context.Field) !void {
+    try self.writeDocBlock(w, field.doc);
     try w.print("{s}: ", .{field.name});
-    try writeTypeAtField(w, &field.type);
+    try self.writeTypeAtField(w, &field.type);
     try w.writeLine(
         \\,
         \\
     );
 }
 
-fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
-    try writeDocBlock(w, flag.doc);
+fn writeFlag(self: Codegen, w: *Writer, flag: *const Context.Flag) !void {
+    try self.writeDocBlock(w, flag.doc);
     try w.printLine("pub const {s} = packed struct({s}) {{", .{
         flag.name, switch (flag.representation) {
             .u32 => "u32",
@@ -689,14 +692,14 @@ fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
     });
     w.indent += 1;
     for (flag.fields.values()) |field| {
-        try writeDocBlock(w, field.doc);
+        try self.writeDocBlock(w, field.doc);
         try w.printLine("{s}: bool = {s},", .{ field.name, if (field.default) "true" else "false" });
     }
     if (flag.padding > 0) {
         try w.printLine("_: u{d} = 0,", .{flag.padding});
     }
     for (flag.consts.values()) |@"const"| {
-        try writeDocBlock(w, @"const".doc);
+        try self.writeDocBlock(w, @"const".doc);
         try w.printLine("pub const {s}: {s} = @bitCast(@as({s}, {d}));", .{ @"const".name, flag.name, switch (flag.representation) {
             .u32 => "u32",
             .u64 => "u64",
@@ -706,8 +709,8 @@ fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
     try w.writeLine("};");
 }
 
-fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
-    try writeDocBlock(w, function.doc);
+fn writeFunctionHeader(self: Codegen, w: *Writer, function: *const Context.Function) !void {
+    try self.writeDocBlock(w, function.doc);
 
     // Declaration
     try w.writeAll("");
@@ -722,16 +725,16 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     // Self parameter
     switch (function.self) {
         .static, .singleton => {},
-        .constant => |self| {
-            try w.print("self: *const {0s}", .{self});
+        .constant => |constant| {
+            try w.print("self: *const {0s}", .{constant});
             is_first = false;
         },
-        .mutable => |self| {
-            try w.print("self: *{0s}", .{self});
+        .mutable => |mutable| {
+            try w.print("self: *{0s}", .{mutable});
             is_first = false;
         },
-        .value => |self| {
-            try w.print("self: {0s}", .{self});
+        .value => |value| {
+            try w.print("self: {0s}", .{value});
             is_first = false;
         },
     }
@@ -747,7 +750,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
             try w.writeAll(", ");
         }
         try w.print("{s}: ", .{param.name});
-        try writeTypeAtParameter(w, &param.type);
+        try self.writeTypeAtParameter(w, &param.type);
         is_first = false;
     }
 
@@ -775,7 +778,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
             if (std.mem.eql(u8, "null", param.default.?)) {
                 try w.writeAll("?");
             }
-            try writeTypeAtOptionalParameterField(w, &param.type);
+            try self.writeTypeAtOptionalParameterField(w, &param.type);
             try w.print(" = {s}", .{param.default.?});
             is_first = false;
         }
@@ -785,7 +788,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
 
     // Return type
     try w.writeAll(") ");
-    try writeTypeAtReturn(w, &function.return_type);
+    try self.writeTypeAtReturn(w, &function.return_type);
     try w.writeLine(" {");
     w.indent += 1;
 
@@ -840,18 +843,18 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
             if (function.return_type == .class) {
                 try w.writeLine("?*anyopaque = null;");
             } else {
-                try writeTypeAtReturn(w, &function.return_type);
+                try self.writeTypeAtReturn(w, &function.return_type);
                 if (function.can_init_directly) {
                     try w.writeLine(" = undefined;");
                 } else {
-                    try writeTypeInit(w, &function.return_type, function);
+                    try self.writeTypeInit(w, &function.return_type, function);
                 }
             }
         }
     }
 }
 
-fn writeTypeInit(w: *Writer, @"type": *const Context.Type, function: *const Context.Function) !void {
+fn writeTypeInit(self: Codegen, w: *Writer, @"type": *const Context.Type, function: *const Context.Function) !void {
     switch (@"type".*) {
         inline .class, .basic => {
             const type_name = @"type".getName().?;
@@ -871,24 +874,32 @@ fn writeTypeInit(w: *Writer, @"type": *const Context.Type, function: *const Cont
             if (can_call_init) {
                 try w.writeLine(" = .init();");
             } else {
-                if (!std.zig.isPrimitive(@"type".getName().?)) {
-                    logger.warn("Zero initialization for type '{s}'", .{@"type"});
-                }
+                if (std.zig.isPrimitive(@"type".getName().?)) {
+                    try w.writeAll(" = std.mem.zeroes(");
+                    try self.writeTypeAtReturn(w, @"type");
+                    try w.writeLine(");");
+                } else {
+                    try w.writeLine(" = undefined;");
 
-                try w.writeAll(" = std.mem.zeroes(");
-                try writeTypeAtReturn(w, @"type");
-                try w.writeLine(");");
+                    // assumes first constructor requires no arguments
+                    // it usually (?) does
+                    try w.writeAll("const constructor_method = godot.support.bindConstructor(");
+                    try self.writeTypeAtReturn(w, @"type");
+                    try w.writeLine(", 0);");
+
+                    try w.writeLine("result = constructor_method();");
+                }
             }
         },
         else => {
             try w.writeAll(" = std.mem.zeroes(");
-            try writeTypeAtReturn(w, @"type");
+            try self.writeTypeAtReturn(w, @"type");
             try w.writeLine(");");
         },
     }
 }
 
-fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
+fn writeFunctionFooter(self: Codegen, w: *Writer, function: *const Context.Function) !void {
     switch (function.return_type) {
         // Class functions need to cast an object pointer
         .class => {
@@ -913,7 +924,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
         // Vararg and operator functions cast to the return type, fixed arity return directly.
         else => if (function.is_vararg) {
             try w.writeAll("return result.as(");
-            try writeTypeAtReturn(w, &function.return_type);
+            try self.writeTypeAtReturn(w, &function.return_type);
             try w.writeLine(");");
         } else {
             try w.writeLine(
@@ -927,7 +938,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
     try w.writeLine("}");
 }
 
-fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, ctx: *const Context) !void {
+fn writeImports(self: Codegen, w: *Writer, root: []const u8, imports: *const Context.Imports) !void {
     try w.printLine(
         \\const std = @import("std");
         \\const godot = @import("{0s}/gdzig.zig");
@@ -939,13 +950,13 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
 
         if (std.mem.eql(u8, import.*, "Variant")) {
             try w.printLine("const Variant = @import(\"{0s}/builtin/variant.zig\").Variant;", .{root});
-        } else if (ctx.builtins.contains(import.*)) {
+        } else if (self.ctx.builtins.contains(import.*)) {
             try w.printLine("const {1s} = @import(\"{0s}/builtin.zig\").{1s};", .{ root, import.* });
-        } else if (ctx.classes.contains(import.*)) {
+        } else if (self.ctx.classes.contains(import.*)) {
             try w.printLine("const {1s} = @import(\"{0s}/class.zig\").{1s};", .{ root, import.* });
-        } else if (ctx.enums.contains(import.*)) {
+        } else if (self.ctx.enums.contains(import.*)) {
             try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
-        } else if (ctx.flags.contains(import.*)) {
+        } else if (self.ctx.flags.contains(import.*)) {
             try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
         } else {
             // TODO: native structures?
@@ -954,9 +965,7 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
 }
 
 fn writeInterfaces(self: Codegen) !void {
-    const ctx = self.ctx;
-
-    const file = try ctx.config.output.createFile("Interface.zig", .{});
+    const file = try self.ctx.config.output.createFile("Interface.zig", .{});
     defer file.close();
 
     var buf = bufferedWriter(file.writer());
@@ -971,8 +980,8 @@ fn writeInterfaces(self: Codegen) !void {
         \\
     );
 
-    for (ctx.interface.functions.items) |function| {
-        try writeDocBlock(&w, function.docs);
+    for (self.ctx.interface.functions.items) |function| {
+        try self.writeDocBlock(&w, function.docs);
         try w.printLine(
             \\{s}: Child(godot.c.{s}),
             \\
@@ -988,7 +997,8 @@ fn writeInterfaces(self: Codegen) !void {
     );
     w.indent += 1;
 
-    for (ctx.interface.functions.items) |function| {
+    for (self.ctx.interface.functions.items) |function| {
+        try self.writeDocBlock(&w, function.docs);
         try w.printLine(
             \\.{s} = @ptrCast(getProcAddress("{s}").?),
         , .{ function.name, function.api_name });
@@ -1000,22 +1010,22 @@ fn writeInterfaces(self: Codegen) !void {
         \\
     );
 
-    for (ctx.builtins.values()) |builtin| {
+    for (self.ctx.builtins.values()) |builtin| {
         try w.printLine(
             \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(builtin.{0s})), @ptrCast("{1s}"), 1);
         , .{ builtin.name, builtin.name_api });
     }
-    for (ctx.classes.values()) |class| {
+    for (self.ctx.classes.values()) |class| {
         try w.printLine(
             \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(class.{0s})), @ptrCast("{1s}"), 1);
         , .{ class.name, class.name_api });
     }
-    for (ctx.enums.values()) |@"enum"| {
+    for (self.ctx.enums.values()) |@"enum"| {
         try w.printLine(
             \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(global.{0s})), @ptrCast("{1s}"), 1);
         , .{ @"enum".name, @"enum".name_api });
     }
-    for (ctx.flags.values()) |flag| {
+    for (self.ctx.flags.values()) |flag| {
         try w.printLine(
             \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(global.{0s})), @ptrCast("{1s}"), 1);
         , .{ flag.name, flag.name_api });
@@ -1044,33 +1054,31 @@ fn writeInterfaces(self: Codegen) !void {
 }
 
 fn writeModules(self: Codegen) !void {
-    const ctx = self.ctx;
+    for (self.ctx.modules.values()) |*module| {
+        const filename = try std.fmt.allocPrint(self.ctx.rawAllocator(), "{s}.zig", .{module.name});
+        defer self.ctx.rawAllocator().free(filename);
 
-    for (ctx.modules.values()) |*module| {
-        const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
-        defer ctx.rawAllocator().free(filename);
-
-        const file = try ctx.config.output.createFile(filename, .{});
+        const file = try self.ctx.config.output.createFile(filename, .{});
         defer file.close();
 
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeModule(&writer, module, ctx);
+        try writeModule(self, &writer, module);
 
         try buf.flush();
     }
 }
 
-fn writeModule(w: *Writer, module: *const Context.Module, ctx: *const Context) !void {
+fn writeModule(self: Codegen, w: *Writer, module: *const Context.Module) !void {
     for (module.functions) |*function| {
-        try writeModuleFunction(w, function);
+        try self.writeModuleFunction(w, function);
     }
-    try writeImports(w, ".", &module.imports, ctx);
+    try self.writeImports(w, ".", &module.imports);
 }
 
-fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
-    try writeFunctionHeader(w, function);
+fn writeModuleFunction(self: Codegen, w: *Writer, function: *const Context.Function) !void {
+    try self.writeFunctionHeader(w, function);
 
     try w.printLine(
         \\const function = godot.support.bindFunction("{s}", {d});
@@ -1081,16 +1089,16 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
         if (function.return_type != .void) "@ptrCast(&result)" else "null",
     });
 
-    try writeFunctionFooter(w, function);
+    try self.writeFunctionFooter(w, function);
 }
 
-fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtField(self: Codegen, w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try self.writeTypeAtField(w, child);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1101,14 +1109,14 @@ fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
     }
 }
 
-fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtReturn(self: Codegen, w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |name| try w.print("?{0s}", .{name}),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try self.writeTypeAtField(w, child);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1121,13 +1129,13 @@ fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtParameter(self: Codegen, w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try writeTypeAtField(self, w, child);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1140,7 +1148,7 @@ fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtOptionalParameterField(self: Codegen, w: *Writer, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |name| {
@@ -1149,7 +1157,7 @@ fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try self.writeTypeAtField(w, child);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1162,7 +1170,8 @@ fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !
 
 /// Writes out code necessary to both assert that arguments are the right type, and coerce them
 /// into the form necessary to pass to the Godot function.
-fn writeTypeCheck(w: *Writer, parameter: *const Context.Function.Parameter) !void {
+fn writeTypeCheck(self: Codegen, w: *Writer, parameter: *const Context.Function.Parameter) !void {
+    _ = self;
     switch (parameter.type) {
         .class => |class| {
             try w.printLine(
