@@ -10,10 +10,15 @@ pub fn init(allocator: Allocator, doc: ?[]const u8, name: []const u8, @"type": [
     var self: Field = .{};
     errdefer self.deinit(allocator);
 
+    var field_type = meta orelse @"type";
+    if (std.mem.eql(u8, field_type, "float") or std.mem.eql(u8, field_type, "real")) {
+        field_type = "f32";
+    }
+
     self.doc = if (doc) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{}) else null;
     self.name = try allocator.dupe(u8, name);
     self.name_api = try allocator.dupe(u8, name);
-    self.type = try Type.from(allocator, meta orelse @"type", meta != null, ctx);
+    self.type = try Type.from(allocator, field_type, meta != null, ctx);
     self.offset = offset;
 
     return self;
