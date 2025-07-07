@@ -409,6 +409,8 @@ pub const Parameter = struct {
             self.default = "null";
         } else if (self.type == .string and std.mem.eql(u8, default, "\"\"")) {
             self.default = "null";
+        } else if (self.type == .string_name and std.mem.eql(u8, default, "&\"\"")) {
+            self.default = "null";
         } else if (self.type == .@"enum") {
             self.default = try std.fmt.allocPrint(allocator, "@enumFromInt({s})", .{default});
         } else if (self.type == .flag) {
