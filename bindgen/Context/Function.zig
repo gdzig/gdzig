@@ -176,7 +176,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
     self.index = @intCast(constructor.index);
 
     for (constructor.arguments orelse &.{}) |arg| {
-        try self.parameters.put(allocator, arg.name, try .fromNameType(allocator, arg.name, arg.type, false, ctx));
+        try self.parameters.put(allocator, arg.name, try .fromNameType(allocator, arg.name, arg.type, false, ctx, .{}));
     }
 
     self.return_type = try .from(allocator, builtin_name, false, ctx);
@@ -206,7 +206,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         const parameter: Parameter = if (arg.default_value.len > 0)
             try .fromNameTypeDefault(allocator, arg.name, arg.type, false, arg.default_value, ctx)
         else
-            try .fromNameType(allocator, arg.name, arg.type, false, ctx);
+            try .fromNameType(allocator, arg.name, arg.type, false, ctx, .{});
         try self.parameters.put(allocator, arg.name, parameter);
     }
     self.return_type = try .from(allocator, api.return_type, false, ctx);
@@ -270,6 +270,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
                 if (arg.meta.len > 0) arg.meta else arg.type,
                 arg.meta.len > 0,
                 ctx,
+                .{},
             );
         try self.parameters.put(allocator, arg.name, parameter);
     }
@@ -334,7 +335,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     self.self = .static;
     self.is_vararg = function.is_vararg;
     for (function.arguments orelse &.{}) |arg| {
-        try self.parameters.put(allocator, arg.name, try .fromNameType(allocator, arg.name, arg.type, false, ctx));
+        try self.parameters.put(allocator, arg.name, try .fromNameType(allocator, arg.name, arg.type, false, ctx, .{}));
     }
     self.return_type = if (function.return_type.len > 0) try .from(allocator, function.return_type, false, ctx) else .void;
 
@@ -373,8 +374,20 @@ pub const Parameter = struct {
     default: ?[]const u8 = null,
     field_name: ?[]const u8 = null,
 
-    pub fn fromNameType(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, ctx: *const Context) !Parameter {
-        const name = try std.fmt.allocPrint(allocator, "p_{s}", .{case_utils.fmtSliceCaseSnake(api_name)});
+    pub const NameStyle = enum {
+        none,
+        prefixed,
+    };
+
+    pub const Options = struct {
+        name_style: NameStyle = .prefixed,
+    };
+
+    pub fn fromNameType(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, ctx: *const Context, opt: Options) !Parameter {
+        const name = switch (opt.name_style) {
+            .none => try std.fmt.allocPrint(allocator, "{s}", .{case_utils.fmtSliceCaseSnake(api_name)}),
+            .prefixed => try std.fmt.allocPrint(allocator, "p_{s}", .{case_utils.fmtSliceCaseSnake(api_name)}),
+        };
         errdefer allocator.free(name);
 
         const @"type" = try Type.from(allocator, api_type, is_meta, ctx);
@@ -388,7 +401,10 @@ pub const Parameter = struct {
     }
 
     pub fn fromNameTypeDefault(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, default: []const u8, ctx: *const Context) !Parameter {
-        var self = try fromNameType(allocator, api_name, api_type, is_meta, ctx);
+        var self = try fromNameType(allocator, api_name, api_type, is_meta, ctx, .{
+            .name_style = .none,
+        });
+
         if (self.type == .array and std.mem.indexOf(u8, default, "[]") != null) {
             self.default = "null";
         } else if (self.type == .string and std.mem.eql(u8, default, "\"\"")) {
