@@ -5,8 +5,8 @@ color_rect: *ColorRect = undefined,
 
 pub fn _bindMethods() void {
     godot.registerSignal(Self, "signal1", &[_]PropertyInfo{
-        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_STRING, StringName.fromComptimeLatin1("name")),
-        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromComptimeLatin1("position")),
+        PropertyInfo.init(godot.heap.general_allocator, .string, "name") catch unreachable,
+        PropertyInfo.init(godot.heap.general_allocator, .vector3, "position") catch unreachable,
     });
 
     godot.registerSignal(Self, "signal2", &.{});
