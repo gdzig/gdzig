@@ -867,31 +867,43 @@ fn writeTypeInit(self: Codegen, w: *Writer, @"type": *const Context.Type, functi
                 break :blk false;
             };
 
-            const is_init_function = std.mem.eql(u8, function.name, "init");
-            const can_call_init = !std.zig.isPrimitive(type_name) and !(is_init_function and return_type_same_as_parent);
+            const this_is_init = std.mem.eql(u8, function.name, "init");
+
+            const parent_is_instantiable: bool = blk: {
+                if (self.ctx.builtins.get(type_name)) |builtin| if (builtin.constructors.items.len > 0) {
+                    break :blk true;
+                };
+
+                if (self.ctx.classes.get(type_name)) |class| {
+                    break :blk class.is_instantiable;
+                }
+
+                break :blk false;
+            };
+
+            const can_call_init = parent_is_instantiable and !this_is_init and !return_type_same_as_parent;
 
             // this assumes that an init function exists on the parent type
             if (can_call_init) {
-                try w.writeLine(" = .init();");
+                try w.print(
+                    \\ = blk: {{
+                    \\    if (@hasDecl({0s}, "init")) {{
+                    \\        break :blk {0s}.init();
+                    \\    }} else {{
+                    \\        break :blk std.mem.zeroes({0s});
+                    \\    }}
+                    \\}};
+                ,
+                    .{@"type"},
+                );
             } else {
-                if (std.zig.isPrimitive(@"type".getName().?)) {
-                    try w.writeAll(" = std.mem.zeroes(");
-                    try self.writeTypeAtReturn(w, @"type");
-                    try w.writeLine(");");
-                } else {
-                    try w.writeLine(" = undefined;");
-
-                    // assumes first constructor requires no arguments
-                    // it usually (?) does
-                    try w.writeAll("const constructor_method = godot.support.bindConstructor(");
-                    try self.writeTypeAtReturn(w, @"type");
-                    try w.writeLine(", 0);");
-
-                    try w.writeLine("result = constructor_method();");
-                }
+                try w.writeAll(" = std.mem.zeroes(");
+                try self.writeTypeAtReturn(w, @"type");
+                try w.writeLine(");");
             }
         },
         else => {
+            logger.warn("Zero initialized type: {s}", .{@"type"});
             try w.writeAll(" = std.mem.zeroes(");
             try self.writeTypeAtReturn(w, @"type");
             try w.writeLine(");");
