@@ -1,40 +1,3 @@
-const PluginCallback = ?*const fn (userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) void;
-
-pub fn registerPlugin(p_get_proc_address: c.GDExtensionInterfaceGetProcAddress, p_library: c.GDExtensionClassLibraryPtr, r_initialization: [*c]c.GDExtensionInitialization, allocator: std.mem.Allocator, plugin_init_cb: PluginCallback, plugin_deinit_cb: PluginCallback) c.GDExtensionBool {
-    const T = struct {
-        var init_cb: PluginCallback = null;
-        var deinit_cb: PluginCallback = null;
-        fn initializeLevel(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.C) void {
-            if (p_level == c.GDEXTENSION_INITIALIZATION_SCENE) {
-                init();
-            }
-
-            if (init_cb) |cb| {
-                cb(userdata, p_level);
-            }
-        }
-
-        fn deinitializeLevel(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.C) void {
-            if (p_level == c.GDEXTENSION_INITIALIZATION_SCENE) {
-                deinit();
-            }
-
-            if (deinit_cb) |cb| {
-                cb(userdata, p_level);
-            }
-        }
-    };
-
-    T.init_cb = plugin_init_cb;
-    T.deinit_cb = plugin_deinit_cb;
-    r_initialization.*.initialize = T.initializeLevel;
-    r_initialization.*.deinitialize = T.deinitializeLevel;
-    r_initialization.*.minimum_initialization_level = c.GDEXTENSION_INITIALIZATION_SCENE;
-    heap.general_allocator = allocator;
-    godot.interface = .init(p_get_proc_address.?, p_library.?);
-    return 1;
-}
-
 const ClassUserData = struct {
     class_name: []const u8,
 };
@@ -329,13 +292,13 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 }
 
-fn init() void {
+pub fn init() void {
     registered_classes = std.StringHashMap(void).init(heap.general_allocator);
     registered_methods = std.StringHashMap(void).init(heap.general_allocator);
     registered_signals = std.StringHashMap(void).init(heap.general_allocator);
 }
 
-fn deinit() void {
+pub fn deinit() void {
     {
         var keys = registered_classes.keyIterator();
         while (keys.next()) |it| {
