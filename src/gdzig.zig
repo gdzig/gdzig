@@ -122,6 +122,7 @@ pub const math = @import("math.zig");
 pub const random = @import("random.zig");
 
 // Local modules
+pub const api = @import("api.zig");
 pub const c = @import("gdextension");
 pub const debug = @import("debug.zig");
 pub const heap = @import("heap.zig");

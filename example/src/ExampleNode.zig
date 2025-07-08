@@ -78,7 +78,7 @@ pub fn onItemFocused(self: *ExampleNode, idx: i64) void {
 
 pub fn _enterTree(self: *ExampleNode) void {
     inline for (Examples) |E| {
-        godot.registerClass(E.T);
+        godot.registerClass(E.T, {}, .{});
     }
 
     // test T -> variant -> T
