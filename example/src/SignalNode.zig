@@ -1,12 +1,12 @@
 const Self = @This();
 
-base: Control, //this makes @Self a valid gdextension class
-color_rect: ColorRect = undefined,
+base: *Control, //this makes @Self a valid gdextension class
+color_rect: *ColorRect = undefined,
 
 pub fn _bindMethods() void {
     godot.registerSignal(Self, "signal1", &[_]PropertyInfo{
-        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_STRING, StringName.fromComptimeLatin1("name")),
-        PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromComptimeLatin1("position")),
+        PropertyInfo.init(godot.heap.general_allocator, .string, "name") catch unreachable,
+        PropertyInfo.init(godot.heap.general_allocator, .vector3, "position") catch unreachable,
     });
 
     godot.registerSignal(Self, "signal2", &.{});
@@ -68,7 +68,7 @@ pub fn onSignal3(self: *Self) void {
 }
 
 pub fn emitSignal1(self: *Self) void {
-    _ = self.base.emitSignal(.fromComptimeLatin1("signal1"), .{ String.fromLatin1("test_signal_name"), Vector3.initXYZ(123, 321, 333) });
+    _ = self.base.emitSignal(.fromComptimeLatin1("signal1"), .{ StringName.fromComptimeLatin1("test_signal_name"), Vector3.initXYZ(123, 321, 333) });
 }
 pub fn emitSignal2(self: *Self) void {
     _ = self.base.emitSignal(.fromComptimeLatin1("signal2"), .{});

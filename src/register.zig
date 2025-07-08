@@ -64,6 +64,7 @@ pub fn registerClass(comptime T: type) void {
                 .set_func = if (@hasDecl(T, "_set")) setBind else null,
                 .get_func = if (@hasDecl(T, "_get")) getBind else null,
                 .get_property_list_func = if (@hasDecl(T, "_getPropertyList")) getPropertyListBind else null,
+                .free_property_list_func = freePropertyListBind,
                 .property_can_revert_func = if (@hasDecl(T, "_propertyCanRevert")) propertyCanRevertBind else null,
                 .property_get_revert_func = if (@hasDecl(T, "_propertyGetRevert")) propertyGetRevertBind else null,
                 .validate_property_func = if (@hasDecl(T, "_validateProperty")) validatePropertyBind else null,
@@ -90,13 +91,12 @@ pub fn registerClass(comptime T: type) void {
             const t = @TypeOf(info.free_property_list_func);
 
             if (t == c.GDExtensionClassFreePropertyList) {
-                info.free_property_list_func = freePropertyListBind;
+                @compileError("Unsupported version of Godot");
             } else if (t == c.GDExtensionClassFreePropertyList2) {
-                info.free_property_list_func = freePropertyListBind2;
+                info.free_property_list_func = freePropertyListBind;
             } else {
                 @compileError(".free_property_list_func is an unknown type.");
             }
-
             break :init_blk info;
         };
 
@@ -119,23 +119,14 @@ pub fn registerClass(comptime T: type) void {
         pub fn getPropertyListBind(p_instance: c.GDExtensionClassInstancePtr, r_count: [*c]u32) callconv(.C) [*c]const c.GDExtensionPropertyInfo {
             if (p_instance) |p| {
                 const ptr: *T = @ptrCast(@alignCast(p));
-                const property_list = T._getPropertyList(ptr);
 
-                const count: u32 = @intCast(property_list.len);
+                var builder = object.PropertyBuilder{
+                    .allocator = godot.heap.general_allocator,
+                };
+                ptr._getPropertyList(&builder) catch @panic("Failed to get property list");
+                r_count.* = @intCast(builder.properties.items.len);
 
-                const propertyies: [*c]c.GDExtensionPropertyInfo = @ptrCast(@alignCast(heap.alloc(@sizeOf(c.GDExtensionPropertyInfo) * count)));
-                for (property_list, 0..) |*property, i| {
-                    propertyies[i].type = property.type;
-                    propertyies[i].hint = property.hint;
-                    propertyies[i].usage = property.usage;
-                    propertyies[i].name = @ptrCast(@constCast(&property.name));
-                    propertyies[i].class_name = @ptrCast(@constCast(&property.class_name));
-                    propertyies[i].hint_string = @ptrCast(@constCast(&property.hint_string));
-                }
-                if (r_count) |r| {
-                    r.* = count;
-                }
-                return propertyies;
+                return @ptrCast(@alignCast(builder.properties.items.ptr));
             } else {
                 if (r_count) |r| {
                     r.* = 0;
@@ -144,21 +135,10 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn freePropertyListBind(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo) callconv(.C) void {
+        pub fn freePropertyListBind(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo, p_count: u32) callconv(.C) void {
             if (@hasDecl(T, "_freePropertyList")) {
                 if (p_instance) |p| {
-                    T._freePropertyList(@ptrCast(@alignCast(p)), p_list); //fn _free_property_list(self:*Self, p_list:[*c]const c.GDExtensionPropertyInfo) void {}
-                }
-            }
-            if (p_list) |list| {
-                heap.free(@ptrCast(@constCast(list)));
-            }
-        }
-
-        pub fn freePropertyListBind2(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo, p_count: u32) callconv(.C) void {
-            if (@hasDecl(T, "_freePropertyList")) {
-                if (p_instance) |p| {
-                    T._freePropertyList(@ptrCast(@alignCast(p)), p_list, p_count); //fn _free_property_list(self:*Self, p_list:[*c]const c.GDExtensionPropertyInfo, p_count:u32) void {}
+                    T._freePropertyList(@ptrCast(@alignCast(p)), p_list[0..p_count]); //fn _freePropertyList(self:*Self, p_list:[]const c.GDExtensionPropertyInfo) void {}
                 }
             }
             if (p_list) |list| {
@@ -217,7 +197,7 @@ pub fn registerClass(comptime T: type) void {
         pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.C) c.GDExtensionObjectPtr {
             _ = p_userdata;
             const ret = object.create(T) catch unreachable;
-            return @ptrCast(meta.asObjectPtr(ret));
+            return @ptrCast(meta.asObject(ret));
         }
 
         pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.C) c.GDExtensionClassInstancePtr {
@@ -239,8 +219,7 @@ pub fn registerClass(comptime T: type) void {
         }
 
         pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.C) c.GDExtensionClassCallVirtual {
-            const Base = std.meta.FieldType(T, .base);
-            const virtual_bind = @field(Base, "getVirtualDispatch");
+            const virtual_bind = @field(meta.BaseOf(T), "getVirtualDispatch");
             return virtual_bind(T, p_class_userdata, p_name);
         }
 
@@ -335,9 +314,9 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 
     for (arguments, 0..) |*a, i| {
-        propertyies[i].type = a.type;
-        propertyies[i].hint = a.hint;
-        propertyies[i].usage = a.usage;
+        propertyies[i].type = @intFromEnum(a.type);
+        propertyies[i].hint = @intCast(@intFromEnum(a.hint));
+        propertyies[i].usage = @bitCast(a.usage);
         propertyies[i].name = @ptrCast(@constCast(&a.name));
         propertyies[i].class_name = @ptrCast(@constCast(&a.class_name));
         propertyies[i].hint_string = @ptrCast(@constCast(&a.hint_string));

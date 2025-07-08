@@ -150,7 +150,7 @@ pub fn MethodBinderT(comptime MethodType: type) type {
                         godot.interface.variantNewCopy(@ptrCast(&variants[i]), @ptrCast(p_args[i]));
                     }
 
-                    args[i + 1] = variants[i].as(ArgsTuple[i + 1].type);
+                    args[i + 1] = variants[i].as(ArgsTuple[i + 1].type).?;
                 }
                 if (ReturnType == void or ReturnType == null) {
                     @call(.auto, method, args);
@@ -162,11 +162,11 @@ pub fn MethodBinderT(comptime MethodType: type) type {
 
         fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
             // TODO: I think this does not increment refcount on user-defined RefCounted types
-            if (comptime meta.isRefCounted(T) and meta.isWrappedPointer(T)) {
+            if (comptime meta.isRefCountedType(T) and meta.isGodotClassType(T)) {
                 const obj = godot.interface.refGetObject(p_arg);
-                return @bitCast(Object{ .ptr = obj.? });
-            } else if (comptime meta.isObject(T) and meta.isWrappedPointer(T)) {
-                return @bitCast(Object{ .ptr = @constCast(p_arg.?) });
+                return @ptrCast(obj.?);
+            } else if (comptime meta.isGodotClassType(T)) {
+                return @ptrCast(@constCast(p_arg.?));
             } else {
                 return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
             }
@@ -196,6 +196,15 @@ pub fn MethodBinderT(comptime MethodType: type) type {
     };
 }
 
+const BuiltinMethod = Child(c.GDExtensionPtrBuiltInMethod);
+const ClassMethod = Child(c.GDExtensionMethodBindPtr);
+const Constructor = Child(c.GDExtensionPtrConstructor);
+const Destructor = Child(c.GDExtensionPtrDestructor);
+const Function = Child(c.GDExtensionPtrUtilityFunction);
+const VariantFrom = Child(c.GDExtensionVariantFromTypeConstructorFunc);
+const VariantTo = Child(c.GDExtensionTypeFromVariantConstructorFunc);
+const VariantOperatorEvaluator = Child(c.GDExtensionPtrOperatorEvaluator);
+
 const std = @import("std");
 const Child = std.meta.Child;
 
@@ -205,12 +214,3 @@ const Object = godot.class.Object;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const c = godot.c;
-
-const BuiltinMethod = Child(c.GDExtensionPtrBuiltInMethod);
-const ClassMethod = Child(c.GDExtensionMethodBindPtr);
-const Constructor = Child(c.GDExtensionPtrConstructor);
-const Destructor = Child(c.GDExtensionPtrDestructor);
-const Function = Child(c.GDExtensionPtrUtilityFunction);
-const VariantFrom = Child(c.GDExtensionVariantFromTypeConstructorFunc);
-const VariantTo = Child(c.GDExtensionTypeFromVariantConstructorFunc);
-const VariantOperatorEvaluator = Child(c.GDExtensionPtrOperatorEvaluator);

@@ -1,4 +1,4 @@
-const Self = @This();
+const ExampleNode = @This();
 
 const Examples = [_]struct { name: [:0]const u8, T: type }{
     .{ .name = "Sprites", .T = SpritesNode },
@@ -6,33 +6,36 @@ const Examples = [_]struct { name: [:0]const u8, T: type }{
     .{ .name = "Signals", .T = SignalNode },
 };
 
-base: Node,
-panel: PanelContainer,
-example_node: ?Node = null,
+base: *Node,
+panel: *PanelContainer = undefined,
+example_node: ?*Node = null,
 
-property1: Vector3,
-property2: Vector3,
+property1: Vector3 = .zero,
+property2: Vector3 = .zero,
 
-fps_counter: Label,
+fps_counter: *Label,
 
 const property1_name: [:0]const u8 = "Property1";
 const property2_name: [:0]const u8 = "Property2";
 
-pub fn init(self: *Self) void {
-    std.log.info("init {s}", .{@typeName(@TypeOf(self))});
+pub fn init(base: *Node) ExampleNode {
+    std.log.info("init {s}", .{@typeName(ExampleNode)});
 
-    self.fps_counter = Label.init();
-    self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{});
-    self.base.addChild(.upcast(self.fps_counter), .{});
+    var fps_counter = Label.init();
+    fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{});
+    base.addChild(.upcast(fps_counter), .{});
+
+    return .{
+        .base = base,
+        .fps_counter = fps_counter,
+    };
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *ExampleNode) void {
     std.log.info("deinit {s}", .{@typeName(@TypeOf(self))});
 }
 
-pub fn _process(self: *Self, delta: f64) void {
-    _ = delta;
-
+pub fn _process(self: *ExampleNode, _: f64) void {
     const window = self.base.getTree().?.getRoot().?;
     const sz = window.getSize();
 
@@ -45,22 +48,22 @@ pub fn _process(self: *Self, delta: f64) void {
     self.fps_counter.setText(fps_string);
 }
 
-fn clearScene(self: *Self) void {
+fn clearScene(self: *ExampleNode) void {
     if (self.example_node) |n| {
         godot.object.destroy(n);
         //n.queue_free(); //ok
     }
 }
 
-pub fn onTimeout(_: *Self) void {
+pub fn onTimeout(_: *ExampleNode) void {
     std.debug.print("onTimeout\n", .{});
 }
 
-pub fn onResized(_: *Self) void {
+pub fn onResized(_: *ExampleNode) void {
     std.debug.print("onResized\n", .{});
 }
 
-pub fn onItemFocused(self: *Self, idx: i64) void {
+pub fn onItemFocused(self: *ExampleNode, idx: i64) void {
     self.clearScene();
     switch (idx) {
         inline 0...Examples.len - 1 => |i| {
@@ -73,10 +76,16 @@ pub fn onItemFocused(self: *Self, idx: i64) void {
     }
 }
 
-pub fn _enterTree(self: *Self) void {
+pub fn _enterTree(self: *ExampleNode) void {
     inline for (Examples) |E| {
         godot.registerClass(E.T);
     }
+
+    // test T -> variant -> T
+    const obj: *ExampleNode = godot.object.create(ExampleNode) catch unreachable;
+    const variant: Variant = Variant.init(obj);
+    const result = variant.as(*ExampleNode).?;
+    std.debug.print("Result: {?}\n", .{result.fps_counter.getPosition()});
 
     //initialize fields
     self.example_node = null;
@@ -119,11 +128,11 @@ pub fn _enterTree(self: *Self) void {
     std.debug.print("Size {d} \n", .{data.size()});
 }
 
-pub fn _exitTree(self: *Self) void {
+pub fn _exitTree(self: *ExampleNode) void {
     _ = self;
 }
 
-pub fn _notification(self: *Self, what: i32) void {
+pub fn _notification(self: *ExampleNode, what: i32) void {
     if (what == Node.NOTIFICATION_WM_CLOSE_REQUEST) {
         if (!Engine.isEditorHint()) {
             self.base.getTree().?.quit(.{});
@@ -131,18 +140,12 @@ pub fn _notification(self: *Self, what: i32) void {
     }
 }
 
-pub fn _getPropertyList(_: *Self) []const PropertyInfo {
-    const C = struct {
-        var properties: [32]PropertyInfo = undefined;
-    };
-
-    C.properties[0] = PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromLatin1(property1_name));
-    C.properties[1] = PropertyInfo.init(godot.c.GDEXTENSION_VARIANT_TYPE_VECTOR3, StringName.fromLatin1(property2_name));
-
-    return C.properties[0..2];
+pub fn _getPropertyList(_: *ExampleNode, p: *godot.object.PropertyBuilder) !void {
+    try p.append(ExampleNode, "property1", .{});
+    try p.append(ExampleNode, "property2", .{});
 }
 
-pub fn _propertyCanRevert(_: *Self, name: StringName) bool {
+pub fn _propertyCanRevert(_: *ExampleNode, name: StringName) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -158,7 +161,7 @@ pub fn _propertyCanRevert(_: *Self, name: StringName) bool {
     return false;
 }
 
-pub fn _propertyGetRevert(_: *Self, name: StringName, value: *Variant) bool {
+pub fn _propertyGetRevert(_: *ExampleNode, name: StringName, value: *Variant) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -176,7 +179,7 @@ pub fn _propertyGetRevert(_: *Self, name: StringName, value: *Variant) bool {
     return false;
 }
 
-pub fn _set(self: *Self, name: StringName, value: Variant) bool {
+pub fn _set(self: *ExampleNode, name: StringName, value: Variant) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -184,17 +187,17 @@ pub fn _set(self: *Self, name: StringName, value: Variant) bool {
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        self.property1 = value.as(Vector3);
+        self.property1 = value.as(Vector3).?;
         return true;
     } else if (name.casecmpTo(prop2) == 0) {
-        self.property2 = value.as(Vector3);
+        self.property2 = value.as(Vector3).?;
         return true;
     }
 
     return false;
 }
 
-pub fn _get(self: *Self, name: StringName, value: *Variant) bool {
+pub fn _get(self: *ExampleNode, name: StringName, value: *Variant) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -212,11 +215,12 @@ pub fn _get(self: *Self, name: StringName, value: *Variant) bool {
     return false;
 }
 
-pub fn _toString(_: *Self) ?String {
+pub fn _toString(_: *ExampleNode) ?String {
     return String.fromLatin1("ExampleNode");
 }
 
 const std = @import("std");
+
 const godot = @import("gdzig");
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
@@ -224,6 +228,7 @@ const HSplitContainer = godot.class.HSplitContainer;
 const ItemList = godot.class.ItemList;
 const Label = godot.class.Label;
 const Node = godot.class.Node;
+const Node3D = godot.class.Node3D;
 const PanelContainer = godot.class.PanelContainer;
 const PropertyInfo = godot.object.PropertyInfo;
 const String = godot.builtin.String;
@@ -231,6 +236,6 @@ const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const Vector3 = godot.builtin.Vector3;
 
-const SpritesNode = @import("SpriteNode.zig");
 const GuiNode = @import("GuiNode.zig");
 const SignalNode = @import("SignalNode.zig");
+const SpritesNode = @import("SpriteNode.zig");

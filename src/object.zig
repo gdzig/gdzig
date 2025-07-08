@@ -1,29 +1,51 @@
+fn assertCanInitialize(comptime T: type) void {
+    comptime {
+        if (@hasDecl(T, "init")) return;
+        for (@typeInfo(T).@"struct".fields) |field| {
+            if (std.mem.eql(u8, "base", field.name)) continue;
+            if (field.default_value_ptr == null) {
+                @compileError("The type '" ++ meta.getTypeShortName(T) ++ "' should either have an 'fn init(base: *" ++ meta.getTypeShortName(meta.BaseOf(T)) ++ ") " ++ meta.getTypeShortName(T) ++ "' function, or a default value for the field '" ++ field.name ++ "', but it has neither.");
+            }
+        }
+    }
+}
+
 /// Create a Godot object.
 pub fn create(comptime T: type) !*T {
-    // TODO: I don't think this class can handle nested user types (MyType { base: Node } and MyTypeSubtype { base: MyType })
-    debug.assertIsObject(T);
+    comptime debug.assertIsObjectType(T);
 
-    const class_name = meta.getNamePtr(T);
-    const base_name = meta.getNamePtr(meta.BaseOf(T));
-
-    // TODO: shouldn't we use Godot's allocator? can this be done without a double allocation?
-    const ptr = godot.interface.classdbConstructObject2(@ptrCast(base_name)).?;
-    const self = try godot.heap.general_allocator.create(T);
-
-    // Store the pointer on base type
-    if (T == godot.class.Object) {
-        self.ptr = ptr;
-    } else {
-        self.base = @bitCast(godot.class.Object{ .ptr = ptr });
+    // If this is an engine type, just return it.
+    if (comptime @typeInfo(T) == .@"opaque") {
+        return @ptrCast(godot.interface.classdbConstructObject2(@ptrCast(meta.getNamePtr(T))).?);
     }
 
-    godot.interface.objectSetInstance(ptr, @ptrCast(class_name), @ptrCast(self));
-    godot.interface.objectSetInstanceBinding(ptr, godot.interface.library, @ptrCast(self), @ptrCast(&dummy_callbacks));
+    // Assert that we can initialize the user type
+    comptime {
+        if (!@hasDecl(T, "init")) {
+            for (@typeInfo(T).@"struct".fields) |field| {
+                if (std.mem.eql(u8, "base", field.name)) continue;
+                if (field.default_value_ptr == null) {
+                    @compileError("The type '" ++ meta.getTypeShortName(T) ++ "' should either have an 'fn init(base: *" ++ meta.getTypeShortName(meta.BaseOf(T)) ++ ") " ++ meta.getTypeShortName(T) ++ "' function, or a default value for the field '" ++ field.name ++ "', but it has neither.");
+                }
+            }
+        }
+    }
 
-    // TODO: doesn't Godot call `_init`? shouldn't we let `init` call `heap.create()`?
-    //       Proper hierarchy of control is not clear here
+    // Construct the base object
+    const base_name = meta.getNamePtr(meta.BaseOf(T));
+    const base: *meta.BaseOf(T) = @ptrCast(godot.interface.classdbConstructObject2(@ptrCast(base_name)).?);
+
+    // Allocate the user object, and link it to the base object
+    const class_name = meta.getNamePtr(T);
+    const self: *T = try godot.heap.general_allocator.create(T);
+    godot.interface.objectSetInstance(@ptrCast(base), @ptrCast(class_name), @ptrCast(self));
+    godot.interface.objectSetInstanceBinding(@ptrCast(base), godot.interface.library, @ptrCast(self), &dummy_callbacks);
+
+    // Initialize the user object
     if (@hasDecl(T, "init")) {
-        self.init();
+        self.* = T.init(base);
+    } else {
+        self.* = .{ .base = base };
     }
 
     return self;
@@ -31,16 +53,16 @@ pub fn create(comptime T: type) !*T {
 
 /// Recreate a Godot object.
 pub fn recreate(comptime T: type, ptr: ?*anyopaque) !*T {
-    debug.assertIsObject(T);
+    debug.assertIsObjectType(T);
     _ = ptr;
     @panic("Extension reloading is not currently supported");
 }
 
 /// Destroy a Godot object.
 pub fn destroy(instance: anytype) void {
-    debug.assertIsObject(@TypeOf(instance));
+    debug.assertIsObjectPtr(@TypeOf(instance));
 
-    const ptr = meta.asObjectPtr(instance);
+    const ptr: *anyopaque = @ptrCast(meta.asObject(instance));
     godot.interface.objectFreeInstanceBinding(ptr, godot.interface.library);
     godot.interface.objectDestroy(ptr);
 }
@@ -48,7 +70,7 @@ pub fn destroy(instance: anytype) void {
 /// Unreference a Godot object.
 pub fn unreference(instance: anytype) void {
     if (meta.asRefCounted(instance).unreference()) {
-        godot.interface.objectDestroy(meta.asObjectPtr(instance));
+        godot.interface.objectDestroy(@ptrCast(meta.asObject(instance)));
     }
 }
 
@@ -58,43 +80,74 @@ pub fn connect(obj: anytype, comptime signal_name: [:0]const u8, instance: anyty
     }
     // TODO: I think this is a memory leak??
     godot.register.registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = Callable.initObjectMethod(.{ .ptr = meta.asObjectPtr(instance) }, .fromComptimeLatin1(method_name));
+    const callable = Callable.initObjectMethod(@ptrCast(meta.asObject(instance)), .fromComptimeLatin1(method_name));
     _ = obj.connect(.fromComptimeLatin1(signal_name), callable, .{});
 }
 
-pub const PropertyInfo = struct {
-    type: c.GDExtensionVariantType = c.GDEXTENSION_VARIANT_TYPE_NIL,
-    name: StringName,
-    class_name: StringName,
-    hint: u32 = @intFromEnum(PropertyHint.property_hint_none),
-    hint_string: String,
-    usage: u32 = @bitCast(PropertyUsageFlags.property_usage_default),
-    const Self = @This();
+pub const PropertyBuilder = struct {
+    allocator: Allocator,
+    properties: std.ArrayListUnmanaged(PropertyInfo) = .empty,
 
-    pub fn init(@"type": c.GDExtensionVariantType, name: StringName) Self {
-        return .{
-            .type = @"type",
-            .name = name,
-            .hint_string = String.fromUtf8("test property"),
-            .class_name = StringName.fromLatin1(""),
-            .hint = @intFromEnum(PropertyHint.property_hint_none),
-            .usage = @bitCast(PropertyUsageFlags.property_usage_default),
-        };
-    }
-
-    pub fn initFull(@"type": c.GDExtensionVariantType, name: StringName, class_name: StringName, hint: PropertyHint, hint_string: String, usage: PropertyUsageFlags) Self {
-        return .{
-            .type = @"type",
-            .name = name,
-            .class_name = class_name,
-            .hint_string = hint_string,
-            .hint = @bitCast(hint),
-            .usage = @bitCast(usage),
-        };
+    pub fn append(self: *PropertyBuilder, comptime T: type, comptime field_name: [:0]const u8, comptime opt: struct {
+        hint: PropertyHint = .property_hint_none,
+        hint_string: [:0]const u8 = "",
+        usage: PropertyUsageFlags = .property_usage_default,
+    }) !void {
+        const info = try PropertyInfo.fromField(self.allocator, T, field_name, .{
+            .hint = opt.hint,
+            .hint_string = opt.hint_string,
+            .usage = opt.usage,
+        });
+        try self.properties.append(self.allocator, info);
     }
 };
 
-var dummy_callbacks = c.GDExtensionInstanceBindingCallbacks{ .create_callback = instanceBindingCreateCallback, .free_callback = instanceBindingFreeCallback, .reference_callback = instanceBindingReferenceCallback };
+pub const PropertyInfo = extern struct {
+    type: Variant.Tag,
+    name: ?*StringName = null,
+    class_name: ?*StringName = null,
+    hint: PropertyHint = .property_hint_none,
+    hint_string: ?*String = null,
+    usage: PropertyUsageFlags = .property_usage_default,
+
+    pub fn init(allocator: Allocator, comptime tag: Variant.Tag, comptime field_name: [:0]const u8) !PropertyInfo {
+        const name = try allocator.create(StringName);
+        name.* = StringName.fromComptimeLatin1(field_name);
+
+        return .{
+            .name = name,
+            .type = tag,
+        };
+    }
+
+    pub fn fromField(allocator: Allocator, comptime T: type, comptime field_name: [:0]const u8, comptime opt: struct {
+        hint: PropertyHint = .property_hint_none,
+        hint_string: [:0]const u8 = "",
+        usage: PropertyUsageFlags = .property_usage_default,
+    }) !PropertyInfo {
+        // This double allocation is dumb, but the API expects *String and *StringName
+        const name = try allocator.create(StringName);
+        name.* = StringName.fromComptimeLatin1(field_name);
+        const hint_string = try allocator.create(String);
+        hint_string.* = String.fromLatin1(opt.hint_string);
+
+        return .{
+            .class_name = meta.getNamePtr(T),
+            .name = name,
+            .type = Variant.Tag.forType(@FieldType(T, field_name)),
+            .hint_string = hint_string,
+            .hint = opt.hint,
+            .usage = opt.usage,
+        };
+    }
+
+    pub fn deinit(self: *PropertyInfo, allocator: Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.hint_string);
+    }
+};
+
+pub var dummy_callbacks = c.GDExtensionInstanceBindingCallbacks{ .create_callback = instanceBindingCreateCallback, .free_callback = instanceBindingFreeCallback, .reference_callback = instanceBindingReferenceCallback };
 fn instanceBindingCreateCallback(_: ?*anyopaque, _: ?*anyopaque) callconv(.C) ?*anyopaque {
     return null;
 }
@@ -104,6 +157,7 @@ fn instanceBindingReferenceCallback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExten
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const godot = @import("gdzig.zig");
 const c = godot.c;
@@ -115,3 +169,4 @@ const PropertyHint = godot.global.PropertyHint;
 const PropertyUsageFlags = godot.global.PropertyUsageFlags;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
+const Variant = godot.builtin.Variant;

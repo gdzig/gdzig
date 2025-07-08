@@ -52,7 +52,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                     for (args.items, 0..) |arg, i| {
                         var pval = arg;
                         if (std.mem.eql(u8, pval, "inf")) {
-                            pval = comptime "std.math.inf(" ++ if (std.mem.eql(u8, build_options.precision, "double")) "f64" else "f32" ++ ")";
+                            pval = comptime "std.math.inf(" ++ (if (std.mem.eql(u8, build_options.precision, "double")) "f64" else "f32") ++ ")";
                         }
 
                         try writer.writeAll(pval);

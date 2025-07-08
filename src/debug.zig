@@ -22,33 +22,16 @@ pub fn assertIsAny(comptime types: anytype, comptime U: type) void {
     }
 }
 
-pub fn assertIsObject(comptime T: type) void {
+pub fn assertIsObjectType(comptime T: type) void {
     assertIs(godot.class.Object, T);
 }
 
-pub fn assertPathLike(comptime T: type) void {
-    assertIsAny(
-        .{ godot.builtin.NodePath, []const u8, [:0]const u8 },
-        T,
-    );
-}
-
-pub fn assertStringLike(comptime T: type) void {
-    assertIsAny(
-        .{ godot.builtin.String, godot.builtin.StringName, []const u8, [:0]const u8 },
-        T,
-    );
-}
-
-pub fn assertVariantLike(comptime T: type) void {
-    // TODO: other types
-    assertIsAny(
-        .{godot.builtin.Variant},
-        T,
-    );
+pub fn assertIsObjectPtr(comptime T: type) void {
+    assertIs(godot.class.Object, Child(T));
 }
 
 const std = @import("std");
 const fmt = std.fmt;
 
 const godot = @import("gdzig.zig");
+const Child = godot.meta.Child;

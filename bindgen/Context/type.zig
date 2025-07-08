@@ -26,10 +26,8 @@ pub const Type = union(enum) {
         .{ "StringName", .string_name },
         .{ "NodePath", .node_path },
         .{ "Variant", .variant },
-        .{ "float", Type{ .basic = "f64" } },
-        .{ "double", Type{ .basic = "f64" } },
         .{ "char32", Type{ .basic = "u32" } },
-        .{ "float", Type{ .basic = "f32" } },
+        .{ "float", Type{ .basic = "f64" } },
         .{ "double", Type{ .basic = "f64" } },
         .{ "int", Type{ .basic = "i64" } },
         .{ "int8", Type{ .basic = "i8" } },
@@ -43,9 +41,8 @@ pub const Type = union(enum) {
         .{ "uint64", Type{ .basic = "u64" } },
     });
 
-    const meta_overrides: std.StaticStringMap(Type) = .initComptime(.{
-        .{ "float", Type{ .basic = "f32" } },
-    });
+    // TODO: may no longer be needed
+    const meta_overrides: std.StaticStringMap(Type) = .initComptime(.{});
 
     pub fn from(allocator: Allocator, name: []const u8, is_meta: bool, ctx: *const Context) !Type {
         var normalized = name;

@@ -8,7 +8,7 @@
             .hash = "case-0.0.1-chGYq3zEAACCYSlQhW6K9Gd8g93Wv8gQOIrNY7xTt8Up",
         },
         .godot_cpp = .{
-            .url = "https://github.com/godotengine/godot-cpp/archive/refs/heads/4.4.tar.gz",
+            .url = "https://github.com/godotengine/godot-cpp/archive/refs/tags/godot-4.4.1-stable.tar.gz",
             .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
         },
         .mvzr = .{

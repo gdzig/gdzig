@@ -1,0 +1,37 @@
+# HEAD
+
+- **Updated dependencies**: Zig 0.14.1 and Godot 4.4 support
+- **Fully commented bindgens**: All generated bindings include complete documentation from Godot's API for convenient ZLS hover docs
+  - Comprehensive reference docs are also now available at https://gdzig.github.io/gdzig/
+- **Eliminated `usingnamespace`**: Generated explicit methods for parent class functionality
+  - Uses compile-time reflection to generate proper method forwarding
+  - Cleaner namespace without implicit imports
+- **Explicit casting system**: Replaced `anytype` polymorphism with explicit cast helpers
+  - `godot.meta.upcast(T, value)` for safe upcasting to parent types
+  - `godot.meta.downcast(T, value)` for checked downcasting to child types
+  - Generated `T.upcast(value)` and `T.downcast(value)` helper methods on engine classes
+  - No more implicit casting or `anytype` parameters
+- **Type-safe enums and flags**: Generated proper Zig enum types and packed structs instead of integer constants
+  - `Error.ok` instead of `OK` constant
+  - `MouseButton.mouse_button_left` instead of `MOUSE_BUTTON_LEFT`
+  - `KeyModifierMask{ .key_mask_shift = true }` instead of bitmask integers
+- **Consistent camelCase naming**: Methods now follow Zig conventions (`setPosition` instead of `set_position`)
+  - Virtual methods now follow the `_prefixedSnakeCase` convention.
+- **Direct field access on builtin types**: Access fields directly instead of through methods
+  - `color.r`, `color.g`, `color.b`, `color.a` instead of getter methods
+  - `vector.x`, `vector.y`, `vector.z` for direct component access
+- **Operator methods on builtin types**: Mathematical operations exposed as methods
+  - `Vector2.add()`, `Vector2.subtract()`, `Vector2.multiply()` etc.
+  - Consistent API across all vector and mathematical types
+- **Opaque engine classes**: Engine classes are now opaque types making pointer semantics clear
+  - `base: *Node` instead of `base: Node`
+  - Clearer distinction between value types (builtins) and reference types (engine classes)
+- **Modular namespace organization**: Classes, builtins, and globals are now organized into logical submodules
+  - `godot.class.*` - All Godot classes (Node, Control, etc.)
+  - `godot.builtin.*` - Core types (String, Vector2/3/4, Array, Dictionary, Color)
+  - `godot.global.*` - Global enumerations and constants
+  - `godot.general.*`, `godot.math.*`, `godot.random.*` - Utility functions
+- **Better error messages**: Improved compile-time diagnostics with `godot.debug` assertions
+- **Type introspection**: `godot.meta` module provides runtime type hierarchy inspection
+- **Flexible header options**: Choose between generated, vendored, or custom headers
+- **Improved bindgen**: Completely rewritten and more robust code generation that allowed us to implement all of the above

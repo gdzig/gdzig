@@ -16,44 +16,45 @@ pub const Variant = extern struct {
     data: Data align(8),
 
     pub fn init(value: anytype) Variant {
-        const constructor = bindVariantFrom(Tag.forType(@TypeOf(value)));
+        const T = @TypeOf(value);
+
+        const tag = comptime Tag.forType(T);
+        const constructor = bindVariantFrom(tag);
         var result: Variant = undefined;
-        constructor(@ptrCast(&result), @ptrCast(@constCast(&value)));
+
+        if (tag == .object) {
+            constructor(@ptrCast(&result), @ptrCast(@constCast(&meta.asObject(value))));
+        } else if (@typeInfo(T) == .pointer) {
+            constructor(@ptrCast(&result), @ptrCast(@constCast(value)));
+        } else {
+            constructor(@ptrCast(&result), @ptrCast(@constCast(&value)));
+        }
+
         return result;
     }
 
     pub fn deinit(self: Variant) void {
+        // TODO: what happens when you deinit an extension class contained in a Variant?
         godot.interface.variantDestroy(@ptrCast(@constCast(&self)));
     }
 
-    pub fn as(self: Variant, comptime T: type) T {
+    pub fn as(self: Variant, comptime T: type) ?T {
         const tag = comptime Tag.forType(T);
 
-        if (tag == .object) {
-            var ptr: ?*anyopaque = null;
+        if (tag != self.tag) {
+            return null;
+        }
 
-            const variantTo = bindVariantTo(tag);
-            variantTo(@ptrCast(&ptr), @ptrCast(@constCast(&self)));
-
-            // TODO: GDExtensionInstanceBindingCallbacks?
-            const instance: *Object = @ptrCast(@alignCast(godot.interface.objectGetInstanceBinding(ptr, godot.interface.library, null)));
-
-            if (std.meta.Child(T) == Object) {
-                return instance;
-            } else {
-                const class_name = godot.getClassName(std.meta.Child(T));
-                const class_tag = godot.interface.classdbGetClassTag(@ptrCast(class_name));
-                // TODO: this can return null if its not the right type; return type should be optional depending on T, right? or return error?
-                const casted = godot.interface.objectCastTo(meta.asObjectPtr(instance), class_tag);
-                const binding = godot.interface.objectGetInstanceBinding(casted, godot.interface.library, null);
-
-                return @ptrCast(@alignCast(binding));
-            }
-        } else {
+        if (tag != .object) {
             var result: T = undefined;
             const variantTo = bindVariantTo(tag);
             variantTo(@ptrCast(&result), @ptrCast(@constCast(&self)));
             return result;
+        } else {
+            var object: ?*Object = null;
+            const variantToObject = bindVariantTo(tag);
+            variantToObject(@ptrCast(&object), @ptrCast(@constCast(&self)));
+            return meta.downcast(T, object);
         }
     }
 
@@ -97,20 +98,22 @@ pub const Variant = extern struct {
         vector4 = 12,
         vector4i = 13,
 
-        pub fn forValue(value: anytype) Variant.Tag {
+        pub fn forValue(value: anytype) Tag {
             return forType(@TypeOf(value));
         }
 
-        pub fn forType(comptime T: type) Variant.Tag {
-            return switch (meta.Deref(T)) {
+        pub fn forType(comptime T: type) Tag {
+            const tag: ?Tag = comptime switch (T) {
                 AABB => .aabb,
                 Array => .array,
                 Basis => .basis,
+                bool => .bool,
                 Callable => .callable,
                 Color => .color,
                 Dictionary => .dictionary,
+                f64 => .float,
+                i64 => .int,
                 NodePath => .node_path,
-                Object => .object,
                 PackedByteArray => .packed_byte_array,
                 PackedColorArray => .packed_color_array,
                 PackedFloat32Array => .packed_float32_array,
@@ -123,9 +126,9 @@ pub const Variant = extern struct {
                 Plane => .plane,
                 Projection => .projection,
                 Quaternion => .quaternion,
-                RID => .rid,
                 Rect2 => .rect2,
                 Rect2i => .rect2i,
+                RID => .rid,
                 Signal => .signal,
                 String => .string,
                 StringName => .string_name,
@@ -137,15 +140,16 @@ pub const Variant = extern struct {
                 Vector3i => .vector3i,
                 Vector4 => .vector4,
                 Vector4i => .vector4i,
-                inline else => |U| switch (@typeInfo(U)) {
-                    .void => .nil,
-                    .bool => .bool,
-                    .int, .@"enum", .comptime_int => .int,
-                    .float, .comptime_float => .float,
-                    .@"struct" => |i| if (i.backing_integer != null) .int else .object,
-                    else => @compileError("Cannot construct variant from " ++ @typeName(T)),
+                void => .nil,
+                inline else => switch (@typeInfo(T)) {
+                    .@"enum" => .int,
+                    .@"struct" => |info| if (info.backing_integer != null) .int else null,
+                    .pointer => |ptr| if (meta.isClassType(ptr.child)) .object else forType(ptr.child),
+                    else => null,
                 },
             };
+
+            return tag orelse @compileError("Cannot construct a 'Variant' from type '" ++ @typeName(T) ++ "'");
         }
     };
 
@@ -221,53 +225,8 @@ pub const Variant = extern struct {
     };
 };
 
-const std = @import("std");
-const Atomic = std.atomic.Value;
-const mem = std.mem;
-
-const precision = @import("build_options").precision;
-
-const godot = @import("../gdzig.zig");
-const AABB = godot.builtin.AABB;
-const Array = godot.builtin.Array;
-const Basis = godot.builtin.Basis;
-const bindVariantFrom = godot.support.bindVariantFrom;
-const bindVariantTo = godot.support.bindVariantTo;
-const Callable = godot.builtin.Callable;
-const Color = godot.builtin.Color;
-const Dictionary = godot.builtin.Dictionary;
-const meta = godot.meta;
-const NodePath = godot.builtin.NodePath;
-const Object = godot.class.Object;
-const PackedByteArray = godot.builtin.PackedByteArray;
-const PackedColorArray = godot.builtin.PackedColorArray;
-const PackedFloat32Array = godot.builtin.PackedFloat32Array;
-const PackedFloat64Array = godot.builtin.PackedFloat64Array;
-const PackedInt32Array = godot.builtin.PackedInt32Array;
-const PackedInt64Array = godot.builtin.PackedInt64Array;
-const PackedStringArray = godot.builtin.PackedStringArray;
-const PackedVector2Array = godot.builtin.PackedVector2Array;
-const PackedVector3Array = godot.builtin.PackedVector3Array;
-const Plane = godot.builtin.Plane;
-const Projection = godot.builtin.Projection;
-const Quaternion = godot.builtin.Quaternion;
-const Rect2 = godot.builtin.Rect2;
-const Rect2i = godot.builtin.Rect2i;
-const RID = godot.builtin.RID;
-const Signal = godot.builtin.Signal;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
-const Transform2D = godot.builtin.Transform2D;
-const Transform3D = godot.builtin.Transform3D;
-const Vector2 = godot.builtin.Vector2;
-const Vector2i = godot.builtin.Vector2i;
-const Vector3 = godot.builtin.Vector3;
-const Vector3i = godot.builtin.Vector3i;
-const Vector4 = godot.builtin.Vector4;
-const Vector4i = godot.builtin.Vector4i;
-
 const tests = struct {
-    const Tag = Variant.Tag;
+    const Tag = Tag;
     const testing = std.testing;
 
     test "forType" {
@@ -326,7 +285,6 @@ const tests = struct {
             try testing.expectEqual(tag, Tag.forType(T));
             try testing.expectEqual(tag, Tag.forType(*T));
             try testing.expectEqual(tag, Tag.forType(*const T));
-            try testing.expectEqual(tag, Tag.forType(?T));
             try testing.expectEqual(tag, Tag.forType(?*T));
             try testing.expectEqual(tag, Tag.forType(?*const T));
         }
@@ -336,3 +294,47 @@ const tests = struct {
 comptime {
     _ = tests;
 }
+
+const std = @import("std");
+const Atomic = std.atomic.Value;
+const mem = std.mem;
+const precision = @import("build_options").precision;
+
+const godot = @import("../gdzig.zig");
+const AABB = godot.builtin.AABB;
+const Array = godot.builtin.Array;
+const Basis = godot.builtin.Basis;
+const bindVariantFrom = godot.support.bindVariantFrom;
+const bindVariantTo = godot.support.bindVariantTo;
+const Callable = godot.builtin.Callable;
+const Color = godot.builtin.Color;
+const Dictionary = godot.builtin.Dictionary;
+const meta = godot.meta;
+const NodePath = godot.builtin.NodePath;
+const Object = godot.class.Object;
+const PackedByteArray = godot.builtin.PackedByteArray;
+const PackedColorArray = godot.builtin.PackedColorArray;
+const PackedFloat32Array = godot.builtin.PackedFloat32Array;
+const PackedFloat64Array = godot.builtin.PackedFloat64Array;
+const PackedInt32Array = godot.builtin.PackedInt32Array;
+const PackedInt64Array = godot.builtin.PackedInt64Array;
+const PackedStringArray = godot.builtin.PackedStringArray;
+const PackedVector2Array = godot.builtin.PackedVector2Array;
+const PackedVector3Array = godot.builtin.PackedVector3Array;
+const Plane = godot.builtin.Plane;
+const Projection = godot.builtin.Projection;
+const Quaternion = godot.builtin.Quaternion;
+const Rect2 = godot.builtin.Rect2;
+const Rect2i = godot.builtin.Rect2i;
+const RID = godot.builtin.RID;
+const Signal = godot.builtin.Signal;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+const Transform2D = godot.builtin.Transform2D;
+const Transform3D = godot.builtin.Transform3D;
+const Vector2 = godot.builtin.Vector2;
+const Vector2i = godot.builtin.Vector2i;
+const Vector3 = godot.builtin.Vector3;
+const Vector3i = godot.builtin.Vector3i;
+const Vector4 = godot.builtin.Vector4;
+const Vector4i = godot.builtin.Vector4i;
