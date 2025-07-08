@@ -1,24 +1,3 @@
-const std = @import("std");
-
-const godot = @import("gdzig");
-const Control = godot.class.Control;
-const Engine = godot.class.Engine;
-const HSplitContainer = godot.class.HSplitContainer;
-const ItemList = godot.class.ItemList;
-const Label = godot.class.Label;
-const Node = godot.class.Node;
-const Node3D = godot.class.Node3D;
-const PanelContainer = godot.class.PanelContainer;
-const PropertyInfo = godot.object.PropertyInfo;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
-const Variant = godot.builtin.Variant;
-const Vector3 = godot.builtin.Vector3;
-
-const GuiNode = @import("GuiNode.zig");
-const SignalNode = @import("SignalNode.zig");
-const SpritesNode = @import("SpriteNode.zig");
-
 const ExampleNode = @This();
 
 const Examples = [_]struct { name: [:0]const u8, T: type }{
@@ -101,6 +80,12 @@ pub fn _enterTree(self: *ExampleNode) void {
     inline for (Examples) |E| {
         godot.registerClass(E.T);
     }
+
+    // test T -> variant -> T
+    const obj: *ExampleNode = godot.object.create(ExampleNode) catch unreachable;
+    const variant: Variant = Variant.init(obj);
+    const result = variant.as(*ExampleNode).?;
+    std.debug.print("Result: {?}\n", .{result.fps_counter.getPosition()});
 
     //initialize fields
     self.example_node = null;
@@ -202,10 +187,10 @@ pub fn _set(self: *ExampleNode, name: StringName, value: Variant) bool {
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        self.property1 = value.as(Vector3);
+        self.property1 = value.as(Vector3).?;
         return true;
     } else if (name.casecmpTo(prop2) == 0) {
-        self.property2 = value.as(Vector3);
+        self.property2 = value.as(Vector3).?;
         return true;
     }
 
@@ -233,3 +218,24 @@ pub fn _get(self: *ExampleNode, name: StringName, value: *Variant) bool {
 pub fn _toString(_: *ExampleNode) ?String {
     return String.fromLatin1("ExampleNode");
 }
+
+const std = @import("std");
+
+const godot = @import("gdzig");
+const Control = godot.class.Control;
+const Engine = godot.class.Engine;
+const HSplitContainer = godot.class.HSplitContainer;
+const ItemList = godot.class.ItemList;
+const Label = godot.class.Label;
+const Node = godot.class.Node;
+const Node3D = godot.class.Node3D;
+const PanelContainer = godot.class.PanelContainer;
+const PropertyInfo = godot.object.PropertyInfo;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+const Variant = godot.builtin.Variant;
+const Vector3 = godot.builtin.Vector3;
+
+const GuiNode = @import("GuiNode.zig");
+const SignalNode = @import("SignalNode.zig");
+const SpritesNode = @import("SpriteNode.zig");

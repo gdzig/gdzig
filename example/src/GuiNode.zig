@@ -25,7 +25,7 @@ pub fn _enterTree(self: *Self) void {
     const texture = ResourceLoader.load(res_name, .{}).?;
     defer _ = texture.unreference();
     self.sprite = Sprite2D.init();
-    self.sprite.setTexture(Texture2D.downcast(texture) catch unreachable);
+    self.sprite.setTexture(Texture2D.downcast(texture).?);
     self.sprite.setPosition(.initXY(400, 300));
     self.sprite.setScale(.initXY(0.6, 0.6));
     self.base.addChild(.upcast(self.sprite), .{});
