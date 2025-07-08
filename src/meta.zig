@@ -1,19 +1,89 @@
+const std = @import("std");
+const fmt = std.fmt;
+const Tuple = std.meta.Tuple;
+
+const godot = @import("gdzig.zig");
+const assertIs = godot.debug.assertIs;
+const Object = godot.class.Object;
+const RefCounted = godot.class.RefCounted;
+const StringName = godot.builtin.StringName;
+
 /// Returns true if the type is a Godot "class" type.
-pub fn isClass(comptime T: type) bool {
+///
+/// Expects the underlying type, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
+pub fn isClassType(comptime T: type) bool {
     return comptime switch (@typeInfo(T)) {
-        .@"struct" => @hasField(T, "base") and isClass(Child(@FieldType(T, "base"))),
-        .@"opaque" => T == Object or @hasDecl(T, "Base") and isClass(T.Base),
+        .@"struct" => @hasField(T, "base") and isClassPtr(@FieldType(T, "base")),
+        .@"opaque" => T == Object or @hasDecl(T, "Base") and isClassType(T.Base),
+        else => false,
+    };
+}
+
+/// Returns true if a type is an official class from Godot (versus a class defined by this extension).
+///
+/// Expects a class type, e.g. `Node` or `MyClass`, not `*Node` or `*MyClass`.
+pub fn isGodotClassType(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"opaque" => isClassType(T),
+        else => false,
+    };
+}
+
+/// Returns true if a type is a class defined by this extension (versus an official class from Godot).
+///
+/// Expects a class type, e.g. `Node` or `MyClass`, not `*Node` or `*MyClass`.
+pub fn isExtensionClassType(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"struct" => isClassType(T),
+        else => false,
+    };
+}
+
+/// Returns true if the type is pointer to a Godot "class" type.
+///
+/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
+pub fn isClassPtr(comptime T: type) bool {
+    return comptime sw: switch (@typeInfo(T)) {
+        .optional => |info| continue :sw @typeInfo(info.child),
+        .pointer => |info| isClassType(info.child),
+        else => false,
+    };
+}
+
+/// Returns true if a type is a pointer to an official class from Godot (versus a class defined by this extension).
+///
+/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
+pub fn isGodotClassPtr(comptime T: type) bool {
+    return comptime sw: switch (@typeInfo(T)) {
+        .optional => |info| continue :sw @typeInfo(info.child),
+        .pointer => |info| isGodotClassType(info.child),
+        else => false,
+    };
+}
+
+/// Returns true if a type is a pointer to a class defined by this extension (versus an official class from Godot).
+///
+/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
+pub fn isExtensionClassPtr(comptime T: type) bool {
+    return comptime sw: switch (@typeInfo(T)) {
+        .optional => |info| continue :sw @typeInfo(info.child),
+        .pointer => |info| isExtensionClassType(info.child),
         else => false,
     };
 }
 
 /// Returns the base type of T.
+///
+/// Expects a class type, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
 pub fn BaseOf(comptime T: type) type {
-    if (comptime !isClass(T)) {
-        @compileError("expected a Godot class, found '" ++ @typeName(T) ++ "'. did you remember to add the 'base' struct field?");
+    if (comptime !isClassType(T)) {
+        if (comptime isClassPtr(T)) {
+            @compileError("expected a Godot class type, found '" ++ @typeName(T) ++ "'. did you mean '" ++ @typeName(Child(T)) ++ "'?");
+        }
+        @compileError("expected a Godot class type, found '" ++ @typeName(T) ++ "'. did you remember to add the 'base' struct field?");
     }
 
-    return switch (@typeInfo(T)) {
+    return comptime switch (@typeInfo(T)) {
         .@"struct" => Child(@FieldType(T, "base")),
         .@"opaque" => T.Base,
         else => unreachable,
@@ -21,16 +91,20 @@ pub fn BaseOf(comptime T: type) type {
 }
 
 /// Returns how many levels of inheritance T has.
+///
+/// Expects a class type, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
 pub fn depthOf(comptime T: type) comptime_int {
     comptime var i = 0;
     comptime var Cur = T;
-    inline while (isClass(Cur) and Cur != Object) : (i += 1) {
+    inline while (isClassType(Cur) and Cur != Object) : (i += 1) {
         Cur = BaseOf(Cur);
     }
     return i;
 }
 
 /// Returns the type hierarchy of T as an array of types, in ascending order, starting with the parent of T.
+///
+/// Expects a class type, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
 pub fn ancestorsOf(comptime T: type) [depthOf(T)]type {
     if (comptime depthOf(T) == 0) {
         return [0]type{};
@@ -44,13 +118,20 @@ pub fn ancestorsOf(comptime T: type) [depthOf(T)]type {
 }
 
 /// Returns the type hierarchy of T as an array of types, in ascending order. starting with T.
+///
+/// Expects a class type, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
 pub fn selfAndAncestorsOf(comptime T: type) [1 + depthOf(T)]type {
     return [_]type{T} ++ ancestorsOf(T);
 }
 
 /// Is U a child of T
+///
+/// Expects class types, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
 pub fn isA(comptime T: type, comptime U: type) bool {
-    if (comptime @typeInfo(T) != .@"struct" and @typeInfo(T) != .@"opaque") {
+    if (isClassPtr(T) or isClassPtr(U)) {
+        @compileError("isA expects a class type, not a pointer type; found '" ++ @typeName(T) ++ "' and '" ++ @typeName(U) ++ "'");
+    }
+    if (!isClassType(T) or !isClassType(U)) {
         return false;
     }
     if (comptime T == U) {
@@ -58,8 +139,8 @@ pub fn isA(comptime T: type, comptime U: type) bool {
     }
 
     @setEvalBranchQuota(10_000);
-    inline for (selfAndAncestorsOf(T)) |V| {
-        if (comptime T == V) {
+    inline for (selfAndAncestorsOf(T)) |Ancestor| {
+        if (comptime T == Ancestor) {
             return true;
         }
     }
@@ -68,6 +149,8 @@ pub fn isA(comptime T: type, comptime U: type) bool {
 }
 
 /// Is U a child of any of the types in types
+///
+/// Expects class types, e.g `Node` or `MyClass`, not `*Node` or `*MyClass`.
 pub fn isAny(comptime types: anytype, comptime U: type) bool {
     inline for (0..types.len) |i| {
         if (comptime isA(types[i], U)) {
@@ -77,112 +160,126 @@ pub fn isAny(comptime types: anytype, comptime U: type) bool {
     return false;
 }
 
-/// Upcast a value to a parent type in the class hierarchy.
-/// Returns the same pointer type as the input (e.g., ?*T for optional, *T for non-optional).
-pub inline fn upcast(comptime T: type, value: anytype) switch (@typeInfo(@TypeOf(value))) {
-    .optional => ?*T,
-    else => *T,
-} {
-    const ValueType = @TypeOf(value);
-    assertIs(T, Child(ValueType));
+/// Upcast a value to a parent type in the class hierarchy with compile time guaranteed success.
+///
+/// Expects pointer types, e.g `*Node` or `*MyClass`, not `Node` or `MyClass`.
+///
+/// Supports optional pointers when both arguments are optional pointer types.
+pub inline fn upcast(comptime T: type, value: anytype) blk: {
+    const U = @TypeOf(value);
 
-    // Initialize our traversal pointer - handle both value and pointer inputs
-    var current_ptr: if (@typeInfo(ValueType) == .optional) ?*anyopaque else *anyopaque =
-        if (@typeInfo(ValueType) != .pointer)
-            @ptrCast(&value) // Take address of value
-        else
-            @ptrCast(value); // Already a pointer
+    if (!isClassPtr(T)) {
+        @compileError("upcast expects a class pointer type as the target type, found '" ++ @typeName(T) ++ "'");
+    }
+    if (!isClassPtr(U)) {
+        @compileError("upcast expects a class pointer type as the source value, found '" ++ @typeName(U) ++ "'");
+    }
+    if (@typeInfo(T) == .optional and @typeInfo(U) != .optional or @typeInfo(T) != .optional and @typeInfo(U) == .optional) {
+        @compileError("upcast expects that if one argument is an optional pointer, the other is an optional pointer. found '" ++ @typeName(T) ++ "' and '" ++ @typeName(U) ++ "'");
+    }
+
+    assertIs(Child(T), Child(U));
+
+    break :blk T;
+} {
+    const U = @TypeOf(value);
+
+    if (@typeInfo(U) == .optional and value == null) {
+        return null;
+    }
+
+    var opaque_ptr: *anyopaque = @ptrCast(value);
 
     // Walk up the inheritance hierarchy from child to parent
-    inline for (selfAndAncestorsOf(Child(ValueType))) |CurrentType| {
-        const typed_ptr = @as(if (@typeInfo(ValueType) == .optional) ?*CurrentType else *CurrentType, @ptrCast(@alignCast(current_ptr)));
-
-        // Handle null optionals
-        if (@typeInfo(ValueType) == .optional and typed_ptr == null) {
-            return null;
-        }
-
+    inline for (selfAndAncestorsOf(Child(U))) |CurrentType| {
         // Found our target type - return the properly typed pointer
-        if (comptime CurrentType == T) {
-            return typed_ptr;
+        if (comptime CurrentType == Child(T)) {
+            return @ptrCast(@alignCast(opaque_ptr));
         }
 
         // Move to the next level up in the hierarchy
-        switch (@typeInfo(CurrentType)) {
-            .@"struct" => {
-                const base_field = @field(typed_ptr, "base");
-                current_ptr = if (@typeInfo(@TypeOf(base_field)) == .pointer)
-                    @ptrCast(base_field) // base is already a pointer
-                else
-                    @ptrCast(&base_field); // base is a value, take its address
-            },
-            .@"opaque" => {
-                // Opaque types don't change pointer location
-                current_ptr = @ptrCast(current_ptr);
-            },
+        opaque_ptr = switch (@typeInfo(CurrentType)) {
+            .@"struct" => @ptrCast(@field(@as(*CurrentType, @ptrCast(@alignCast(opaque_ptr))), "base")),
+            .@"opaque" => @ptrCast(opaque_ptr),
             else => unreachable,
-        }
+        };
     }
 
     unreachable;
 }
 
-pub fn downcast(comptime T: type, value: anytype) !*T {
-    // Compile time type check (can't cast an Animal to a Motorcycle)
-    assertIs(Child(@TypeOf(value)), T);
+/// Downcast a value to a child type in the class hierarchy. Has some compile time checks, but returns null at runtime if the cast fails.
+///
+/// Expects pointer types, e.g `*Node` or `*MyClass`, not `Node` or `MyClass`.
+pub fn downcast(comptime T: type, value: anytype) blk: {
+    const U = @TypeOf(value);
 
-    // Runtime cast
-    const name = getNamePtr(T);
+    if (!isClassPtr(T)) {
+        @compileError("downcast expects a class pointer type as the target type, found '" ++ @typeName(T) ++ "'");
+    }
+    if (!isClassPtr(U)) {
+        @compileError("downcast expects a class pointer type as the source value, found '" ++ @typeName(U) ++ "'");
+    }
+
+    assertIs(Child(U), Child(T));
+
+    break :blk ?*Child(T);
+} {
+    const U = @TypeOf(value);
+
+    if (@typeInfo(U) == .optional and value == null) {
+        return null;
+    }
+
+    const name = getNamePtr(Child(T));
     const tag = godot.interface.classdbGetClassTag(@ptrCast(name));
-    const result = godot.interface.objectCastTo(@ptrCast(asObject(value)), tag);
+    const result = godot.interface.objectCastTo(@ptrCast(value), tag);
 
-    return if (result) |ptr|
-        return @ptrCast(ptr)
-    else
-        return error.InvalidCast;
+    if (result) |ptr| {
+        if (isGodotClassPtr(T)) {
+            return @ptrCast(@alignCast(ptr));
+        } else {
+            const object: *anyopaque = godot.interface.objectGetInstanceBinding(ptr, godot.interface.library, null) orelse return null;
+            return @ptrCast(@alignCast(object));
+        }
+    } else {
+        return null;
+    }
 }
 
-pub fn isObject(comptime T: type) bool {
-    return isA(Object, T);
-}
-
-/// This
-pub fn isWrappedPointer(comptime T: type) bool {
-    return switch (@typeInfo(T)) {
-        .@"struct" => |s| s.fields.len == 1 and @typeInfo(s.fields[0].type) == .pointer,
-        else => false,
-    };
-}
-
-pub fn isRefCounted(comptime T: type) bool {
+/// Returns true if a type is a reference counted type.
+///
+/// Expects a class type, e.g. `Node` or `MyClass`, not `*Node` or `*MyClass`.
+pub fn isRefCountedType(comptime T: type) bool {
     return isA(RefCounted, T);
 }
 
+/// Returns true if a type is a pointer to a reference counted type.
+///
+/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
+pub fn isRefCountedPtr(comptime T: type) bool {
+    return isA(RefCounted, Child(T));
+}
+
+/// Upcasts a pointer to an object type.
+///
+/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
 pub fn asObject(value: anytype) *Object {
-    return upcast(Object, value);
+    return upcast(*Object, value);
 }
 
+/// Upcasts a pointer to a reference counted type.
+///
+/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
 pub fn asRefCounted(value: anytype) RefCounted {
-    return upcast(RefCounted, value);
+    return upcast(*RefCounted, value);
 }
 
-pub fn isPathLike(comptime T: type) bool {
-    return isAny(.{ godot.builtin.NodePath, []const u8, [:0]const u8 }, T);
-}
-
-pub fn isStringLike(comptime T: type) bool {
-    return isAny(.{ godot.builtin.String, godot.builtin.StringName, []const u8, [:0]const u8 }, T);
-}
-
-pub fn isVariantLike(comptime T: type) bool {
-    // TODO: variant types
-    return isAny(.{godot.builtin.Variant}, T);
-}
-
+/// Recursively dereferences a type to its base; e.g. `Child(?*?*?*T)` returns `T`.
 pub fn Child(comptime T: type) type {
-    return deref: switch (@typeInfo(T)) {
-        .optional => |info| continue :deref @typeInfo(info.child),
-        .pointer => |info| info.child,
+    return switch (@typeInfo(T)) {
+        .optional => |info| Child(info.child),
+        .pointer => |info| Child(info.child),
         else => T,
     };
 }
@@ -203,16 +300,6 @@ pub fn getNamePtr(comptime T: type) *StringName {
     };
     return &Static.name;
 }
-
-const std = @import("std");
-const fmt = std.fmt;
-const Tuple = std.meta.Tuple;
-
-const godot = @import("gdzig.zig");
-const assertIs = godot.debug.assertIs;
-const Object = godot.class.Object;
-const RefCounted = godot.class.RefCounted;
-const StringName = godot.builtin.StringName;
 
 const tests = struct {
     const testing = std.testing;

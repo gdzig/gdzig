@@ -41,7 +41,7 @@ pub fn _ready(self: *Self) void {
             .scale = Vector2.initXY(s, s),
             .gd_sprite = Sprite2D.init(),
         };
-        spr.gd_sprite.setTexture(Texture2D.downcast(tex) catch unreachable);
+        spr.gd_sprite.setTexture(Texture2D.downcast(tex).?);
         spr.gd_sprite.setRotation(self.randfRange(f32, 0, std.math.pi));
         spr.gd_sprite.setScale(spr.scale);
         self.base.addChild(.upcast(spr.gd_sprite), .{});

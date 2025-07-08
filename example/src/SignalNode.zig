@@ -68,7 +68,7 @@ pub fn onSignal3(self: *Self) void {
 }
 
 pub fn emitSignal1(self: *Self) void {
-    _ = self.base.emitSignal(.fromComptimeLatin1("signal1"), .{ String.fromLatin1("test_signal_name"), Vector3.initXYZ(123, 321, 333) });
+    _ = self.base.emitSignal(.fromComptimeLatin1("signal1"), .{ StringName.fromComptimeLatin1("test_signal_name"), Vector3.initXYZ(123, 321, 333) });
 }
 pub fn emitSignal2(self: *Self) void {
     _ = self.base.emitSignal(.fromComptimeLatin1("signal2"), .{});

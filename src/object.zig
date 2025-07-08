@@ -12,7 +12,7 @@ fn assertCanInitialize(comptime T: type) void {
 
 /// Create a Godot object.
 pub fn create(comptime T: type) !*T {
-    comptime debug.assertIsObject(T);
+    comptime debug.assertIsObjectType(T);
 
     // If this is an engine type, just return it.
     if (comptime @typeInfo(T) == .@"opaque") {
@@ -39,6 +39,7 @@ pub fn create(comptime T: type) !*T {
     const class_name = meta.getNamePtr(T);
     const self: *T = try godot.heap.general_allocator.create(T);
     godot.interface.objectSetInstance(@ptrCast(base), @ptrCast(class_name), @ptrCast(self));
+    godot.interface.objectSetInstanceBinding(@ptrCast(base), godot.interface.library, @ptrCast(self), &dummy_callbacks);
 
     // Initialize the user object
     if (@hasDecl(T, "init")) {
@@ -52,14 +53,14 @@ pub fn create(comptime T: type) !*T {
 
 /// Recreate a Godot object.
 pub fn recreate(comptime T: type, ptr: ?*anyopaque) !*T {
-    debug.assertIsObject(T);
+    debug.assertIsObjectType(T);
     _ = ptr;
     @panic("Extension reloading is not currently supported");
 }
 
 /// Destroy a Godot object.
 pub fn destroy(instance: anytype) void {
-    debug.assertIsObject(@TypeOf(instance));
+    debug.assertIsObjectPtr(@TypeOf(instance));
 
     const ptr: *anyopaque = @ptrCast(meta.asObject(instance));
     godot.interface.objectFreeInstanceBinding(ptr, godot.interface.library);
@@ -146,7 +147,7 @@ pub const PropertyInfo = extern struct {
     }
 };
 
-var dummy_callbacks = c.GDExtensionInstanceBindingCallbacks{ .create_callback = instanceBindingCreateCallback, .free_callback = instanceBindingFreeCallback, .reference_callback = instanceBindingReferenceCallback };
+pub var dummy_callbacks = c.GDExtensionInstanceBindingCallbacks{ .create_callback = instanceBindingCreateCallback, .free_callback = instanceBindingFreeCallback, .reference_callback = instanceBindingReferenceCallback };
 fn instanceBindingCreateCallback(_: ?*anyopaque, _: ?*anyopaque) callconv(.C) ?*anyopaque {
     return null;
 }
