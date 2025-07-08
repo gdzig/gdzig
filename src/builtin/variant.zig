@@ -41,7 +41,7 @@ pub const Variant = extern struct {
             if (std.meta.Child(T) == Object) {
                 return instance;
             } else {
-                const class_name = godot.getClassName(std.meta.Child(T));
+                const class_name = godot.meta.getNamePtr(std.meta.Child(T));
                 const class_tag = godot.interface.classdbGetClassTag(@ptrCast(class_name));
                 // TODO: this can return null if its not the right type; return type should be optional depending on T, right? or return error?
                 const casted = godot.interface.objectCastTo(@ptrCast(meta.asObject(instance)), class_tag);
