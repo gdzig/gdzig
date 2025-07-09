@@ -2,87 +2,134 @@ const PluginCallback = ?*const fn (userdata: ?*anyopaque, p_level: c.GDExtension
 
 pub fn registerClass(
     comptime T: type,
+    opt: RegisterClassOpts(T, void),
+) void {
+    return registerClassWithUserdata(T, {}, opt);
+}
+
+pub fn registerClassWithUserdata(
+    comptime T: type,
     userdata: anytype,
-    opt: godot.api.classdb.ClassCreationInfo(T, @TypeOf(userdata)),
+    opt: RegisterClassOpts(T, @TypeOf(userdata)),
 ) void {
     const base_name = meta.getNamePtr(meta.BaseOf(T));
     const class_name = meta.getNamePtr(T);
     class_name.* = StringName.fromComptimeLatin1(comptime meta.getTypeShortName(T));
 
-    const CustomClassUserdata = @TypeOf(userdata);
-    const GdzigClassUserdata = struct {
+    // Create a new ClassCreationInfo object with extended userdata
+    const Userdata = struct {
         class_name: StringName,
-        userdata: CustomClassUserdata,
+        userdata: @TypeOf(userdata),
+    };
+    const Info = godot.api.classdb.ClassCreationInfo(T, Userdata);
+    var info: Info = .{};
+
+    // Copy the fields from opt into info
+    inline for (std.meta.fieldNames(Info)) |name| {
+        if (comptime std.mem.eql(u8, "class_userdata", name)) continue;
+        @field(info, name) = @field(opt, name);
+    }
+
+    // Virtual function defaults
+    info.set = info.set orelse if (@hasDecl(T, "_set")) &T._set else null;
+    info.get = info.get orelse if (@hasDecl(T, "_get")) &T._get else null;
+    info.get_property_list = info.get_property_list orelse if (@hasDecl(T, "_getPropertyList")) &T._getPropertyList else null;
+    info.free_property_list = info.free_property_list orelse if (@hasDecl(T, "_freePropertyList")) &T._freePropertyList else null;
+    info.property_can_revert = info.property_can_revert orelse if (@hasDecl(T, "_propertyCanRevert")) &T._propertyCanRevert else null;
+    info.property_get_revert = info.property_get_revert orelse if (@hasDecl(T, "_propertyGetRevert")) &T._propertyGetRevert else null;
+    if (@hasDecl(godot.c, "GDExtensionClassValidateProperty")) { // added in Godot 4.2
+        info.validate_property = info.validate_property orelse if (@hasDecl(T, "_validateProperty")) &T._validateProperty else null;
+    }
+    info.notification = info.notification orelse if (@hasDecl(T, "_notification")) &T._notification else null;
+    info.to_string = info.to_string orelse if (@hasDecl(T, "_toString")) &T._toString else null;
+    info.reference = info.reference orelse if (@hasDecl(T, "_reference")) &T._reference else null;
+    info.unreference = info.unreference orelse if (@hasDecl(T, "_unreference")) &T._unreference else null;
+    info.get_rid = info.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
+
+    // Object lifecycle defaults
+    if (@hasDecl(godot.c, "GDExtensionClassCreateInstance2")) { // added in 4.4
+        info.create_instance = info.create_instance orelse struct {
+            fn create(_: *Userdata, _: bool) *T {
+                const ret = object.create(T) catch unreachable;
+                return @ptrCast(meta.asObject(ret));
+            }
+        }.create;
+    } else {
+        info.create_instance = info.create_instance orelse struct {
+            fn create(_: *Userdata) *T {
+                const ret = object.create(T) catch unreachable;
+                return @ptrCast(meta.asObject(ret));
+            }
+        }.create;
+    }
+    info.recreate_instance = info.recreate_instance orelse struct {
+        fn recreate(_: *Userdata, _: *Object) *T {
+            @panic("Extension reloading is not currently supported");
+        }
+    }.recreate;
+    info.free_instance = info.free_instance orelse struct {
+        fn free(_: *Userdata, instance: *T) void {
+            if (@hasDecl(T, "deinit")) {
+                instance.deinit();
+            }
+            // TODO: should this be left to the deinit function?
+            heap.general_allocator.destroy(instance);
+        }
+    }.free;
+
+    // Setup class userdata
+    info.class_userdata = &.{
+        .class_name = class_name.*,
+        .userdata = userdata,
     };
 
-    var info = opt;
+    // Register the type in the ClassDB
+    godot.api.classdb.registerClass(T, Userdata, class_name, base_name, info);
 
-    info.set = opt.set orelse if (@hasDecl(T, "_set")) &T._set else null;
-    info.get = opt.get orelse if (@hasDecl(T, "_get")) &T._get else null;
-    info.get_property_list = opt.get_property_list orelse if (@hasDecl(T, "_getPropertyList")) &T._getPropertyList else null;
-    info.free_property_list = opt.free_property_list orelse if (@hasDecl(T, "_freePropertyList")) &T._freePropertyList else null;
-    info.property_can_revert = opt.property_can_revert orelse if (@hasDecl(T, "_propertyCanRevert")) &T._propertyCanRevert else null;
-    info.property_get_revert = opt.property_get_revert orelse if (@hasDecl(T, "_propertyGetRevert")) &T._propertyGetRevert else null;
-    info.validate_property = opt.validate_property orelse if (@hasDecl(T, "_validateProperty")) &T._validateProperty else null;
-    info.notification = opt.notification orelse if (@hasDecl(T, "_notification")) &T._notification else null;
-    info.to_string = opt.to_string orelse if (@hasDecl(T, "_toString")) &T._toString else null;
-    info.reference = opt.reference orelse if (@hasDecl(T, "_reference")) &T._reference else null;
-    info.unreference = opt.unreference orelse if (@hasDecl(T, "_unreference")) &T._unreference else null;
-    info.create_instance = opt.create_instance orelse struct {
-        fn create() void {
-            // ..
-        }
-    }.create;
-    info.recreate_instance = opt.recreate_instance orelse struct {
-        fn create() void {
-            // ..
-        }
-    }.create;
-    info.free_instance = opt.free_instance orelse struct {
-        fn create() void {
-            // ..
-        }
-    }.create;
-    info.get_rid = opt.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
-
-    godot.api.classdb.registerClass(
-        T,
-        void,
-        class_name,
-        base_name,
-        .{
-            .is_virtual = opt.is_virtual,
-            .is_abstract = opt.is_abstract,
-            .is_exposed = opt.is_exposed,
-            .is_runtime = opt.is_runtime,
-            .set_func = opt.set_func,
-            .get_func = opt.get_func,
-            .get_property_list_func = opt.get_property_list_func,
-            .free_property_list_func = opt.free_property_list_func,
-            .property_can_revert_func = opt.property_can_revert_func,
-            .property_get_revert_func = opt.property_get_revert_func,
-            .validate_property_func = opt.validate_property_func,
-            .notification_func = opt.notification_func,
-            .to_string_func = opt.to_string_func,
-            .reference_func = opt.reference_func,
-            .unreference_func = opt.unreference_func,
-            .create_instance_func = opt.create_instance_func,
-            .free_instance_func = opt.free_instance_func,
-            .recreate_instance_func = opt.recreate_instance_func,
-            .get_virtual_func = opt.get_virtual_func,
-            .get_virtual_call_data_func = opt.get_virtual_call_data_func,
-            .call_virtual_with_data_func = opt.call_virtual_with_data_func,
-            .get_rid_func = opt.get_rid_func,
-            .class_userdata = @constCast(@ptrCast(&GdzigClassUserdata{
-                .class_name = class_name.*,
-                .userdata = userdata,
-            })),
-        },
-    );
-
+    // This hook allows the user to register additional methods or properties
     if (@hasDecl(T, "_bindMethods")) {
         T._bindMethods();
     }
+}
+
+/// Extends and modifies ClassCreationInfo(T, Userdata) by:
+///
+/// - making create_instance nullable, with default null value
+/// - making recreate_instance nullable, with default null value
+/// - making free_instance nullable, with default null value
+///
+pub fn RegisterClassOpts(comptime T: type, comptime Userdata: type) type {
+    const Original = godot.api.classdb.ClassCreationInfo(T, Userdata);
+    const original_info = @typeInfo(Original);
+    const original_fields = original_info.@"struct".fields;
+
+    var new_fields: [original_fields.len]std.builtin.Type.StructField = undefined;
+
+    for (original_fields, 0..) |field, i| {
+        if (std.mem.eql(u8, field.name, "create_instance") or
+            std.mem.eql(u8, field.name, "recreate_instance") or
+            std.mem.eql(u8, field.name, "free_instance"))
+        {
+            new_fields[i] = std.builtin.Type.StructField{
+                .name = field.name,
+                .type = ?field.type,
+                .default_value_ptr = @ptrCast(&@as(?field.type, null)),
+                .is_comptime = field.is_comptime,
+                .alignment = field.alignment,
+            };
+        } else {
+            new_fields[i] = field;
+        }
+    }
+
+    return @Type(std.builtin.Type{
+        .@"struct" = .{
+            .layout = original_info.@"struct".layout,
+            .fields = &new_fields,
+            .decls = &.{},
+            .is_tuple = original_info.@"struct".is_tuple,
+        },
+    });
 }
 
 var registered_methods: std.StringHashMap(void) = undefined;
@@ -172,12 +219,12 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 }
 
-fn init() void {
+pub fn init() void {
     registered_methods = std.StringHashMap(void).init(heap.general_allocator);
     registered_signals = std.StringHashMap(void).init(heap.general_allocator);
 }
 
-fn deinit() void {
+pub fn deinit() void {
     {
         var keys = registered_methods.keyIterator();
         while (keys.next()) |it| {
@@ -201,12 +248,13 @@ const DebugAllocator = std.heap.DebugAllocator;
 
 const godot = @import("gdzig.zig");
 const c = godot.c;
-const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const PropertyHint = godot.global.PropertyHint;
 const heap = godot.heap;
 const Interface = godot.Interface;
 const meta = godot.meta;
+const Object = godot.class.Object;
 const object = godot.object;
+const PropertyHint = godot.global.PropertyHint;
+const PropertyUsageFlags = godot.global.PropertyUsageFlags;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const support = godot.support;

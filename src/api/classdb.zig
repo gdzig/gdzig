@@ -138,7 +138,7 @@ pub fn registerClass(
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime),
-            .icon_path = @ptrCast(info.icon_path),
+            .icon_path = @ptrCast(info.icon_path), // added in v4
             .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
             .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
             .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
@@ -150,11 +150,11 @@ pub fn registerClass(
             .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = cb }) else null,
             .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = cb }) else null,
             .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = cb }) else null,
-            .create_instance_func = bind(Func.createInstance2, .{ .@"-1" = info.create_instance }),
+            .create_instance_func = bind(Func.createInstance2, .{ .@"-1" = info.create_instance }), // signature changed in v4
             .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = info.free_instance }),
             .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = cb }) else null,
-            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual2, .{ .@"-1" = cb }) else null,
-            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData2, .{ .@"-1" = cb }) else null,
+            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual2, .{ .@"-1" = cb }) else null, // signature changed in v4
+            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData2, .{ .@"-1" = cb }) else null, // signature changed in v4
             .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = cb }) else null,
             .class_userdata = if (Userdata == void) null else @ptrCast(info.class_userdata),
         })
@@ -163,11 +163,11 @@ pub fn registerClass(
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed),
-            .is_runtime = @intFromBool(info.is_runtime),
+            .is_runtime = @intFromBool(info.is_runtime), // added in v3
             .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
             .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
             .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
-            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList2, .{ .@"-1" = cb }) else null,
+            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList2, .{ .@"-1" = cb }) else null, // signature changed in v3
             .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = cb }) else null,
             .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = cb }) else null,
             .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = cb }) else null,
@@ -188,24 +188,24 @@ pub fn registerClass(
         godot.interface.classdbRegisterExtensionClass2(godot.interface.library, base_name, class_name, .{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
-            .is_exposed = @intFromBool(info.is_exposed),
+            .is_exposed = @intFromBool(info.is_exposed), // added in v2
             .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
             .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
             .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
             .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList, .{ .@"-1" = cb }) else null,
             .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = cb }) else null,
             .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = cb }) else null,
-            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = cb }) else null,
-            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = cb }) else null,
+            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = cb }) else null, // added in v2
+            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = cb }) else null, // signature changed in v2
             .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = cb }) else null,
             .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = cb }) else null,
             .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = cb }) else null,
             .create_instance_func = bind(Func.createInstance, .{ .@"-1" = info.create_instance }),
             .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = info.free_instance }),
-            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = cb }) else null,
+            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = cb }) else null, // added in v2
             .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = cb }) else null,
-            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData, .{ .@"-1" = cb }) else null,
-            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = cb }) else null,
+            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData, .{ .@"-1" = cb }) else null, // added in v2
+            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = cb }) else null, // added in v2
             .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = cb }) else null,
             .class_userdata = if (Userdata == void) null else @ptrCast(info.class_userdata),
         })
@@ -271,7 +271,7 @@ pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
             is_abstract: bool = false,
             is_exposed: bool = false,
             is_runtime: bool = false,
-            icon_path: ?*const String = null,
+            icon_path: ?*const String = null, // added in v4
             set: ?*const callback.Set = null,
             get: ?*const callback.Get = null,
             get_property_list: ?*const callback.GetPropertyList = null,
@@ -283,13 +283,13 @@ pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
             to_string: ?*const callback.ToString = null,
             reference: ?*const callback.Reference = null,
             unreference: ?*const callback.Unreference = null,
-            create_instance: *const callback.CreateInstance2,
+            create_instance: *const callback.CreateInstance2, // signature changed in v4
             free_instance: *const callback.FreeInstance,
             recreate_instance: ?*const callback.RecreateInstance = null,
-            get_virtual: ?*const callback.GetVirtual2 = null,
-            get_virtual_call_data: ?*const callback.GetVirtualCallData2 = null,
+            get_virtual: ?*const callback.GetVirtual2 = null, // signature changed in v4
+            get_virtual_call_data: ?*const callback.GetVirtualCallData2 = null, // signature changed in v4
             call_virtual_with_data: ?*const callback.CallVirtualWithData = null,
-            class_userdata: if (Userdata == void) void else *Userdata = {},
+            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
         }
     else if (@hasDecl(c, "GDExtensionClassCreationInfo3"))
         struct {
@@ -298,11 +298,11 @@ pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
             is_virtual: bool = false,
             is_abstract: bool = false,
             is_exposed: bool = false,
-            is_runtime: bool = false,
+            is_runtime: bool = false, // added in v3
             set: ?*const callback.Set = null,
             get: ?*const callback.Get = null,
             get_property_list: ?*const callback.GetPropertyList = null,
-            free_property_list: ?*const callback.FreePropertyList2 = null,
+            free_property_list: ?*const callback.FreePropertyList2 = null, // signature changed in v3
             property_can_revert: ?*const callback.PropertyCanRevert = null,
             property_get_revert: ?*const callback.PropertyGetRevert = null,
             validate_property: ?*const callback.ValidateProperty = null,
@@ -317,7 +317,7 @@ pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
             get_virtual_call_data: ?*const callback.GetVirtualCallData = null,
             call_virtual_with_data: ?*const callback.CallVirtualWithData = null,
             get_rid: ?*const callback.GetRID = null,
-            class_userdata: if (Userdata == void) void else *Userdata = {},
+            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
         }
     else if (@hasDecl(c, "GDExtensionClassCreationInfo2"))
         struct {
@@ -325,26 +325,26 @@ pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
 
             is_virtual: bool = false,
             is_abstract: bool = false,
-            is_exposed: bool = false,
+            is_exposed: bool = false, // added in v2
             set: ?*const callback.Set = null,
             get: ?*const callback.Get = null,
             get_property_list: ?*const callback.GetPropertyList = null,
             free_property_list: ?*const callback.FreePropertyList = null,
             property_can_revert: ?*const callback.PropertyCanRevert = null,
             property_get_revert: ?*const callback.PropertyGetRevert = null,
-            validate_property: ?*const callback.ValidateProperty = null,
-            notification: ?*const callback.Notification2 = null,
+            validate_property: ?*const callback.ValidateProperty = null, // added in v2
+            notification: ?*const callback.Notification2 = null, // signature changed in v2
             to_string: ?*const callback.ToString = null,
             reference: ?*const callback.Reference = null,
             unreference: ?*const callback.Unreference = null,
             create_instance: *const callback.CreateInstance,
             free_instance: *const callback.FreeInstance,
-            recreate_instance: ?*const callback.RecreateInstance = null,
+            recreate_instance: ?*const callback.RecreateInstance = null, // added in v2
             get_virtual: ?*const callback.GetVirtual = null,
-            get_virtual_call_data: ?*const callback.GetVirtualCallData = null,
-            call_virtual_with_data: ?*const callback.CallVirtualWithData = null,
+            get_virtual_call_data: ?*const callback.GetVirtualCallData = null, // added in v2
+            call_virtual_with_data: ?*const callback.CallVirtualWithData = null, // added in v2
             get_rid: ?*const callback.GetRID = null,
-            class_userdata: if (Userdata == void) void else *Userdata = {},
+            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
         }
     else if (@hasDecl(c, "GDExtensionClassCreationInfo"))
         struct {
@@ -366,7 +366,7 @@ pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
             free_instance: *const callback.FreeInstance,
             get_virtual: ?*const callback.GetVirtual = null,
             get_rid: ?*const callback.GetRID = null,
-            class_userdata: if (Userdata == void) void else *Userdata = {},
+            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
         }
     else
         @compileError("Godot version 4.1 or higher is required.");
