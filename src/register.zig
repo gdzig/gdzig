@@ -9,28 +9,13 @@ pub fn registerClass(
 
 pub fn registerClassWithUserdata(
     comptime T: type,
-    userdata: anytype,
-    opt: RegisterClassOpts(T, @TypeOf(userdata)),
+    opt: ClassCreationInfo,
 ) void {
     const base_name = meta.getNamePtr(meta.BaseOf(T));
     const class_name = meta.getNamePtr(T);
     class_name.* = StringName.fromComptimeLatin1(comptime meta.getTypeShortName(T));
 
-    // Create a new ClassCreationInfo object with extended userdata
-    const Userdata = struct {
-        class_name: StringName,
-        userdata: @TypeOf(userdata),
-    };
-    const Info = comptime godot.api.classdb.ClassCreationInfo(T, Userdata);
-    var info: Info = undefined;
-
-    // Copy the fields from opt into info
-    inline for (@typeInfo(Info).@"struct".fields) |field| {
-        if (comptime std.mem.eql(u8, "class_userdata", field.name)) continue;
-        if (@FieldType(@TypeOf(info), field.name) == @FieldType(@TypeOf(opt), field.name)) {
-            @field(info, field.name) = @field(opt, field.name);
-        }
-    }
+    var info: ClassCreationInfo = opt;
 
     // Virtual function defaults
     info.set = info.set orelse if (@hasDecl(T, "_set")) &T._set else null;
@@ -46,7 +31,7 @@ pub fn registerClassWithUserdata(
     info.to_string = info.to_string orelse if (@hasDecl(T, "_toString")) &T._toString else null;
     info.reference = info.reference orelse if (@hasDecl(T, "_reference")) &T._reference else null;
     info.unreference = info.unreference orelse if (@hasDecl(T, "_unreference")) &T._unreference else null;
-    if (@hasField(Info, "get_rid")) { // removed in Godot 4.4
+    if (@hasField(ClassCreationInfo, "get_rid")) { // removed in Godot 4.4
         info.get_rid = info.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
     }
 
@@ -54,26 +39,26 @@ pub fn registerClassWithUserdata(
     // TODO: allow overrides for these methods
     if (comptime @hasDecl(godot.c, "GDExtensionClassCreateInstance2")) { // added in Godot 4.4
         info.create_instance = struct {
-            fn create(_: *Userdata, _: bool) *Object {
+            fn create(_: *ClassUserdata, _: bool) *Object {
                 const ret = object.create(T) catch unreachable;
                 return @ptrCast(meta.asObject(ret));
             }
         }.create;
     } else {
         info.create_instance = struct {
-            fn create(_: *Userdata) *Object {
+            fn create(_: *ClassUserdata) *Object {
                 const ret = object.create(T) catch unreachable;
                 return @ptrCast(@alignCast(meta.asObject(ret)));
             }
         }.create;
     }
     info.recreate_instance = struct {
-        fn recreate(_: *Userdata, _: *Object) *T {
+        fn recreate(_: *ClassUserdata, _: *Object) *T {
             @panic("Extension reloading is not currently supported");
         }
     }.recreate;
     info.free_instance = struct {
-        fn free(_: *Userdata, instance: *T) void {
+        fn free(_: *ClassUserdata, instance: *T) void {
             if (@hasDecl(T, "deinit")) {
                 instance.deinit();
             }
@@ -83,13 +68,13 @@ pub fn registerClassWithUserdata(
     }.free;
 
     // Setup class userdata
-    info.class_userdata = @constCast(&Userdata{
+    info.class_userdata = @constCast(&ClassUserdata{
         .class_name = class_name.*,
         .userdata = userdata,
     });
 
     // Register the type in the ClassDB
-    godot.api.classdb.registerClass(T, Userdata, class_name, base_name, info);
+    godot.api.classdb.registerClass(class_name, base_name, info);
 
     // This hook allows the user to register additional methods or properties
     if (@hasDecl(T, "_bindMethods")) {
@@ -264,3 +249,5 @@ const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const support = godot.support;
 const Variant = godot.builtin.Variant;
+const ClassCreationInfo = godot.api.classdb.ClassCreationInfo;
+const ClassUserdata = godot.api.classdb.ClassUserdata;

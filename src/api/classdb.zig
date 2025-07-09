@@ -6,571 +6,674 @@
 //! `godot.c` module.
 //!
 
+pub const ClassCreationInfo = if (@hasDecl(c, "GDExtensionClassCreationInfo4"))
+    ClassCreationInfo4
+else if (@hasDecl(c, "GDExtensionClassCreationInfo3"))
+    ClassCreationInfo3
+else if (@hasDecl(c, "GDExtensionClassCreationInfo2"))
+    ClassCreationInfo2
+else if (@hasDecl(c, "GDExtensionClassCreationInfo"))
+    ClassCreationInfo1
+else
+    @compileError("Godot version 4.1 or higher is required.");
+
+pub const ClassUserdata = if (@hasDecl(godot.c, "GDExtensionClassCreationInfo4"))
+    ClassUserdata4
+else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo3"))
+    ClassUserdata3
+else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo2"))
+    ClassUserdata2
+else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo"))
+    ClassUserdata1
+else
+    @compileError("Godot version 4.1 or higher is required.");
+
 pub fn registerClass(
-    comptime T: type,
-    comptime Userdata: type,
     class_name: *StringName,
     base_name: *StringName,
-    info: ClassCreationInfo(T, Userdata),
+    info: ClassCreationInfo,
 ) void {
-    const Info = @TypeOf(info);
-    const Impl = struct {
-        fn set(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, variant: c.GDExtensionConstVariantPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            std.debug.print("set\n", .{});
-
-            const callback: *const Info.callback.Set = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-            const p_variant: *const Variant = @ptrCast(@alignCast(variant.?));
-
-            const ret = callback(p_instance, p_name, p_variant);
-
-            return @intFromBool(ret);
-        }
-        fn get(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, variant: c.GDExtensionVariantPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            std.debug.print("get\n", .{});
-
-            const callback: *const Info.callback.Get = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-            const r_variant: *Variant = @ptrCast(@alignCast(variant.?));
-
-            const ret = callback(p_instance, p_name);
-
-            if (ret) |result| {
-                r_variant.* = result;
-                return 1;
-            } else {
-                return 0;
-            }
-        }
-        fn getPropertyList(instance: c.GDExtensionClassInstancePtr, count: [*c]u32, callback_ptr: *anyopaque) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
-            std.debug.print("getPropertyList\n", .{});
-
-            const callback: *const Info.callback.GetPropertyList = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            const ret = callback(p_instance);
-
-            count.* = @intCast(ret.len);
-            return @ptrCast(ret.ptr);
-        }
-        fn freePropertyList(instance: c.GDExtensionClassInstancePtr, list: [*c]const c.GDExtensionPropertyInfo, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("freePropertyList\n", .{});
-
-            const callback: *const Info.callback.FreePropertyList = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            callback(p_instance, list);
-        }
-        fn freePropertyList2(instance: c.GDExtensionClassInstancePtr, list: [*c]const c.GDExtensionPropertyInfo, count: u32, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("freePropertyList2\n", .{});
-
-            const callback: *const Info.callback.FreePropertyList2 = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            callback(p_instance, @ptrCast(@constCast(list[0..count])));
-        }
-        fn propertyCanRevert(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            std.debug.print("propertyCanRevert\n", .{});
-
-            const callback: *const Info.callback.PropertyCanRevert = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = callback(p_instance, p_name);
-
-            return @intFromBool(ret);
-        }
-        fn propertyGetRevert(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, variant: c.GDExtensionVariantPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            std.debug.print("propertyGetRevert\n", .{});
-
-            const callback: *const Info.callback.PropertyGetRevert = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-            const r_variant: *Variant = @ptrCast(@alignCast(variant.?));
-
-            const ret = callback(p_instance, p_name);
-
-            if (ret) |result| {
-                r_variant.* = result;
-                return 1;
-            }
-            return 0;
-        }
-        fn validateProperty(instance: c.GDExtensionClassInstancePtr, property: [*c]c.GDExtensionPropertyInfo, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            std.debug.print("validateProperty\n", .{});
-
-            const callback: *const Info.callback.ValidateProperty = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_property: *PropertyInfo = @ptrCast(property);
-
-            const ret = callback(p_instance, p_property);
-
-            return @intFromBool(ret);
-        }
-        fn notification(instance: c.GDExtensionClassInstancePtr, what: i32, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("notification\n", .{});
-
-            const callback: *const Info.callback.Notification = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            callback(p_instance, what);
-        }
-        fn notification2(instance: c.GDExtensionClassInstancePtr, what: i32, reversed: c.GDExtensionBool, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("notification2\n", .{});
-
-            const callback: *const Info.callback.Notification2 = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            callback(p_instance, what, reversed != 0);
-        }
-        fn toString(instance: c.GDExtensionClassInstancePtr, is_valid: [*c]c.GDExtensionBool, string: c.GDExtensionStringPtr, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("toString\n", .{});
-
-            const callback: *const Info.callback.ToString = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const r_string: *String = @ptrCast(@alignCast(string.?));
-            const r_is_valid: *u8 = @ptrCast(is_valid.?);
-
-            const ret = callback(p_instance);
-
-            if (ret) |result| {
-                r_string.* = result;
-                r_is_valid.* = 1;
-            } else {
-                r_is_valid.* = 0;
-            }
-        }
-        fn reference(instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("reference\n", .{});
-
-            const callback: *const Info.callback.Reference = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            callback(p_instance);
-        }
-        fn unreference(instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("unreference\n", .{});
-
-            const callback: *const Info.callback.Unreference = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            callback(p_instance);
-        }
-        fn createInstance(userdata: ?*anyopaque, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionObjectPtr {
-            std.debug.print("createInstance\n", .{});
-
-            const callback: *const Info.callback.CreateInstance = @ptrCast(@alignCast(callback_ptr));
-
-            if (Userdata == void) {
-                const ret = callback();
-
-                return @ptrCast(ret);
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                const ret = callback(p_userdata);
-
-                return @ptrCast(ret);
-            }
-        }
-        fn createInstance2(userdata: ?*anyopaque, notify_postinitialize: c.GDExtensionBool, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionObjectPtr {
-            std.debug.print("createInstance2\n", .{});
-
-            const callback: *const Info.callback.CreateInstance2 = @ptrCast(@alignCast(callback_ptr));
-            if (Userdata == void) {
-                const ret = callback(notify_postinitialize);
-
-                return @ptrCast(ret);
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                const ret = callback(p_userdata, notify_postinitialize != 0);
-
-                return @ptrCast(ret);
-            }
-        }
-        fn freeInstance(userdata: ?*anyopaque, instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("freeInstance\n", .{});
-
-            const callback: *const Info.callback.FreeInstance = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            if (Userdata == void) {
-                callback(p_instance);
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                callback(p_userdata, p_instance);
-            }
-        }
-        fn recreateInstance(userdata: ?*anyopaque, object: c.GDExtensionObjectPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassInstancePtr {
-            std.debug.print("recreateInstance\n", .{});
-
-            const callback: *const Info.callback.RecreateInstance = @ptrCast(@alignCast(callback_ptr));
-            const p_object: *Object = @ptrCast(object.?);
-
-            if (Userdata == void) {
-                const ret = callback(p_object);
-
-                return @ptrCast(ret);
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                const ret = callback(p_userdata, p_object);
-
-                return @ptrCast(ret);
-            }
-        }
-        fn callVirtual(instance: c.GDExtensionClassInstancePtr, args: [*c]const c.GDExtensionConstTypePtr, ret: c.GDExtensionTypePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("callVirtual\n", .{});
-
-            const callback: *const Info.callback.CallVirtual = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_args: [*]const ?*anyopaque = @ptrCast(args);
-            const r_ret: *anyopaque = @ptrCast(ret);
-
-            callback(p_instance, p_args, r_ret);
-        }
-        fn getVirtual(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassCallVirtual {
-            std.debug.print("getVirtual\n", .{});
-
-            const callback: *const Info.callback.GetVirtual = @ptrCast(@alignCast(callback_ptr));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = ret: {
-                if (Userdata == void) {
-                    break :ret callback(p_name);
-                } else {
-                    const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                    break :ret callback(p_userdata, p_name);
-                }
-            };
-
-            return bind(@This().callVirtual, ret);
-        }
-        fn getVirtual2(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, hash: u32, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassCallVirtual {
-            std.debug.print("getVirtual2\n", .{});
-
-            const callback: *const Info.callback.GetVirtual2 = @ptrCast(@alignCast(callback_ptr));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = ret: {
-                if (Userdata == void) {
-                    break :ret callback(p_name, hash);
-                } else {
-                    const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                    break :ret callback(p_userdata, p_name, hash);
-                }
-            };
-
-            return bind(@This().callVirtual, ret);
-        }
-        fn getVirtualCallData(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) ?*anyopaque {
-            std.debug.print("getVirtualCallData\n", .{});
-
-            const callback: *const Info.callback.GetVirtualCallData = @ptrCast(@alignCast(callback_ptr));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            if (Userdata == void) {
-                const ret = callback(p_name);
-
-                return ret;
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                const ret = callback(p_userdata, p_name);
-
-                return ret;
-            }
-        }
-        fn getVirtualCallData2(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, hash: u32, callback_ptr: *anyopaque) callconv(.c) ?*anyopaque {
-            std.debug.print("getVirtualCallData2\n", .{});
-
-            const callback: *const Info.callback.GetVirtualCallData2 = @ptrCast(@alignCast(callback_ptr));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            if (Userdata == void) {
-                const ret = callback(p_name, hash);
-
-                return ret;
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-
-                const ret = callback(p_userdata, p_name, hash);
-
-                return ret;
-            }
-        }
-        fn callVirtualWithData(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, virtual_call_userdata: ?*anyopaque, args: [*c]const c.GDExtensionConstTypePtr, ret: c.GDExtensionTypePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            std.debug.print("callVirtualWithData\n", .{});
-
-            const callback: *const Info.callback.CallVirtualWithData = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            // ret.* = callback(p_instance, p_name, virtual_call_userdata, args, ret);
-            _ = callback;
-            _ = p_instance;
-            _ = p_name;
-            _ = virtual_call_userdata;
-            _ = args;
-            _ = ret;
-            @panic("TODO: implement");
-        }
-        fn getRid(instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) u64 {
-            std.debug.print("getRid\n", .{});
-
-            const callback: *const Info.callback.GetRid = @ptrCast(@alignCast(callback_ptr));
-            const p_instance: *T = @ptrCast(@alignCast(instance.?));
-
-            const ret = callback(p_instance);
-
-            return ret;
-        }
-    };
-
-    return if (@hasDecl(godot.c, "GDExtensionClassCreationInfo4"))
-        godot.interface.classdbRegisterExtensionClass4(godot.interface.library, class_name, base_name, &.{
+    switch (@TypeOf(ClassCreationInfo)) {
+        ClassCreationInfo4 => godot.interface.classdbRegisterExtensionClass4(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime),
-            .icon_path = @ptrCast(info.icon_path),
-            .set_func = bind(Impl.set, info.set),
-            .get_func = bind(Impl.get, info.get),
-            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(Impl.freePropertyList2, info.free_property_list),
-            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
-            .validate_property_func = bind(Impl.validateProperty, info.validate_property),
-            .notification_func = bind(Impl.notification2, info.notification),
-            .to_string_func = bind(Impl.toString, info.to_string),
-            .reference_func = bind(Impl.reference, info.reference),
-            .unreference_func = bind(Impl.unreference, info.unreference),
-            .create_instance_func = bind(Impl.createInstance2, info.create_instance),
-            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
-            .recreate_instance_func = bind(Impl.recreateInstance, info.recreate_instance),
-            .get_virtual_func = bind(Impl.getVirtual2, info.get_virtual),
-            .get_virtual_call_data_func = bind(Impl.getVirtualCallData2, info.get_virtual_call_data),
-            .call_virtual_with_data_func = bind(Impl.callVirtualWithData, info.call_virtual_with_data),
-            .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
-        })
-    else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo3"))
-        godot.interface.classdbRegisterExtensionClass3(godot.interface.library, class_name, base_name, &.{
+            .icon_path = @ptrCast(if (info.icon_path) |icon| &icon else null),
+            .set_func = &set,
+            .get_func = &get,
+            .get_property_list_func = &getPropertyList,
+            .free_property_list_func = &freePropertyList2,
+            .property_can_revert_func = &propertyCanRevert,
+            .property_get_revert_func = &propertyGetRevert,
+            .validate_property_func = &validateProperty,
+            .notification_func = &notification2,
+            .to_string_func = &toString,
+            .reference_func = &reference,
+            .unreference_func = &unreference,
+            .create_instance_func = &createInstance2,
+            .free_instance_func = &freeInstance,
+            .recreate_instance_func = &recreateInstance,
+            .get_virtual_func = &getVirtual2,
+            .get_virtual_call_data_func = &getVirtualCallData2,
+            .call_virtual_with_data_func = &callVirtualWithData,
+            .class_userdata = &ClassUserdata4{
+                .vtable = info.vtable,
+                .userdata = info.userdata,
+            },
+        }),
+        ClassCreationInfo3 => godot.interface.classdbRegisterExtensionClass3(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime), // added in v3
-            .set_func = bind(Impl.set, info.set),
-            .get_func = bind(Impl.get, info.get),
-            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(Impl.freePropertyList2, info.free_property_list),
-            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
-            .validate_property_func = bind(Impl.validateProperty, info.validate_property),
-            .notification_func = bind(Impl.notification2, info.notification),
-            .to_string_func = bind(Impl.toString, info.to_string),
-            .reference_func = bind(Impl.reference, info.reference),
-            .unreference_func = bind(Impl.unreference, info.unreference),
-            .create_instance_func = bind(Impl.createInstance, info.create_instance),
-            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
-            .recreate_instance_func = bind(Impl.recreateInstance, info.recreate_instance),
-            .get_virtual_func = bind(Impl.getVirtual, info.get_virtual),
-            .get_virtual_call_data_func = bind(Impl.getVirtualCallData, info.get_virtual_call_data),
-            .call_virtual_with_data_func = bind(Impl.callVirtualWithData, info.call_virtual_with_data),
-            .get_rid_func = bind(Impl.getRid, info.get_rid),
-            .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
-        })
-    else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo2"))
-        godot.interface.classdbRegisterExtensionClass2(godot.interface.library, class_name, base_name, &.{
+            .set_func = &set,
+            .get_func = &get,
+            .get_property_list_func = &getPropertyList,
+            .free_property_list_func = &freePropertyList2,
+            .property_can_revert_func = &propertyCanRevert,
+            .property_get_revert_func = &propertyGetRevert,
+            .validate_property_func = &validateProperty,
+            .notification_func = &notification2,
+            .to_string_func = &toString,
+            .reference_func = &reference,
+            .unreference_func = &unreference,
+            .create_instance_func = &createInstance,
+            .free_instance_func = &freeInstance,
+            .recreate_instance_func = &recreateInstance,
+            .get_virtual_func = &getVirtual,
+            .get_virtual_call_data_func = &getVirtualCallData,
+            .call_virtual_with_data_func = &callVirtualWithData,
+            .get_rid_func = &getRid,
+            .class_userdata = &ClassUserdata3{
+                .vtable = info.vtable,
+                .userdata = info.userdata,
+            },
+        }),
+        ClassCreationInfo2 => godot.interface.classdbRegisterExtensionClass2(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed), // added in v2
-            .set_func = bind(Impl.set, info.set),
-            .get_func = bind(Impl.get, info.get),
-            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(Impl.freePropertyList, info.free_property_list),
-            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
-            .validate_property_func = bind(Impl.validateProperty, info.validate_property),
-            .notification_func = bind(Impl.notification2, info.notification),
-            .to_string_func = bind(Impl.toString, info.to_string),
-            .reference_func = bind(Impl.reference, info.reference),
-            .unreference_func = bind(Impl.unreference, info.unreference),
-            .create_instance_func = bind(Impl.createInstance, info.create_instance),
-            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
-            .recreate_instance_func = bind(Impl.recreateInstance, info.recreate_instance),
-            .get_virtual_func = bind(Impl.getVirtual, info.get_virtual),
-            .get_virtual_call_data_func = bind(Impl.getVirtualCallData, info.get_virtual_call_data),
-            .call_virtual_with_data_func = bind(Impl.callVirtualWithData, info.call_virtual_with_data),
-            .get_rid_func = bind(Impl.getRid, info.get_rid),
-            .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
-        })
-    else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo"))
-        godot.interface.classdbRegisterExtensionClass(godot.interface.library, class_name, base_name, &.{
+            .set_func = &set,
+            .get_func = &get,
+            .get_property_list_func = &getPropertyList,
+            .free_property_list_func = &freePropertyList,
+            .property_can_revert_func = &propertyCanRevert,
+            .property_get_revert_func = &propertyGetRevert,
+            .validate_property_func = &validateProperty,
+            .notification_func = &notification2,
+            .to_string_func = &toString,
+            .reference_func = &reference,
+            .unreference_func = &unreference,
+            .create_instance_func = &createInstance,
+            .free_instance_func = &freeInstance,
+            .recreate_instance_func = &recreateInstance,
+            .get_virtual_func = &getVirtual,
+            .get_virtual_call_data_func = &getVirtualCallData,
+            .call_virtual_with_data_func = &callVirtualWithData,
+            .get_rid_func = &getRid,
+            .class_userdata = &ClassUserdata2{
+                .vtable = info.vtable,
+                .userdata = info.userdata,
+            },
+        }),
+        ClassCreationInfo1 => godot.interface.classdbRegisterExtensionClass(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
-            .set_func = bind(Impl.set, info.set),
-            .get_func = bind(Impl.get, info.get),
-            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(Impl.freePropertyList, info.free_property_list),
-            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
-            .notification_func = bind(Impl.notification, info.notification),
-            .to_string_func = bind(Impl.toString, info.to_string),
-            .reference_func = bind(Impl.reference, info.reference),
-            .unreference_func = bind(Impl.unreference, info.unreference),
-            .create_instance_func = bind(Impl.createInstance, info.create_instance),
-            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
-            .get_virtual_func = bind(Impl.getVirtual, info.get_virtual),
-            .get_rid_func = bind(Impl.getRid, info.get_rid),
-            .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
-        })
-    else
-        @compileError("Godot version 4.1 or higher is required.");
+            .set_func = &set,
+            .get_func = &get,
+            .get_property_list_func = &getPropertyList,
+            .free_property_list_func = &freePropertyList,
+            .property_can_revert_func = &propertyCanRevert,
+            .property_get_revert_func = &propertyGetRevert,
+            .notification_func = &notification,
+            .to_string_func = &toString,
+            .reference_func = &reference,
+            .unreference_func = &unreference,
+            .create_instance_func = &createInstance,
+            .free_instance_func = &freeInstance,
+            .get_virtual_func = &getVirtual,
+            .get_rid_func = &getRid,
+            .class_userdata = &ClassUserdata{
+                .vtable = info.vtable,
+                .userdata = info.userdata,
+            },
+        }),
+        else => unreachable,
+    }
 }
 
-pub fn ClassCreationInfo(comptime T: type, comptime Userdata: type) type {
-    comptime godot.debug.assertIsObjectType(T);
+/// Godot v4.4
+const ClassCreationInfo4 = struct {
+    is_virtual: bool = false,
+    is_abstract: bool = false,
+    is_exposed: bool = false,
+    is_runtime: bool = false,
+    icon_path: ?String = null, // added in v4
+    vtable: *const ClassUserdata4.VTable,
+    userdata: *anyopaque,
+};
 
-    const cb = struct {
-        pub const Set = fn (self: *T, StringName, *const Variant) bool;
-        pub const Get = fn (self: *T, name: StringName) ?Variant;
-        pub const GetPropertyList = fn (self: *T) []PropertyInfo;
-        pub const FreePropertyList = fn (self: *T, [*]PropertyInfo) void;
-        pub const FreePropertyList2 = fn (self: *T, []PropertyInfo) void;
-        pub const PropertyCanRevert = fn (self: *T, name: StringName) bool;
-        pub const PropertyGetRevert = fn (self: *T, name: StringName) ?Variant;
-        pub const ValidateProperty = fn (self: *T, info: *PropertyInfo) bool;
-        pub const Notification = fn (self: *T, what: i32) void;
-        pub const Notification2 = fn (self: *T, what: i32, reversed: bool) void;
-        pub const ToString = fn (self: *T) ?String;
-        pub const Reference = fn (self: *T) void;
-        pub const Unreference = fn (self: *T) void;
-        pub const CreateInstance = if (Userdata == void) fn () *Object else fn (userdata: *Userdata) *Object;
-        pub const CreateInstance2 = if (Userdata == void) fn (notify_postinitialize: bool) *Object else fn (userdata: *Userdata, notify_postinitialize: bool) *Object;
-        pub const FreeInstance = if (Userdata == void) fn (instance: *T) void else fn (userdata: *Userdata, instance: *T) void;
-        pub const RecreateInstance = if (Userdata == void) fn (object: *Object) *T else fn (userdata: *Userdata, object: *Object) *T;
-        pub const GetVirtual = if (Userdata == void) fn (name: StringName) ?*const CallVirtual else fn (userdata: *Userdata, name: StringName) ?*const CallVirtual;
-        pub const GetVirtual2 = if (Userdata == void) fn (name: StringName, hash: u32) ?*const CallVirtual else fn (userdata: *Userdata, name: StringName, hash: u32) ?*const CallVirtual;
-        pub const GetVirtualCallData = if (Userdata == void) fn (name: StringName) ?*anyopaque else fn (userdata: *Userdata, name: StringName) ?*anyopaque;
-        pub const GetVirtualCallData2 = if (Userdata == void) fn (name: StringName, hash: u32) ?*anyopaque else fn (userdata: *Userdata, name: StringName, hash: u32) ?*anyopaque;
-        pub const CallVirtual = fn (self: *T, args: []const *anyopaque) *anyopaque;
-        pub const CallVirtualWithData = fn (self: *T, name: StringName, virtual_call_userdata: ?*anyopaque, args: []const *anyopaque) ?*anyopaque;
-        pub const GetRID = fn (self: *T) u64;
+/// Godot v4.3
+const ClassCreationInfo3 = struct {
+    is_virtual: bool = false,
+    is_abstract: bool = false,
+    is_exposed: bool = false,
+    is_runtime: bool = false, // added in v3
+    vtable: *const ClassUserdata3.VTable,
+    userdata: *anyopaque,
+};
+
+/// Godot v4.2
+const ClassCreationInfo2 = struct {
+    is_virtual: bool = false,
+    is_abstract: bool = false,
+    is_exposed: bool = false, // added in v2
+    vtable: *const ClassUserdata2.VTable,
+    userdata: *anyopaque,
+};
+
+/// Godot v4.1
+const ClassCreationInfo1 = struct {
+    is_virtual: bool = false,
+    is_abstract: bool = false,
+    vtable: *const ClassUserdata1.VTable,
+    userdata: *anyopaque,
+};
+
+/// Godot v4.4
+const ClassUserdata4 = struct {
+    vtable: *VTable,
+    userdata: *anyopaque,
+
+    pub const InstanceBinding = struct {
+        vtable: *VTable,
+        ptr: *Object,
     };
 
-    return if (@hasDecl(c, "GDExtensionClassCreationInfo4"))
-        struct {
-            pub const callback = cb;
+    pub const VTable = struct {
+        // Static
+        createInstance: CreateInstance2,
+        freeInstance: FreeInstance,
+        recreateInstance: RecreateInstance,
+        getVirtual: GetVirtual2,
+        getVirtualCallData: GetVirtualCallData2,
 
-            is_virtual: bool = false,
-            is_abstract: bool = false,
-            is_exposed: bool = false,
-            is_runtime: bool = false,
-            icon_path: ?*const String = null, // added in v4
-            set: ?*const callback.Set = null,
-            get: ?*const callback.Get = null,
-            get_property_list: ?*const callback.GetPropertyList = null,
-            free_property_list: ?*const callback.FreePropertyList2 = null,
-            property_can_revert: ?*const callback.PropertyCanRevert = null,
-            property_get_revert: ?*const callback.PropertyGetRevert = null,
-            validate_property: ?*const callback.ValidateProperty = null,
-            notification: ?*const callback.Notification2 = null,
-            to_string: ?*const callback.ToString = null,
-            reference: ?*const callback.Reference = null,
-            unreference: ?*const callback.Unreference = null,
-            create_instance: *const callback.CreateInstance2, // signature changed in v4
-            free_instance: *const callback.FreeInstance,
-            recreate_instance: ?*const callback.RecreateInstance = null,
-            get_virtual: ?*const callback.GetVirtual2 = null, // signature changed in v4
-            get_virtual_call_data: ?*const callback.GetVirtualCallData2 = null, // signature changed in v4
-            call_virtual_with_data: ?*const callback.CallVirtualWithData = null,
-            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
-        }
-    else if (@hasDecl(c, "GDExtensionClassCreationInfo3"))
-        struct {
-            pub const callback = cb;
+        // Instance
+        set: Set,
+        get: Get,
+        getPropertyList: GetPropertyList,
+        freePropertyList: FreePropertyList2,
+        propertyCanRevert: PropertyCanRevert,
+        propertyGetRevert: PropertyGetRevert,
+        validateProperty: ValidateProperty,
+        notification: Notification2,
+        toString: ToString,
+        reference: Reference,
+        unreference: Unreference,
+    };
+};
 
-            is_virtual: bool = false,
-            is_abstract: bool = false,
-            is_exposed: bool = false,
-            is_runtime: bool = false, // added in v3
-            set: ?*const callback.Set = null,
-            get: ?*const callback.Get = null,
-            get_property_list: ?*const callback.GetPropertyList = null,
-            free_property_list: ?*const callback.FreePropertyList2 = null, // signature changed in v3
-            property_can_revert: ?*const callback.PropertyCanRevert = null,
-            property_get_revert: ?*const callback.PropertyGetRevert = null,
-            validate_property: ?*const callback.ValidateProperty = null,
-            notification: ?*const callback.Notification2 = null,
-            to_string: ?*const callback.ToString = null,
-            reference: ?*const callback.Reference = null,
-            unreference: ?*const callback.Unreference = null,
-            create_instance: *const callback.CreateInstance,
-            free_instance: *const callback.FreeInstance,
-            recreate_instance: ?*const callback.RecreateInstance = null,
-            get_virtual: ?*const callback.GetVirtual = null,
-            get_virtual_call_data: ?*const callback.GetVirtualCallData = null,
-            call_virtual_with_data: ?*const callback.CallVirtualWithData = null,
-            get_rid: ?*const callback.GetRID = null, // removed in v4
-            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
-        }
-    else if (@hasDecl(c, "GDExtensionClassCreationInfo2"))
-        struct {
-            pub const callback = cb;
+/// Godot v4.3
+const ClassUserdata3 = struct {
+    vtable: *VTable,
+    userdata: *anyopaque,
 
-            is_virtual: bool = false,
-            is_abstract: bool = false,
-            is_exposed: bool = false, // added in v2
-            set: ?*const callback.Set = null,
-            get: ?*const callback.Get = null,
-            get_property_list: ?*const callback.GetPropertyList = null,
-            free_property_list: ?*const callback.FreePropertyList = null,
-            property_can_revert: ?*const callback.PropertyCanRevert = null,
-            property_get_revert: ?*const callback.PropertyGetRevert = null,
-            validate_property: ?*const callback.ValidateProperty = null, // added in v2
-            notification: ?*const callback.Notification2 = null, // signature changed in v2
-            to_string: ?*const callback.ToString = null,
-            reference: ?*const callback.Reference = null,
-            unreference: ?*const callback.Unreference = null,
-            create_instance: *const callback.CreateInstance,
-            free_instance: *const callback.FreeInstance,
-            recreate_instance: ?*const callback.RecreateInstance = null, // added in v2
-            get_virtual: ?*const callback.GetVirtual = null,
-            get_virtual_call_data: ?*const callback.GetVirtualCallData = null, // added in v2
-            call_virtual_with_data: ?*const callback.CallVirtualWithData = null, // added in v2
-            get_rid: ?*const callback.GetRID = null,
-            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
-        }
-    else if (@hasDecl(c, "GDExtensionClassCreationInfo"))
-        struct {
-            pub const callback = cb;
+    pub const InstanceBinding = struct {
+        vtable: *VTable,
+        ptr: *Object,
+    };
 
-            is_virtual: bool = false,
-            is_abstract: bool = false,
-            set: ?*const callback.Set = null,
-            get: ?*const callback.Get = null,
-            get_property_list: ?*const callback.GetPropertyList = null,
-            free_property_list: ?*const callback.FreePropertyList = null,
-            property_can_revert: ?*const callback.PropertyCanRevert = null,
-            property_get_revert: ?*const callback.PropertyGetRevert = null,
-            notification: ?*const callback.Notification = null,
-            to_string: ?*const callback.ToString = null,
-            reference: ?*const callback.Reference = null,
-            unreference: ?*const callback.Unreference = null,
-            create_instance: *const callback.CreateInstance,
-            free_instance: *const callback.FreeInstance,
-            get_virtual: ?*const callback.GetVirtual = null,
-            get_rid: ?*const callback.GetRID = null,
-            class_userdata: if (Userdata == void) void else *Userdata = if (Userdata == void) {} else undefined,
-        }
-    else
-        @compileError("Godot version 4.1 or higher is required.");
+    pub const VTable = struct {
+        // Static
+        createInstance: CreateInstance,
+        freeInstance: FreeInstance,
+        recreateInstance: RecreateInstance,
+        getVirtual: GetVirtual,
+        getVirtualCallData: GetVirtualCallData,
+
+        // Instance
+        set: Set,
+        get: Get,
+        getPropertyList: GetPropertyList,
+        freePropertyList: FreePropertyList2,
+        propertyCanRevert: PropertyCanRevert,
+        propertyGetRevert: PropertyGetRevert,
+        validateProperty: ValidateProperty,
+        notification: Notification2,
+        toString: ToString,
+        reference: Reference,
+        unreference: Unreference,
+        getRid: GetRID,
+    };
+};
+
+/// Godot v4.2
+const ClassUserdata2 = struct {
+    vtable: *VTable,
+    userdata: *anyopaque,
+
+    pub const Binding = struct {
+        vtable: *VTable,
+        ptr: *Object,
+    };
+
+    pub const VTable = struct {
+        // Static
+        createInstance: CreateInstance,
+        freeInstance: FreeInstance,
+        recreateInstance: RecreateInstance,
+        getVirtual: GetVirtual,
+        getVirtualCallData: GetVirtualCallData,
+
+        // Instance
+        set: Set,
+        get: Get,
+        getPropertyList: GetPropertyList,
+        freePropertyList: FreePropertyList,
+        propertyCanRevert: PropertyCanRevert,
+        propertyGetRevert: PropertyGetRevert,
+        validateProperty: ValidateProperty,
+        notification: Notification2,
+        toString: ToString,
+        reference: Reference,
+        unreference: Unreference,
+        getRid: GetRID,
+    };
+};
+
+/// Godot v4.1
+const ClassUserdata1 = struct {
+    vtable: *VTable,
+    userdata: *anyopaque,
+
+    pub const Binding = struct {
+        vtable: *VTable,
+        ptr: *Object,
+    };
+
+    pub const VTable = struct {
+        // Static
+        createInstance: *const CreateInstance,
+        freeInstance: *const FreeInstance,
+        getVirtual: ?*const GetVirtual,
+
+        // Instance
+        set: ?*const Set,
+        get: ?*const Get,
+        getPropertyList: ?*const GetPropertyList,
+        freePropertyList: ?*const FreePropertyList,
+        propertyCanRevert: ?*const PropertyCanRevert,
+        propertyGetRevert: ?*const PropertyGetRevert,
+        notification: ?*const Notification,
+        toString: ?*const ToString,
+        reference: ?*const Reference,
+        unreference: ?*const Unreference,
+        getRid: ?*const GetRID,
+    };
+};
+
+pub const Set = fn (instance: *anyopaque, StringName, *const Variant) bool;
+pub const Get = fn (instance: *anyopaque, name: StringName) ?Variant;
+pub const GetPropertyList = fn (instance: *anyopaque) []PropertyInfo;
+pub const FreePropertyList = fn (instance: *anyopaque, [*]PropertyInfo) void;
+pub const FreePropertyList2 = fn (instance: *anyopaque, []PropertyInfo) void;
+pub const PropertyCanRevert = fn (instance: *anyopaque, name: StringName) bool;
+pub const PropertyGetRevert = fn (instance: *anyopaque, name: StringName) ?Variant;
+pub const ValidateProperty = fn (instance: *anyopaque, info: *PropertyInfo) bool;
+pub const Notification = fn (instance: *anyopaque, what: i32) void;
+pub const Notification2 = fn (instance: *anyopaque, what: i32, reversed: bool) void;
+pub const ToString = fn (instance: *anyopaque) ?String;
+pub const Reference = fn (instance: *anyopaque) void;
+pub const Unreference = fn (instance: *anyopaque) void;
+pub const CreateInstance = fn (class_userdata: *anyopaque) *Object;
+pub const CreateInstance2 = fn (class_userdata: *anyopaque, notify_postinitialize: bool) *Object;
+pub const FreeInstance = fn (class_userdata: *anyopaque, instance: *anyopaque) void;
+pub const RecreateInstance = fn (class_userdata: *anyopaque, object: *Object) *anyopaque;
+pub const GetVirtual = fn (class_userdata: *anyopaque, name: StringName) ?*const CallVirtual;
+pub const GetVirtual2 = fn (class_userdata: *anyopaque, name: StringName, hash: u32) ?*const CallVirtual;
+pub const GetVirtualCallData = fn (class_userdata: *anyopaque, name: StringName) ?*anyopaque;
+pub const GetVirtualCallData2 = fn (class_userdata: *anyopaque, name: StringName, hash: u32) ?*anyopaque;
+pub const CallVirtual = fn (instance: *anyopaque, args: []const *anyopaque) *anyopaque;
+pub const CallVirtualWithData = fn (instance: *anyopaque, name: StringName, virtual_call_userdata: ?*anyopaque, args: []const *anyopaque) ?*anyopaque;
+pub const GetRID = fn (instance: *anyopaque) u64;
+
+fn getMethod(instance: *anyopaque, comptime method_name: []const u8) @FieldType(ClassUserdata.VTable, method_name) {
+    const binding: *anyopaque = @ptrCast(godot.interface.objectGetInstanceBinding(instance, godot.interface.library, null).?);
+    return @field(binding.vtable, method_name);
+}
+
+fn set(
+    instance: c.GDExtensionClassInstancePtr,
+    name: c.GDExtensionConstStringNamePtr,
+    variant: c.GDExtensionConstVariantPtr,
+) callconv(.c) c.GDExtensionBool {
+    const set_fn = getMethod(instance, "set") orelse return 0;
+
+    const p_instance: *anyopaque = instance.?;
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+    const p_variant: *const Variant = @ptrCast(@alignCast(variant.?));
+
+    const ret = set_fn(p_instance, p_name, p_variant);
+
+    return @intFromBool(ret);
+}
+
+fn get(
+    instance: c.GDExtensionClassInstancePtr,
+    name: c.GDExtensionConstStringNamePtr,
+    variant: c.GDExtensionVariantPtr,
+) callconv(.c) c.GDExtensionBool {
+    const get_fn = getMethod(instance, "get") orelse return 0;
+
+    const p_instance: *anyopaque = instance.?;
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+    const r_variant: *Variant = @ptrCast(@alignCast(variant.?));
+
+    const ret = get_fn(p_instance, p_name);
+
+    if (ret) |result| {
+        r_variant.* = result;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+fn getPropertyList(
+    instance: c.GDExtensionClassInstancePtr,
+    count: [*c]u32,
+) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
+    const getPropertyList_fn = getMethod(instance, "getPropertyList") orelse {
+        count.* = 0;
+        return null;
+    };
+
+    const p_instance: *anyopaque = instance.?;
+
+    const ret = getPropertyList_fn(p_instance);
+
+    count.* = @intCast(ret.len);
+    return @ptrCast(ret.ptr);
+}
+
+fn freePropertyList(
+    instance: c.GDExtensionClassInstancePtr,
+    list: [*c]const c.GDExtensionPropertyInfo,
+) callconv(.c) void {
+    const freePropertyList_fn = getMethod(instance, "freePropertyList") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+
+    freePropertyList_fn(p_instance, list);
+}
+
+fn freePropertyList2(
+    instance: c.GDExtensionClassInstancePtr,
+    list: [*c]const c.GDExtensionPropertyInfo,
+    count: u32,
+) callconv(.c) void {
+    const freePropertyList_fn = getMethod(instance, "freePropertyList") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+
+    freePropertyList_fn(p_instance, @ptrCast(@constCast(list[0..count])));
+}
+
+fn propertyCanRevert(
+    instance: c.GDExtensionClassInstancePtr,
+    name: c.GDExtensionConstStringNamePtr,
+) callconv(.c) c.GDExtensionBool {
+    const propertyCanRevert_fn = getMethod(instance, "propertyCanRevert") orelse return 0;
+
+    const p_instance: *anyopaque = instance.?;
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+    const ret = propertyCanRevert_fn(p_instance, p_name);
+
+    return @intFromBool(ret);
+}
+
+fn propertyGetRevert(
+    instance: c.GDExtensionClassInstancePtr,
+    name: c.GDExtensionConstStringNamePtr,
+    variant: c.GDExtensionVariantPtr,
+) callconv(.c) c.GDExtensionBool {
+    const propertyGetRevert_fn = getMethod(instance, "propertyGetRevert") orelse return 0;
+
+    const p_instance: *anyopaque = instance.?;
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+    const r_variant: *Variant = @ptrCast(@alignCast(variant.?));
+
+    const ret = propertyGetRevert_fn(p_instance, p_name);
+
+    if (ret) |result| {
+        r_variant.* = result;
+        return 1;
+    }
+    return 0;
+}
+
+fn validateProperty(
+    instance: c.GDExtensionClassInstancePtr,
+    property: [*c]c.GDExtensionPropertyInfo,
+) callconv(.c) c.GDExtensionBool {
+    const validateProperty_fn = getMethod(instance, "validateProperty") orelse return 0;
+
+    const p_instance: *anyopaque = instance.?;
+    const p_property: *PropertyInfo = @ptrCast(property);
+
+    const ret = validateProperty_fn(p_instance, p_property);
+
+    return @intFromBool(ret);
+}
+
+fn notification(
+    instance: c.GDExtensionClassInstancePtr,
+    what: i32,
+) callconv(.c) void {
+    const notification_fn = getMethod(instance, "notification") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+
+    notification_fn(p_instance, what);
+}
+
+fn notification2(
+    instance: c.GDExtensionClassInstancePtr,
+    what: i32,
+    reversed: c.GDExtensionBool,
+) callconv(.c) void {
+    const notification_fn = getMethod(instance, "notification") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+
+    notification_fn(p_instance, what, reversed != 0);
+}
+
+fn toString(
+    instance: c.GDExtensionClassInstancePtr,
+    is_valid: [*c]c.GDExtensionBool,
+    string: c.GDExtensionStringPtr,
+) callconv(.c) void {
+    const toString_fn = getMethod(instance, "toString") orelse {
+        const r_is_valid: *u8 = @ptrCast(is_valid.?);
+        r_is_valid.* = 0;
+        return;
+    };
+
+    const p_instance: *anyopaque = instance.?;
+    const r_string: *String = @ptrCast(@alignCast(string.?));
+    const r_is_valid: *u8 = @ptrCast(is_valid.?);
+
+    const ret = toString_fn(p_instance);
+
+    if (ret) |result| {
+        r_string.* = result;
+        r_is_valid.* = 1;
+    } else {
+        r_is_valid.* = 0;
+    }
+}
+
+fn reference(
+    instance: c.GDExtensionClassInstancePtr,
+) callconv(.c) void {
+    const reference_fn = getMethod(instance, "reference") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+
+    reference_fn(p_instance);
+}
+
+fn unreference(
+    instance: c.GDExtensionClassInstancePtr,
+) callconv(.c) void {
+    const unreference_fn = getMethod(instance, "unreference") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+
+    unreference_fn(p_instance);
+}
+
+fn createInstance(
+    userdata: ?*anyopaque,
+) callconv(.c) c.GDExtensionObjectPtr {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const ret = class_userdata.vtable.createInstance(class_userdata.userdata);
+
+    return @ptrCast(ret);
+}
+
+fn createInstance2(
+    userdata: ?*anyopaque,
+    notify_postinitialize: c.GDExtensionBool,
+) callconv(.c) c.GDExtensionObjectPtr {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const ret = class_userdata.vtable.createInstance(class_userdata.userdata, notify_postinitialize != 0);
+
+    return @ptrCast(ret);
+}
+
+fn freeInstance(
+    userdata: ?*anyopaque,
+    instance: c.GDExtensionClassInstancePtr,
+) callconv(.c) void {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const p_instance: *anyopaque = instance.?;
+
+    class_userdata.vtable.freeInstance(class_userdata.userdata, p_instance);
+}
+
+fn recreateInstance(
+    userdata: ?*anyopaque,
+    object: c.GDExtensionObjectPtr,
+) callconv(.c) c.GDExtensionClassInstancePtr {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const p_object: *Object = @ptrCast(object.?);
+
+    const ret = class_userdata.vtable.recreateInstance(class_userdata.userdata, p_object);
+
+    return @ptrCast(ret);
+}
+
+fn callVirtual(
+    instance: c.GDExtensionClassInstancePtr,
+    args: [*c]const c.GDExtensionConstTypePtr,
+    ret: c.GDExtensionTypePtr,
+) callconv(.c) void {
+    const callVirtual_fn = getMethod(instance, "callVirtual") orelse return;
+
+    const p_instance: *anyopaque = instance.?;
+    const p_args: []const *anyopaque = @ptrCast(args);
+    const r_ret: *anyopaque = @ptrCast(ret);
+
+    const result = callVirtual_fn(p_instance, p_args);
+    r_ret.* = result.*;
+}
+
+fn getVirtual(
+    userdata: ?*anyopaque,
+    name: c.GDExtensionConstStringNamePtr,
+) callconv(.c) c.GDExtensionClassCallVirtual {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+    const ret = class_userdata.vtable.getVirtual(class_userdata.userdata, p_name);
+    _ = ret; // autofix
+
+    @panic("TODO");
+}
+
+fn getVirtual2(
+    userdata: ?*anyopaque,
+    name: c.GDExtensionConstStringNamePtr,
+    hash: u32,
+) callconv(.c) c.GDExtensionClassCallVirtual {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+    const ret = class_userdata.vtable.getVirtual(class_userdata.userdata, p_name, hash);
+    _ = ret; // autofix
+
+    @panic("TODO");
+}
+
+fn getVirtualCallData(
+    userdata: ?*anyopaque,
+    name: c.GDExtensionConstStringNamePtr,
+) callconv(.c) ?*anyopaque {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+    const ret = class_userdata.vtable.getVirtualCallData(class_userdata.userdata, p_name);
+
+    return ret;
+}
+
+fn getVirtualCallData2(
+    userdata: ?*anyopaque,
+    name: c.GDExtensionConstStringNamePtr,
+    hash: u32,
+) callconv(.c) ?*anyopaque {
+    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+    const ret = class_userdata.vtable.getVirtualCallData(class_userdata.userdata, p_name, hash);
+
+    return ret;
+}
+
+fn callVirtualWithData(
+    instance: c.GDExtensionClassInstancePtr,
+    name: c.GDExtensionConstStringNamePtr,
+    virtual_call_userdata: ?*anyopaque,
+    args: [*c]const c.GDExtensionConstTypePtr,
+    ret: c.GDExtensionTypePtr,
+) callconv(.c) void {
+    const p_instance: *anyopaque = instance.?;
+    const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+    // ret.* = callback(p_instance, p_name, virtual_call_userdata, args, ret);
+    _ = p_instance;
+    _ = p_name;
+    _ = virtual_call_userdata;
+    _ = args;
+    _ = ret;
+
+    @panic("TODO: implement");
+}
+
+fn getRid(
+    instance: c.GDExtensionClassInstancePtr,
+) callconv(.c) u64 {
+    const getRid_fn = getMethod(instance, "getRid") orelse return 0;
+
+    const p_instance: *anyopaque = instance.?;
+
+    const ret = getRid_fn(p_instance);
+
+    return ret;
 }
 
 pub const PropertyInfo = extern struct {
@@ -581,13 +684,6 @@ pub const PropertyInfo = extern struct {
     hint_string: ?*String = null,
     usage: PropertyUsageFlags = .property_usage_default,
 };
-
-fn bind(func: anytype, callback: anytype) ?*const fn_binding.BoundFn(@TypeOf(func), struct { @"-1": *anyopaque }) {
-    if (@typeInfo(@TypeOf(callback)) == .optional and callback == null) {
-        return null;
-    }
-    return fn_binding.bind(func, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(callback))) }) catch unreachable;
-}
 
 const std = @import("std");
 
