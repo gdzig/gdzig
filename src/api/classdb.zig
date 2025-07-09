@@ -6,6 +6,10 @@
 //! `godot.c` module.
 //!
 
+pub fn bind(func: anytype, vars: anytype) *const fn_binding.BoundFn(@TypeOf(func), @TypeOf(vars)) {
+    return fn_binding.bind(func, vars) catch unreachable;
+}
+
 pub fn registerClass(
     comptime T: type,
     comptime Userdata: type,
@@ -16,74 +20,77 @@ pub fn registerClass(
     const Info = @TypeOf(info);
     const Func = struct {
         fn set(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, variant: c.GDExtensionConstVariantPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            const callback: *const Info.callback.Set = @ptrCast(callback_ptr);
-            return callback(@ptrCast(instance.?), @ptrCast(name.?), @ptrCast(variant.?));
+            const callback: *const Info.callback.Set = @ptrCast(@alignCast(callback_ptr));
+            const result = callback(@ptrCast(@alignCast(instance.?)), @ptrCast(name.?), @ptrCast(@alignCast(variant.?)));
+            return @intFromBool(result);
         }
         fn get(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, variant: c.GDExtensionVariantPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            const callback: *const Info.callback.Get = @ptrCast(callback_ptr);
-            if (callback(@ptrCast(instance.?), @ptrCast(name.?), @ptrCast(variant.?))) |result| {
-                variant.?.* = result;
-                return true;
+            const callback: *const Info.callback.Get = @ptrCast(@alignCast(callback_ptr));
+            if (callback(@ptrCast(@alignCast(instance.?)), @ptrCast(name.?))) |result| {
+                @as(*Variant, @ptrCast(@alignCast(variant.?))).* = result;
+                return 1;
             }
-            return false;
+            return 0;
         }
-        fn getPropertyList(instance: c.GDExtensionClassInstancePtr, count: *u32, callback_ptr: *anyopaque) callconv(.c) [*]const c.GDExtensionPropertyInfo {
-            const callback: *const Info.callback.GetPropertyList = @ptrCast(callback_ptr);
-            const slice = callback(@ptrCast(instance.?));
-            count.* = slice.len;
+        fn getPropertyList(instance: c.GDExtensionClassInstancePtr, count: [*c]u32, callback_ptr: *anyopaque) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
+            const callback: *const Info.callback.GetPropertyList = @ptrCast(@alignCast(callback_ptr));
+            const slice = callback(@ptrCast(@alignCast(instance.?)));
+            count.* = @intCast(slice.len);
             return @ptrCast(slice.ptr);
         }
-        fn freePropertyList(instance: c.GDExtensionClassInstancePtr, list: [*]const c.GDExtensionPropertyInfo, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.FreePropertyList = @ptrCast(callback_ptr);
-            callback(@ptrCast(instance.?), list);
+        fn freePropertyList(instance: c.GDExtensionClassInstancePtr, list: [*c]const c.GDExtensionPropertyInfo, callback_ptr: *anyopaque) callconv(.c) void {
+            const callback: *const Info.callback.FreePropertyList = @ptrCast(@alignCast(callback_ptr));
+            callback(@ptrCast(@alignCast(instance.?)), list);
         }
-        fn freePropertyList2(instance: c.GDExtensionClassInstancePtr, list: [*]const c.GDExtensionPropertyInfo, count: u32, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.FreePropertyList = @ptrCast(callback_ptr);
-            callback(@ptrCast(instance.?), list[0..count]);
+        fn freePropertyList2(instance: c.GDExtensionClassInstancePtr, list: [*c]const c.GDExtensionPropertyInfo, count: u32, callback_ptr: *anyopaque) callconv(.c) void {
+            const callback: *const Info.callback.FreePropertyList2 = @ptrCast(@alignCast(callback_ptr));
+            callback(@ptrCast(@alignCast(instance.?)), @ptrCast(@constCast(list[0..count])));
         }
         fn propertyCanRevert(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            const callback: *const Info.callback.PropertyCanRevert = @ptrCast(callback_ptr);
-            return callback(@ptrCast(instance.?), @ptrCast(name.?));
+            const callback: *const Info.callback.PropertyCanRevert = @ptrCast(@alignCast(callback_ptr));
+            const result = callback(@ptrCast(@alignCast(instance.?)), @ptrCast(name.?));
+            return @intFromBool(result);
         }
         fn propertyGetRevert(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, variant: c.GDExtensionVariantPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            const callback: *const Info.callback.PropertyGetRevert = @ptrCast(callback_ptr);
-            if (callback(@ptrCast(instance.?), @ptrCast(name.?))) |result| {
-                variant.?.* = result;
-                return true;
+            const callback: *const Info.callback.PropertyGetRevert = @ptrCast(@alignCast(callback_ptr));
+            if (callback(@ptrCast(@alignCast(instance.?)), @ptrCast(name.?))) |result| {
+                @as(*Variant, @ptrCast(@alignCast(variant.?))).* = result;
+                return 1;
             }
-            return false;
+            return 0;
         }
-        fn validateProperty(instance: c.GDExtensionClassInstancePtr, property: *c.GDExtensionPropertyInfo, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
-            const callback: *const Info.callback.ValidateProperty = @ptrCast(callback_ptr);
-            return callback(@ptrCast(instance.?), @ptrCast(property));
+        fn validateProperty(instance: c.GDExtensionClassInstancePtr, property: [*c]c.GDExtensionPropertyInfo, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionBool {
+            const callback: *const Info.callback.ValidateProperty = @ptrCast(@alignCast(callback_ptr));
+            const result = callback(@ptrCast(@alignCast(instance.?)), @ptrCast(property));
+            return @intFromBool(result);
         }
         fn notification(instance: c.GDExtensionClassInstancePtr, what: i32, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.Notification = @ptrCast(callback_ptr);
-            callback(@ptrCast(instance.?), what);
+            const callback: *const Info.callback.Notification = @ptrCast(@alignCast(callback_ptr));
+            callback(@ptrCast(@alignCast(instance.?)), what);
         }
         fn notification2(instance: c.GDExtensionClassInstancePtr, what: i32, reversed: c.GDExtensionBool, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.Notification = @ptrCast(callback_ptr);
-            callback(@ptrCast(instance.?), what, reversed);
+            const callback: *const Info.callback.Notification2 = @ptrCast(@alignCast(callback_ptr));
+            callback(@ptrCast(@alignCast(instance.?)), what, reversed != 0);
         }
-        fn toString(instance: c.GDExtensionClassInstancePtr, is_valid: *c.GDExtensionBool, string: c.GDExtensionStringPtr, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.ToString = @ptrCast(callback_ptr);
-            if (callback(@ptrCast(instance.?), is_valid, @ptrCast(string.?))) |result| {
-                string.* = result;
-                is_valid.* = true;
+        fn toString(instance: c.GDExtensionClassInstancePtr, is_valid: [*c]c.GDExtensionBool, string: c.GDExtensionStringPtr, callback_ptr: *anyopaque) callconv(.c) void {
+            const callback: *const Info.callback.ToString = @ptrCast(@alignCast(callback_ptr));
+            if (callback(@ptrCast(@alignCast(instance.?)))) |result| {
+                @as(*String, @ptrCast(@alignCast(string.?))).* = result;
+                @as(*u8, @ptrCast(is_valid.?)).* = 1;
             } else {
-                is_valid.* = false;
+                @as(*u8, @ptrCast(is_valid.?)).* = 0;
             }
         }
         fn reference(instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.Reference = @ptrCast(callback_ptr);
-            callback(@ptrCast(instance.?));
+            const callback: *const Info.callback.Reference = @ptrCast(@alignCast(callback_ptr));
+            callback(@ptrCast(@alignCast(instance.?)));
         }
         fn unreference(instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.Unreference = @ptrCast(callback_ptr);
-            callback(@ptrCast(instance.?));
+            const callback: *const Info.callback.Unreference = @ptrCast(@alignCast(callback_ptr));
+            callback(@ptrCast(@alignCast(instance.?)));
         }
         fn createInstance(userdata: ?*anyopaque, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionObjectPtr {
-            const callback: *const Info.callback.CreateInstance = @ptrCast(callback_ptr);
+            const callback: *const Info.callback.CreateInstance = @ptrCast(@alignCast(callback_ptr));
             if (Userdata == void) {
                 return @ptrCast(callback());
             } else {
@@ -91,23 +98,23 @@ pub fn registerClass(
             }
         }
         fn createInstance2(userdata: ?*anyopaque, notify_postinitialize: c.GDExtensionBool, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionObjectPtr {
-            const callback: *const Info.callback.CreateInstance = @ptrCast(callback_ptr);
+            const callback: *const Info.callback.CreateInstance2 = @ptrCast(@alignCast(callback_ptr));
             if (Userdata == void) {
                 return @ptrCast(callback(notify_postinitialize));
             } else {
-                return @ptrCast(callback(@ptrCast(userdata.?), notify_postinitialize));
+                return @ptrCast(callback(@ptrCast(userdata.?), notify_postinitialize != 0));
             }
         }
         fn freeInstance(userdata: ?*anyopaque, instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.FreeInstance = @ptrCast(callback_ptr);
+            const callback: *const Info.callback.FreeInstance = @ptrCast(@alignCast(callback_ptr));
             if (Userdata == void) {
-                callback(@ptrCast(instance.?));
+                callback(@ptrCast(@alignCast(instance.?)));
             } else {
-                callback(@ptrCast(userdata.?), @ptrCast(instance.?));
+                callback(@ptrCast(userdata.?), @ptrCast(@alignCast(instance.?)));
             }
         }
         fn recreateInstance(userdata: ?*anyopaque, object: c.GDExtensionObjectPtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassInstancePtr {
-            const callback: *const Info.callback.RecreateInstance = @ptrCast(callback_ptr);
+            const callback: *const Info.callback.RecreateInstance = @ptrCast(@alignCast(callback_ptr));
             if (Userdata == void) {
                 return @ptrCast(callback(@ptrCast(object.?)));
             } else {
@@ -115,23 +122,34 @@ pub fn registerClass(
             }
         }
         fn getVirtual(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassCallVirtual {
-            const callback: *const Info.callback.GetVirtual = @ptrCast(callback_ptr);
+            _ = userdata; // autofix
+            _ = name; // autofix
+            const callback: *const Info.callback.GetVirtual = @ptrCast(@alignCast(callback_ptr));
+            _ = callback; // autofix
             if (Userdata == void) {
-                return callback(@ptrCast(name.?));
+                @panic("TODO: wrap the returned callback");
+                // return callback(@ptrCast(name.?));
             } else {
-                return callback(@ptrCast(userdata.?), @ptrCast(name.?));
+                @panic("TODO: wrap the returned callback");
+                // return callback(@ptrCast(userdata.?), @ptrCast(name.?));
             }
         }
         fn getVirtual2(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, hash: u32, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassCallVirtual {
-            const callback: *const Info.callback.GetVirtual = @ptrCast(callback_ptr);
+            _ = userdata; // autofix
+            _ = name; // autofix
+            _ = hash; // autofix
+            const callback: *const Info.callback.GetVirtual2 = @ptrCast(@alignCast(callback_ptr));
+            _ = callback; // autofix
             if (Userdata == void) {
-                return callback(@ptrCast(name.?), hash);
+                @panic("TODO: wrap the returned callback");
+                // return callback(@ptrCast(name.?), hash);
             } else {
-                return callback(@ptrCast(userdata.?), @ptrCast(name.?), hash);
+                @panic("TODO: wrap the returned callback");
+                // return callback(@ptrCast(userdata.?), @ptrCast(name.?), hash);
             }
         }
         fn getVirtualCallData(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) ?*anyopaque {
-            const callback: *const Info.callback.GetVirtualCallData = @ptrCast(callback_ptr);
+            const callback: *const Info.callback.GetVirtualCallData = @ptrCast(@alignCast(callback_ptr));
             if (Userdata == void) {
                 return callback(@ptrCast(name.?));
             } else {
@@ -139,7 +157,7 @@ pub fn registerClass(
             }
         }
         fn getVirtualCallData2(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, hash: u32, callback_ptr: *anyopaque) callconv(.c) ?*anyopaque {
-            const callback: *const Info.callback.GetVirtualCallData = @ptrCast(callback_ptr);
+            const callback: *const Info.callback.GetVirtualCallData2 = @ptrCast(@alignCast(callback_ptr));
             if (Userdata == void) {
                 return callback(@ptrCast(name.?), hash);
             } else {
@@ -147,12 +165,19 @@ pub fn registerClass(
             }
         }
         fn callVirtualWithData(instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, virtual_call_userdata: ?*anyopaque, args: [*c]const c.GDExtensionConstTypePtr, ret: c.GDExtensionTypePtr, callback_ptr: *anyopaque) callconv(.c) void {
-            const callback: *const Info.callback.CallVirtualWithData = @ptrCast(callback_ptr);
-            ret.* = callback(@ptrCast(instance.?), @ptrCast(name.?), virtual_call_userdata, args, ret);
+            _ = instance; // autofix
+            _ = name; // autofix
+            _ = virtual_call_userdata; // autofix
+            _ = args; // autofix
+            _ = ret; // autofix
+            const callback: *const Info.callback.CallVirtualWithData = @ptrCast(@alignCast(callback_ptr));
+            _ = callback; // autofix
+            // ret.* = callback(@ptrCast(@alignCast(instance.?)), @ptrCast(name.?), virtual_call_userdata, args, ret);
+            @panic("TODO: implement");
         }
         fn getRid(instance: c.GDExtensionClassInstancePtr, callback_ptr: *anyopaque) callconv(.c) u64 {
-            const callback: *const Info.callback.GetRid = @ptrCast(callback_ptr);
-            return callback(@ptrCast(instance.?));
+            const callback: *const Info.callback.GetRid = @ptrCast(@alignCast(callback_ptr));
+            return callback(@ptrCast(@alignCast(instance.?)));
         }
     };
 
@@ -163,23 +188,23 @@ pub fn registerClass(
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime),
             .icon_path = @ptrCast(info.icon_path), // added in v4
-            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
-            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
-            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
-            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList2, .{ .@"-1" = cb }) else null,
-            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = cb }) else null,
-            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = cb }) else null,
-            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = cb }) else null,
-            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = cb }) else null,
-            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = cb }) else null,
-            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = cb }) else null,
-            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = cb }) else null,
-            .create_instance_func = bind(Func.createInstance2, .{ .@"-1" = info.create_instance }), // signature changed in v4
-            .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = info.free_instance }),
-            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = cb }) else null,
-            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual2, .{ .@"-1" = cb }) else null, // signature changed in v4
-            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData2, .{ .@"-1" = cb }) else null, // signature changed in v4
-            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = cb }) else null,
+            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .create_instance_func = bind(Func.createInstance2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(info.create_instance))) }), // signature changed in v4
+            .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(info.free_instance))) }),
+            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // signature changed in v4
+            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // signature changed in v4
+            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .class_userdata = if (Userdata == void) null else @ptrCast(info.class_userdata),
         })
     else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo3"))
@@ -188,24 +213,24 @@ pub fn registerClass(
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime), // added in v3
-            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
-            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
-            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
-            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList2, .{ .@"-1" = cb }) else null, // signature changed in v3
-            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = cb }) else null,
-            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = cb }) else null,
-            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = cb }) else null,
-            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = cb }) else null,
-            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = cb }) else null,
-            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = cb }) else null,
-            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = cb }) else null,
+            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // signature changed in v3
+            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .create_instance_func = bind(Func.createInstance, .{ .@"-1" = info.create_instance }),
             .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = info.free_instance }),
-            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = cb }) else null,
-            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = cb }) else null,
-            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData, .{ .@"-1" = cb }) else null,
-            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = cb }) else null,
-            .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = cb }) else null,
+            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .class_userdata = if (Userdata == void) null else @ptrCast(info.class_userdata),
         })
     else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo2"))
@@ -213,44 +238,44 @@ pub fn registerClass(
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed), // added in v2
-            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
-            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
-            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
-            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList, .{ .@"-1" = cb }) else null,
-            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = cb }) else null,
-            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = cb }) else null,
-            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = cb }) else null, // added in v2
-            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = cb }) else null, // signature changed in v2
-            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = cb }) else null,
-            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = cb }) else null,
-            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = cb }) else null,
+            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .validate_property_func = if (info.validate_property) |cb| bind(Func.validateProperty, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // added in v2
+            .notification_func = if (info.notification) |cb| bind(Func.notification2, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // signature changed in v2
+            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .create_instance_func = bind(Func.createInstance, .{ .@"-1" = info.create_instance }),
             .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = info.free_instance }),
-            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = cb }) else null, // added in v2
-            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = cb }) else null,
-            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData, .{ .@"-1" = cb }) else null, // added in v2
-            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = cb }) else null, // added in v2
-            .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = cb }) else null,
+            .recreate_instance_func = if (info.recreate_instance) |cb| bind(Func.recreateInstance, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // added in v2
+            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_virtual_call_data_func = if (info.get_virtual_call_data) |cb| bind(Func.getVirtualCallData, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // added in v2
+            .call_virtual_with_data_func = if (info.call_virtual_with_data) |cb| bind(Func.callVirtualWithData, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null, // added in v2
+            .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .class_userdata = if (Userdata == void) null else @ptrCast(info.class_userdata),
         })
     else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo"))
         godot.interface.classdbRegisterExtensionClass(godot.interface.library, base_name, class_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
-            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = cb }) else null,
-            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = cb }) else null,
-            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = cb }) else null,
-            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList, .{ .@"-1" = cb }) else null,
-            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = cb }) else null,
-            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = cb }) else null,
-            .notification_func = if (info.notification) |cb| bind(Func.notification, .{ .@"-1" = cb }) else null,
-            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = cb }) else null,
-            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = cb }) else null,
-            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = cb }) else null,
+            .set_func = if (info.set) |cb| bind(Func.set, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_func = if (info.get) |cb| bind(Func.get, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_property_list_func = if (info.get_property_list) |cb| bind(Func.getPropertyList, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .free_property_list_func = if (info.free_property_list) |cb| bind(Func.freePropertyList, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_can_revert_func = if (info.property_can_revert) |cb| bind(Func.propertyCanRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .property_get_revert_func = if (info.property_get_revert) |cb| bind(Func.propertyGetRevert, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .notification_func = if (info.notification) |cb| bind(Func.notification, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .to_string_func = if (info.to_string) |cb| bind(Func.toString, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .reference_func = if (info.reference) |cb| bind(Func.reference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .unreference_func = if (info.unreference) |cb| bind(Func.unreference, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .create_instance_func = bind(Func.createInstance, .{ .@"-1" = info.create_instance }),
             .free_instance_func = bind(Func.freeInstance, .{ .@"-1" = info.free_instance }),
-            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = cb }) else null,
-            .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = cb }) else null,
+            .get_virtual_func = if (info.get_virtual) |cb| bind(Func.getVirtual, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
+            .get_rid_func = if (info.get_rid) |cb| bind(Func.getRid, .{ .@"-1" = @as(*anyopaque, @ptrCast(@constCast(cb))) }) else null,
             .class_userdata = if (Userdata == void) null else @ptrCast(info.class_userdata),
         })
     else
@@ -413,4 +438,4 @@ const Object = godot.class.Object;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
-const bind = @import("../util/fn_binding.zig").bind;
+const fn_binding = @import("../util/fn_binding.zig");

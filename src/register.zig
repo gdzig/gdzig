@@ -50,9 +50,6 @@ pub fn registerClassWithUserdata(
         info.get_rid = info.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
     }
 
-    @compileLog(@FieldType(Info, "create_instance"), @FieldType(@TypeOf(opt), "create_instance"));
-    @compileLog(@FieldType(Info, "create_instance"), @FieldType(@TypeOf(opt), "create_instance"));
-
     // Object lifecycle defaults
     // TODO: allow overrides for these methods
     if (comptime @hasDecl(godot.c, "GDExtensionClassCreateInstance2")) { // added in Godot 4.4
