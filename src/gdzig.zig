@@ -26,9 +26,91 @@
 //! - `support` - Method binding and constructor utilities
 //!
 
-const std = @import("std");
-
 pub var interface: Interface = undefined;
+
+pub const InitializationLevel = enum(c_int) {
+    core = 0,
+    servers = 1,
+    scene = 2,
+    editor = 3,
+};
+
+pub fn entrypoint(
+    comptime name: []const u8,
+    comptime opt: struct {
+        init: ?*const fn (level: InitializationLevel) void = null,
+        deinit: ?*const fn (level: InitializationLevel) void = null,
+        minimum_initialization_level: InitializationLevel = InitializationLevel.core,
+    },
+) void {
+    comptime entrypointWithUserdata(name, void, .{
+        .userdata = {},
+        .init = opt.init,
+        .deinit = opt.deinit,
+        .minimum_initialization_level = opt.minimum_initialization_level,
+    });
+}
+
+pub fn entrypointWithUserdata(
+    comptime name: []const u8,
+    comptime Userdata: type,
+    comptime opt: struct {
+        userdata: if (Userdata == void) void else *const fn () Userdata,
+        init: if (Userdata == void) ?*const fn (level: InitializationLevel) void else ?*const fn (userdata: Userdata, level: InitializationLevel) void = null,
+        deinit: if (Userdata == void) ?*const fn (level: InitializationLevel) void else ?*const fn (userdata: Userdata, level: InitializationLevel) void = null,
+        minimum_initialization_level: InitializationLevel = InitializationLevel.core,
+    },
+) void {
+    @export(&struct {
+        fn entrypoint(
+            p_get_proc_address: c.GDExtensionInterfaceGetProcAddress,
+            p_library: c.GDExtensionClassLibraryPtr,
+            r_initialization: [*c]c.GDExtensionInitialization,
+        ) callconv(.c) c.GDExtensionBool {
+            interface = .init(p_get_proc_address.?, p_library.?);
+            r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
+            r_initialization.*.initialize = @ptrCast(&init);
+            r_initialization.*.deinitialize = @ptrCast(&deinit);
+            r_initialization.*.minimum_initialization_level = @intFromEnum(opt.minimum_initialization_level);
+            // TODO: remove
+            heap.general_allocator = std.heap.page_allocator;
+            return 1;
+        }
+
+        fn init(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.C) void {
+            if (opt.init) |init_cb| {
+                // TODO: remove
+                register.init();
+                if (Userdata == void) {
+                    init_cb(@enumFromInt(p_level));
+                } else {
+                    init_cb(@ptrCast(userdata.?), @enumFromInt(p_level));
+                }
+            }
+        }
+
+        fn deinit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.C) void {
+            if (opt.deinit) |deinit_cb| {
+                if (Userdata == void) {
+                    deinit_cb(@enumFromInt(p_level));
+                } else {
+                    deinit_cb(@ptrCast(userdata.?), @enumFromInt(p_level));
+                }
+                // TODO: remove
+                register.deinit();
+            }
+        }
+    }.entrypoint, .{
+        .name = name,
+        .linkage = .strong,
+    });
+}
+
+test {
+    std.testing.refAllDecls(@This());
+}
+
+const std = @import("std");
 
 // Bindgen modules
 pub const builtin = @import("builtin.zig");
@@ -55,7 +137,3 @@ pub const registerClass = register.registerClass;
 pub const registerMethod = register.registerMethod;
 pub const registerPlugin = register.registerPlugin;
 pub const registerSignal = register.registerSignal;
-
-test {
-    std.testing.refAllDecls(@This());
-}

@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -17,7 +15,7 @@ pub fn build(b: *std.Build) !void {
 
     const lib = b.addSharedLibrary(.{
         .name = "example",
-        .root_source_file = b.path("src/Entry.zig"),
+        .root_source_file = b.path("src/example.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -44,3 +42,5 @@ pub fn build(b: *std.Build) !void {
     const run_step = b.step("run", "Run with Godot");
     run_step.dependOn(&run_cmd.step);
 }
+
+const std = @import("std");
