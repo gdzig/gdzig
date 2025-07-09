@@ -88,6 +88,12 @@ pub const PropertyBuilder = struct {
     allocator: Allocator,
     properties: std.ArrayListUnmanaged(PropertyInfo) = .empty,
 
+    pub fn init(allocator: Allocator) PropertyBuilder {
+        return PropertyBuilder{
+            .allocator = allocator,
+        };
+    }
+
     pub fn append(self: *PropertyBuilder, comptime T: type, comptime field_name: [:0]const u8, comptime opt: struct {
         hint: PropertyHint = .property_hint_none,
         hint_string: [:0]const u8 = "",
@@ -99,6 +105,10 @@ pub const PropertyBuilder = struct {
             .usage = opt.usage,
         });
         try self.properties.append(self.allocator, info);
+    }
+
+    pub fn toOwnedSlice(self: *PropertyBuilder) ![]PropertyInfo {
+        return self.properties.toOwnedSlice(self.allocator);
     }
 };
 

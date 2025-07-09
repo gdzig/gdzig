@@ -132,7 +132,7 @@ pub fn _exitTree(self: *ExampleNode) void {
     _ = self;
 }
 
-pub fn _notification(self: *ExampleNode, what: i32) void {
+pub fn _notification(self: *ExampleNode, what: i32, _: bool) void {
     if (what == Node.NOTIFICATION_WM_CLOSE_REQUEST) {
         if (!Engine.isEditorHint()) {
             self.base.getTree().?.quit(.{});
@@ -140,12 +140,14 @@ pub fn _notification(self: *ExampleNode, what: i32) void {
     }
 }
 
-pub fn _getPropertyList(_: *ExampleNode, p: *godot.object.PropertyBuilder) !void {
-    try p.append(ExampleNode, "property1", .{});
-    try p.append(ExampleNode, "property2", .{});
-}
+// pub fn _getPropertyList(_: *ExampleNode) []godot.api.classdb.PropertyInfo {
+//     var p = godot.object.PropertyBuilder.init(godot.heap.general_allocator);
+//     p.append(ExampleNode, "property1", .{}) catch unreachable;
+//     p.append(ExampleNode, "property2", .{}) catch unreachable;
+//     return p.toOwnedSlice() catch unreachable;
+// }
 
-pub fn _propertyCanRevert(_: *ExampleNode, name: StringName) bool {
+pub fn _propertyCanRevert(_: *ExampleNode, name: *const StringName) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -161,7 +163,7 @@ pub fn _propertyCanRevert(_: *ExampleNode, name: StringName) bool {
     return false;
 }
 
-pub fn _propertyGetRevert(_: *ExampleNode, name: StringName, value: *Variant) bool {
+pub fn _propertyGetRevert(_: *ExampleNode, name: *const StringName) ?Variant {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -169,17 +171,15 @@ pub fn _propertyGetRevert(_: *ExampleNode, name: StringName, value: *Variant) bo
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        value.* = Variant.init(Vector3.initXYZ(42, 42, 42));
-        return true;
+        return Variant.init(Vector3.initXYZ(42, 42, 42));
     } else if (name.casecmpTo(prop2) == 0) {
-        value.* = Variant.init(Vector3.initXYZ(24, 24, 24));
-        return true;
+        return Variant.init(Vector3.initXYZ(24, 24, 24));
     }
 
-    return false;
+    return null;
 }
 
-pub fn _set(self: *ExampleNode, name: StringName, value: Variant) bool {
+pub fn _set(self: *ExampleNode, name: *const StringName, value: *const Variant) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -197,7 +197,7 @@ pub fn _set(self: *ExampleNode, name: StringName, value: Variant) bool {
     return false;
 }
 
-pub fn _get(self: *ExampleNode, name: StringName, value: *Variant) bool {
+pub fn _get(self: *ExampleNode, name: *const StringName) ?Variant {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -205,14 +205,12 @@ pub fn _get(self: *ExampleNode, name: StringName, value: *Variant) bool {
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        value.* = Variant.init(self.property1);
-        return true;
+        return Variant.init(self.property1);
     } else if (name.casecmpTo(prop2) == 0) {
-        value.* = Variant.init(self.property2);
-        return true;
+        return Variant.init(self.property2);
     }
 
-    return false;
+    return null;
 }
 
 pub fn _toString(_: *ExampleNode) ?String {

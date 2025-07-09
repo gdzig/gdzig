@@ -21,13 +21,15 @@ pub fn registerClassWithUserdata(
         class_name: StringName,
         userdata: @TypeOf(userdata),
     };
-    const Info = godot.api.classdb.ClassCreationInfo(T, Userdata);
-    var info: Info = .{};
+    const Info = comptime godot.api.classdb.ClassCreationInfo(T, Userdata);
+    var info: Info = undefined;
 
     // Copy the fields from opt into info
-    inline for (std.meta.fieldNames(Info)) |name| {
-        if (comptime std.mem.eql(u8, "class_userdata", name)) continue;
-        @field(info, name) = @field(opt, name);
+    inline for (@typeInfo(Info).@"struct".fields) |field| {
+        if (comptime std.mem.eql(u8, "class_userdata", field.name)) continue;
+        if (@FieldType(@TypeOf(info), field.name) == @FieldType(@TypeOf(opt), field.name)) {
+            @field(info, field.name) = @field(opt, field.name);
+        }
     }
 
     // Virtual function defaults
@@ -44,30 +46,36 @@ pub fn registerClassWithUserdata(
     info.to_string = info.to_string orelse if (@hasDecl(T, "_toString")) &T._toString else null;
     info.reference = info.reference orelse if (@hasDecl(T, "_reference")) &T._reference else null;
     info.unreference = info.unreference orelse if (@hasDecl(T, "_unreference")) &T._unreference else null;
-    info.get_rid = info.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
+    if (@hasField(Info, "get_rid")) { // removed in Godot 4.4
+        info.get_rid = info.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
+    }
+
+    @compileLog(@FieldType(Info, "create_instance"), @FieldType(@TypeOf(opt), "create_instance"));
+    @compileLog(@FieldType(Info, "create_instance"), @FieldType(@TypeOf(opt), "create_instance"));
 
     // Object lifecycle defaults
-    if (@hasDecl(godot.c, "GDExtensionClassCreateInstance2")) { // added in 4.4
-        info.create_instance = info.create_instance orelse struct {
-            fn create(_: *Userdata, _: bool) *T {
+    // TODO: allow overrides for these methods
+    if (comptime @hasDecl(godot.c, "GDExtensionClassCreateInstance2")) { // added in Godot 4.4
+        info.create_instance = struct {
+            fn create(_: *Userdata, _: bool) *Object {
                 const ret = object.create(T) catch unreachable;
                 return @ptrCast(meta.asObject(ret));
             }
         }.create;
     } else {
-        info.create_instance = info.create_instance orelse struct {
-            fn create(_: *Userdata) *T {
+        info.create_instance = struct {
+            fn create(_: *Userdata) *Object {
                 const ret = object.create(T) catch unreachable;
-                return @ptrCast(meta.asObject(ret));
+                return @ptrCast(@alignCast(meta.asObject(ret)));
             }
         }.create;
     }
-    info.recreate_instance = info.recreate_instance orelse struct {
+    info.recreate_instance = struct {
         fn recreate(_: *Userdata, _: *Object) *T {
             @panic("Extension reloading is not currently supported");
         }
     }.recreate;
-    info.free_instance = info.free_instance orelse struct {
+    info.free_instance = struct {
         fn free(_: *Userdata, instance: *T) void {
             if (@hasDecl(T, "deinit")) {
                 instance.deinit();
@@ -78,10 +86,10 @@ pub fn registerClassWithUserdata(
     }.free;
 
     // Setup class userdata
-    info.class_userdata = &.{
+    info.class_userdata = @constCast(&Userdata{
         .class_name = class_name.*,
         .userdata = userdata,
-    };
+    });
 
     // Register the type in the ClassDB
     godot.api.classdb.registerClass(T, Userdata, class_name, base_name, info);
@@ -103,10 +111,10 @@ pub fn RegisterClassOpts(comptime T: type, comptime Userdata: type) type {
     const original_info = @typeInfo(Original);
     const original_fields = original_info.@"struct".fields;
 
-    var new_fields: [original_fields.len]std.builtin.Type.StructField = undefined;
+    comptime var new_fields: [original_fields.len]std.builtin.Type.StructField = undefined;
 
-    for (original_fields, 0..) |field, i| {
-        if (std.mem.eql(u8, field.name, "create_instance") or
+    inline for (original_fields, 0..) |field, i| {
+        if (comptime std.mem.eql(u8, field.name, "create_instance") or
             std.mem.eql(u8, field.name, "recreate_instance") or
             std.mem.eql(u8, field.name, "free_instance"))
         {
