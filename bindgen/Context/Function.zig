@@ -467,6 +467,7 @@ const return_type_init_map: StaticStringMap([]const u8) = .initComptime(.{
     .{ "f64", "0.0" },
 
     .{ "void", "undefined" },
+    .{ "Variant", ".nil" },
 });
 
 /// Returns the initializer for a given return type.
