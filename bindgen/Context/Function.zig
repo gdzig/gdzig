@@ -3,7 +3,6 @@ const Function = @This();
 doc: ?[]const u8 = null,
 name: []const u8 = "_",
 name_api: []const u8 = "_",
-type: FunctionType = .method,
 
 /// The name of the parent type that this function belongs to.
 base: ?[]const u8 = null,
@@ -118,7 +117,6 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
         break :blk try buf.toOwnedSlice(allocator);
     };
     self.name_api = api.name;
-    self.type = .operator;
 
     self.operator_name = operator_enum_names.get(api.name).?;
 
@@ -185,7 +183,6 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
 
     self.return_type = try .from(allocator, builtin_name, false, ctx);
     self.base = builtin_name;
-    self.type = .constructor;
 
     return self;
 }
@@ -208,7 +205,6 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         .{ .mutable = builtin_name };
     self.is_vararg = api.is_vararg;
     self.base = builtin_name;
-    self.type = .method;
 
     for (api.arguments orelse &.{}) |arg| {
         const parameter: Parameter = if (arg.default_value.len > 0)
@@ -312,7 +308,6 @@ pub fn fromClassGetter(allocator: Allocator, class_name: []const u8, name: []con
     self.is_vararg = false;
     self.parameters = .{};
     self.return_type = @"type";
-    self.type = .getter;
 
     return self;
 }
@@ -327,7 +322,6 @@ pub fn fromClassSetter(allocator: Allocator, class_name: []const u8, is_singleto
     self.self = if (is_singleton) .singleton else .{ .mutable = class_name };
     self.is_vararg = false;
     self.return_type = .void;
-    self.type = .setter;
 
     try self.parameters.put(allocator, "value", .{
         .name = "value",
@@ -442,15 +436,6 @@ pub const Parameter = struct {
 
         self.* = .{};
     }
-};
-
-pub const FunctionType = enum {
-    method,
-    constructor,
-    destructor,
-    getter,
-    setter,
-    operator,
 };
 
 const return_type_init_map: StaticStringMap([]const u8) = .initComptime(.{
