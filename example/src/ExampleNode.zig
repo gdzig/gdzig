@@ -147,7 +147,7 @@ pub fn _notification(self: *ExampleNode, what: i32, _: bool) void {
 //     return p.toOwnedSlice() catch unreachable;
 // }
 
-pub fn _propertyCanRevert(_: *ExampleNode, name: *const StringName) bool {
+pub fn _propertyCanRevert(_: *ExampleNode, name: StringName) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -163,7 +163,7 @@ pub fn _propertyCanRevert(_: *ExampleNode, name: *const StringName) bool {
     return false;
 }
 
-pub fn _propertyGetRevert(_: *ExampleNode, name: *const StringName) ?Variant {
+pub fn _propertyGetRevert(_: *ExampleNode, name: StringName) ?Variant {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -179,7 +179,7 @@ pub fn _propertyGetRevert(_: *ExampleNode, name: *const StringName) ?Variant {
     return null;
 }
 
-pub fn _set(self: *ExampleNode, name: *const StringName, value: *const Variant) bool {
+pub fn _set(self: *ExampleNode, name: StringName, value: *const Variant) bool {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
@@ -197,7 +197,7 @@ pub fn _set(self: *ExampleNode, name: *const StringName, value: *const Variant) 
     return false;
 }
 
-pub fn _get(self: *ExampleNode, name: *const StringName) ?Variant {
+pub fn _get(self: *ExampleNode, name: StringName) ?Variant {
     var prop1 = String.fromLatin1(property1_name);
     defer prop1.deinit();
 
