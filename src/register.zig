@@ -2,62 +2,63 @@ const PluginCallback = ?*const fn (userdata: ?*anyopaque, p_level: c.GDExtension
 
 pub fn registerClass(
     comptime T: type,
-    opt: RegisterClassOpts(T, void),
-) void {
-    return registerClassWithUserdata(T, {}, opt);
-}
-
-pub fn registerClassWithUserdata(
-    comptime T: type,
     opt: ClassCreationInfo,
 ) void {
     const base_name = meta.getNamePtr(meta.BaseOf(T));
     const class_name = meta.getNamePtr(T);
     class_name.* = StringName.fromComptimeLatin1(comptime meta.getTypeShortName(T));
 
-    var info: ClassCreationInfo = opt;
+    var vtable = &struct {
+        pub const Class = T;
+        var vtable: ClassUserdata.VTable = undefined;
+    }.vtable;
 
     // Virtual function defaults
-    info.set = info.set orelse if (@hasDecl(T, "_set")) &T._set else null;
-    info.get = info.get orelse if (@hasDecl(T, "_get")) &T._get else null;
-    info.get_property_list = info.get_property_list orelse if (@hasDecl(T, "_getPropertyList")) &T._getPropertyList else null;
-    info.free_property_list = info.free_property_list orelse if (@hasDecl(T, "_freePropertyList")) &T._freePropertyList else null;
-    info.property_can_revert = info.property_can_revert orelse if (@hasDecl(T, "_propertyCanRevert")) &T._propertyCanRevert else null;
-    info.property_get_revert = info.property_get_revert orelse if (@hasDecl(T, "_propertyGetRevert")) &T._propertyGetRevert else null;
-    if (@hasDecl(godot.c, "GDExtensionClassValidateProperty")) { // added in Godot 4.2
-        info.validate_property = info.validate_property orelse if (@hasDecl(T, "_validateProperty")) &T._validateProperty else null;
-    }
-    info.notification = info.notification orelse if (@hasDecl(T, "_notification")) &T._notification else null;
-    info.to_string = info.to_string orelse if (@hasDecl(T, "_toString")) &T._toString else null;
-    info.reference = info.reference orelse if (@hasDecl(T, "_reference")) &T._reference else null;
-    info.unreference = info.unreference orelse if (@hasDecl(T, "_unreference")) &T._unreference else null;
-    if (@hasField(ClassCreationInfo, "get_rid")) { // removed in Godot 4.4
-        info.get_rid = info.get_rid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
+    vtable.set = opt.vtable.set orelse if (@hasDecl(T, "_set")) @ptrCast(&T._set) else null;
+    vtable.get = opt.vtable.get orelse if (@hasDecl(T, "_get")) @ptrCast(&T._get) else null;
+    vtable.getPropertyList = opt.vtable.getPropertyList orelse if (@hasDecl(T, "_getPropertyList")) @ptrCast(&T._getPropertyList) else null;
+    vtable.freePropertyList = opt.vtable.freePropertyList orelse if (@hasDecl(T, "_freePropertyList")) @ptrCast(&T._freePropertyList) else null;
+    vtable.propertyCanRevert = opt.vtable.propertyCanRevert orelse if (@hasDecl(T, "_propertyCanRevert")) @ptrCast(&T._propertyCanRevert) else null;
+    vtable.propertyGetRevert = opt.vtable.propertyGetRevert orelse if (@hasDecl(T, "_propertyGetRevert")) @ptrCast(&T._propertyGetRevert) else null;
+    vtable.notification = opt.vtable.notification orelse if (@hasDecl(T, "_notification")) @ptrCast(&T._notification) else null;
+    vtable.toString = opt.vtable.toString orelse if (@hasDecl(T, "_toString")) @ptrCast(&T._toString) else null;
+    vtable.reference = opt.vtable.reference orelse if (@hasDecl(T, "_reference")) @ptrCast(&T._reference) else null;
+    vtable.unreference = opt.vtable.unreference orelse if (@hasDecl(T, "_unreference")) @ptrCast(&T._unreference) else null;
+
+    if (@hasField(ClassUserdata.VTable, "validateProperty")) { // added in Godot 4.2
+        vtable.validateProperty = opt.vtable.validateProperty orelse if (@hasDecl(T, "_validateProperty")) &T._validateProperty else null;
     }
 
-    // Object lifecycle defaults
+    if (@hasField(ClassUserdata.VTable, "getRid")) { // removed in Godot 4.4
+        vtable.getRid = opt.vtable.getRid orelse if (@hasDecl(T, "_getRid")) &T._getRid else null;
+    }
+
     // TODO: allow overrides for these methods
     if (comptime @hasDecl(godot.c, "GDExtensionClassCreateInstance2")) { // added in Godot 4.4
-        info.create_instance = struct {
+        vtable.createInstance = @ptrCast(&struct {
             fn create(_: *ClassUserdata, _: bool) *Object {
                 const ret = object.create(T) catch unreachable;
                 return @ptrCast(meta.asObject(ret));
             }
-        }.create;
+        }.create);
     } else {
-        info.create_instance = struct {
+        vtable.createInstance = @ptrCast(&struct {
             fn create(_: *ClassUserdata) *Object {
                 const ret = object.create(T) catch unreachable;
                 return @ptrCast(@alignCast(meta.asObject(ret)));
             }
-        }.create;
+        }.create);
     }
-    info.recreate_instance = struct {
-        fn recreate(_: *ClassUserdata, _: *Object) *T {
-            @panic("Extension reloading is not currently supported");
-        }
-    }.recreate;
-    info.free_instance = struct {
+
+    if (comptime @hasDecl(godot.c, "GDExtensionClassRecreateInstance")) { // added in Godot 4.2
+        vtable.recreateInstance = @ptrCast(&struct {
+            fn recreate(_: *ClassUserdata, _: *Object) *T {
+                @panic("Extension reloading is not currently supported");
+            }
+        }.recreate);
+    }
+
+    vtable.freeInstance = @ptrCast(&struct {
         fn free(_: *ClassUserdata, instance: *T) void {
             if (@hasDecl(T, "deinit")) {
                 instance.deinit();
@@ -65,13 +66,11 @@ pub fn registerClassWithUserdata(
             // TODO: should this be left to the deinit function?
             heap.general_allocator.destroy(instance);
         }
-    }.free;
+    }.free);
 
-    // Setup class userdata
-    info.class_userdata = @constCast(&ClassUserdata{
-        .class_name = class_name.*,
-        .userdata = userdata,
-    });
+    // Store class userdata statically
+    var info: ClassCreationInfo = opt;
+    info.vtable = vtable;
 
     // Register the type in the ClassDB
     godot.api.classdb.registerClass(class_name, base_name, info);
@@ -80,46 +79,6 @@ pub fn registerClassWithUserdata(
     if (@hasDecl(T, "_bindMethods")) {
         T._bindMethods();
     }
-}
-
-/// Extends and modifies ClassCreationInfo(T, Userdata) by:
-///
-/// - making create_instance nullable, with default null value
-/// - making recreate_instance nullable, with default null value
-/// - making free_instance nullable, with default null value
-///
-pub fn RegisterClassOpts(comptime T: type, comptime Userdata: type) type {
-    const Original = godot.api.classdb.ClassCreationInfo(T, Userdata);
-    const original_info = @typeInfo(Original);
-    const original_fields = original_info.@"struct".fields;
-
-    comptime var new_fields: [original_fields.len]std.builtin.Type.StructField = undefined;
-
-    inline for (original_fields, 0..) |field, i| {
-        if (comptime std.mem.eql(u8, field.name, "create_instance") or
-            std.mem.eql(u8, field.name, "recreate_instance") or
-            std.mem.eql(u8, field.name, "free_instance"))
-        {
-            new_fields[i] = std.builtin.Type.StructField{
-                .name = field.name,
-                .type = ?field.type,
-                .default_value_ptr = @ptrCast(&@as(?field.type, null)),
-                .is_comptime = field.is_comptime,
-                .alignment = field.alignment,
-            };
-        } else {
-            new_fields[i] = field;
-        }
-    }
-
-    return @Type(std.builtin.Type{
-        .@"struct" = .{
-            .layout = original_info.@"struct".layout,
-            .fields = &new_fields,
-            .decls = &.{},
-            .is_tuple = original_info.@"struct".is_tuple,
-        },
-    });
 }
 
 var registered_methods: std.StringHashMap(void) = undefined;

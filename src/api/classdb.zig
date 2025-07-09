@@ -33,7 +33,7 @@ pub fn registerClass(
     base_name: *StringName,
     info: ClassCreationInfo,
 ) void {
-    switch (@TypeOf(ClassCreationInfo)) {
+    switch (ClassCreationInfo) {
         ClassCreationInfo4 => godot.interface.classdbRegisterExtensionClass4(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
@@ -57,10 +57,10 @@ pub fn registerClass(
             .get_virtual_func = &getVirtual2,
             .get_virtual_call_data_func = &getVirtualCallData2,
             .call_virtual_with_data_func = &callVirtualWithData,
-            .class_userdata = &ClassUserdata4{
+            .class_userdata = @ptrCast(@constCast(&ClassUserdata4{
                 .vtable = info.vtable,
                 .userdata = info.userdata,
-            },
+            })),
         }),
         ClassCreationInfo3 => godot.interface.classdbRegisterExtensionClass3(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
@@ -85,10 +85,10 @@ pub fn registerClass(
             .get_virtual_call_data_func = &getVirtualCallData,
             .call_virtual_with_data_func = &callVirtualWithData,
             .get_rid_func = &getRid,
-            .class_userdata = &ClassUserdata3{
+            .class_userdata = @ptrCast(@constCast(&ClassUserdata4{
                 .vtable = info.vtable,
                 .userdata = info.userdata,
-            },
+            })),
         }),
         ClassCreationInfo2 => godot.interface.classdbRegisterExtensionClass2(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
@@ -112,10 +112,10 @@ pub fn registerClass(
             .get_virtual_call_data_func = &getVirtualCallData,
             .call_virtual_with_data_func = &callVirtualWithData,
             .get_rid_func = &getRid,
-            .class_userdata = &ClassUserdata2{
+            .class_userdata = @ptrCast(@constCast(&ClassUserdata4{
                 .vtable = info.vtable,
                 .userdata = info.userdata,
-            },
+            })),
         }),
         ClassCreationInfo1 => godot.interface.classdbRegisterExtensionClass(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
@@ -134,10 +134,10 @@ pub fn registerClass(
             .free_instance_func = &freeInstance,
             .get_virtual_func = &getVirtual,
             .get_rid_func = &getRid,
-            .class_userdata = &ClassUserdata{
+            .class_userdata = @ptrCast(@constCast(&ClassUserdata4{
                 .vtable = info.vtable,
                 .userdata = info.userdata,
-            },
+            })),
         }),
         else => unreachable,
     }
@@ -150,8 +150,8 @@ const ClassCreationInfo4 = struct {
     is_exposed: bool = false,
     is_runtime: bool = false,
     icon_path: ?String = null, // added in v4
-    vtable: *const ClassUserdata4.VTable,
-    userdata: *anyopaque,
+    vtable: *const ClassUserdata4.VTable = &.{},
+    userdata: ?*anyopaque = null,
 };
 
 /// Godot v4.3
@@ -160,8 +160,8 @@ const ClassCreationInfo3 = struct {
     is_abstract: bool = false,
     is_exposed: bool = false,
     is_runtime: bool = false, // added in v3
-    vtable: *const ClassUserdata3.VTable,
-    userdata: *anyopaque,
+    vtable: *const ClassUserdata3.VTable = &.{},
+    userdata: ?*anyopaque = null,
 };
 
 /// Godot v4.2
@@ -169,147 +169,147 @@ const ClassCreationInfo2 = struct {
     is_virtual: bool = false,
     is_abstract: bool = false,
     is_exposed: bool = false, // added in v2
-    vtable: *const ClassUserdata2.VTable,
-    userdata: *anyopaque,
+    vtable: *const ClassUserdata2.VTable = &.{},
+    userdata: ?*anyopaque = null,
 };
 
 /// Godot v4.1
 const ClassCreationInfo1 = struct {
     is_virtual: bool = false,
     is_abstract: bool = false,
-    vtable: *const ClassUserdata1.VTable,
-    userdata: *anyopaque,
+    vtable: *const ClassUserdata1.VTable = &.{},
+    userdata: ?*anyopaque = null,
 };
 
 /// Godot v4.4
 const ClassUserdata4 = struct {
-    vtable: *VTable,
-    userdata: *anyopaque,
+    vtable: *const VTable,
+    userdata: ?*anyopaque,
 
-    pub const InstanceBinding = struct {
-        vtable: *VTable,
+    pub const Binding = struct {
+        vtable: *const VTable,
         ptr: *Object,
     };
 
     pub const VTable = struct {
         // Static
-        createInstance: CreateInstance2,
-        freeInstance: FreeInstance,
-        recreateInstance: RecreateInstance,
-        getVirtual: GetVirtual2,
-        getVirtualCallData: GetVirtualCallData2,
+        createInstance: ?*const CreateInstance2 = null,
+        freeInstance: ?*const FreeInstance = null,
+        recreateInstance: ?*const RecreateInstance = null,
+        getVirtual: ?*const GetVirtual2 = null,
+        getVirtualCallData: ?*const GetVirtualCallData2 = null,
 
         // Instance
-        set: Set,
-        get: Get,
-        getPropertyList: GetPropertyList,
-        freePropertyList: FreePropertyList2,
-        propertyCanRevert: PropertyCanRevert,
-        propertyGetRevert: PropertyGetRevert,
-        validateProperty: ValidateProperty,
-        notification: Notification2,
-        toString: ToString,
-        reference: Reference,
-        unreference: Unreference,
+        set: ?*const Set = null,
+        get: ?*const Get = null,
+        getPropertyList: ?*const GetPropertyList = null,
+        freePropertyList: ?*const FreePropertyList2 = null,
+        propertyCanRevert: ?*const PropertyCanRevert = null,
+        propertyGetRevert: ?*const PropertyGetRevert = null,
+        validateProperty: ?*const ValidateProperty = null,
+        notification: ?*const Notification2 = null,
+        toString: ?*const ToString = null,
+        reference: ?*const Reference = null,
+        unreference: ?*const Unreference = null,
     };
 };
 
 /// Godot v4.3
 const ClassUserdata3 = struct {
-    vtable: *VTable,
-    userdata: *anyopaque,
+    vtable: *const VTable,
+    userdata: ?*anyopaque,
 
-    pub const InstanceBinding = struct {
-        vtable: *VTable,
+    pub const Binding = struct {
+        vtable: *const VTable,
         ptr: *Object,
     };
 
     pub const VTable = struct {
         // Static
-        createInstance: CreateInstance,
-        freeInstance: FreeInstance,
-        recreateInstance: RecreateInstance,
-        getVirtual: GetVirtual,
-        getVirtualCallData: GetVirtualCallData,
+        createInstance: ?*const CreateInstance = null,
+        freeInstance: ?*const FreeInstance = null,
+        recreateInstance: ?*const RecreateInstance = null,
+        getVirtual: ?*const GetVirtual = null,
+        getVirtualCallData: ?*const GetVirtualCallData = null,
 
         // Instance
-        set: Set,
-        get: Get,
-        getPropertyList: GetPropertyList,
-        freePropertyList: FreePropertyList2,
-        propertyCanRevert: PropertyCanRevert,
-        propertyGetRevert: PropertyGetRevert,
-        validateProperty: ValidateProperty,
-        notification: Notification2,
-        toString: ToString,
-        reference: Reference,
-        unreference: Unreference,
-        getRid: GetRID,
+        set: ?*const Set = null,
+        get: ?*const Get = null,
+        getPropertyList: ?*const GetPropertyList = null,
+        freePropertyList: ?*const FreePropertyList2 = null,
+        propertyCanRevert: ?*const PropertyCanRevert = null,
+        propertyGetRevert: ?*const PropertyGetRevert = null,
+        validateProperty: ?*const ValidateProperty = null,
+        notification: ?*const Notification2 = null,
+        toString: ?*const ToString = null,
+        reference: ?*const Reference = null,
+        unreference: ?*const Unreference = null,
+        getRid: ?*const GetRID = null,
     };
 };
 
 /// Godot v4.2
 const ClassUserdata2 = struct {
-    vtable: *VTable,
-    userdata: *anyopaque,
+    vtable: *const VTable,
+    userdata: ?*anyopaque,
 
     pub const Binding = struct {
-        vtable: *VTable,
+        vtable: *const VTable,
         ptr: *Object,
     };
 
     pub const VTable = struct {
         // Static
-        createInstance: CreateInstance,
-        freeInstance: FreeInstance,
-        recreateInstance: RecreateInstance,
-        getVirtual: GetVirtual,
-        getVirtualCallData: GetVirtualCallData,
+        createInstance: ?*const CreateInstance = null,
+        freeInstance: ?*const FreeInstance = null,
+        recreateInstance: ?*const RecreateInstance = null,
+        getVirtual: ?*const GetVirtual = null,
+        getVirtualCallData: ?*const GetVirtualCallData = null,
 
         // Instance
-        set: Set,
-        get: Get,
-        getPropertyList: GetPropertyList,
-        freePropertyList: FreePropertyList,
-        propertyCanRevert: PropertyCanRevert,
-        propertyGetRevert: PropertyGetRevert,
-        validateProperty: ValidateProperty,
-        notification: Notification2,
-        toString: ToString,
-        reference: Reference,
-        unreference: Unreference,
-        getRid: GetRID,
+        set: ?*const Set = null,
+        get: ?*const Get = null,
+        getPropertyList: ?*const GetPropertyList = null,
+        freePropertyList: ?*const FreePropertyList = null,
+        propertyCanRevert: ?*const PropertyCanRevert = null,
+        propertyGetRevert: ?*const PropertyGetRevert = null,
+        validateProperty: ?*const ValidateProperty = null,
+        notification: ?*const Notification2 = null,
+        toString: ?*const ToString = null,
+        reference: ?*const Reference = null,
+        unreference: ?*const Unreference = null,
+        getRid: ?*const GetRID = null,
     };
 };
 
 /// Godot v4.1
 const ClassUserdata1 = struct {
-    vtable: *VTable,
-    userdata: *anyopaque,
+    vtable: *const VTable,
+    userdata: ?*anyopaque,
 
     pub const Binding = struct {
-        vtable: *VTable,
+        vtable: *const VTable,
         ptr: *Object,
     };
 
     pub const VTable = struct {
         // Static
-        createInstance: *const CreateInstance,
-        freeInstance: *const FreeInstance,
-        getVirtual: ?*const GetVirtual,
+        createInstance: ?*const CreateInstance = null,
+        freeInstance: ?*const FreeInstance = null,
+        getVirtual: ?*const GetVirtual = null,
 
         // Instance
-        set: ?*const Set,
-        get: ?*const Get,
-        getPropertyList: ?*const GetPropertyList,
-        freePropertyList: ?*const FreePropertyList,
-        propertyCanRevert: ?*const PropertyCanRevert,
-        propertyGetRevert: ?*const PropertyGetRevert,
-        notification: ?*const Notification,
-        toString: ?*const ToString,
-        reference: ?*const Reference,
-        unreference: ?*const Unreference,
-        getRid: ?*const GetRID,
+        set: ?*const Set = null,
+        get: ?*const Get = null,
+        getPropertyList: ?*const GetPropertyList = null,
+        freePropertyList: ?*const FreePropertyList = null,
+        propertyCanRevert: ?*const PropertyCanRevert = null,
+        propertyGetRevert: ?*const PropertyGetRevert = null,
+        notification: ?*const Notification = null,
+        toString: ?*const ToString = null,
+        reference: ?*const Reference = null,
+        unreference: ?*const Unreference = null,
+        getRid: ?*const GetRID = null,
     };
 };
 
@@ -326,20 +326,21 @@ pub const Notification2 = fn (instance: *anyopaque, what: i32, reversed: bool) v
 pub const ToString = fn (instance: *anyopaque) ?String;
 pub const Reference = fn (instance: *anyopaque) void;
 pub const Unreference = fn (instance: *anyopaque) void;
-pub const CreateInstance = fn (class_userdata: *anyopaque) *Object;
-pub const CreateInstance2 = fn (class_userdata: *anyopaque, notify_postinitialize: bool) *Object;
-pub const FreeInstance = fn (class_userdata: *anyopaque, instance: *anyopaque) void;
-pub const RecreateInstance = fn (class_userdata: *anyopaque, object: *Object) *anyopaque;
-pub const GetVirtual = fn (class_userdata: *anyopaque, name: StringName) ?*const CallVirtual;
-pub const GetVirtual2 = fn (class_userdata: *anyopaque, name: StringName, hash: u32) ?*const CallVirtual;
-pub const GetVirtualCallData = fn (class_userdata: *anyopaque, name: StringName) ?*anyopaque;
-pub const GetVirtualCallData2 = fn (class_userdata: *anyopaque, name: StringName, hash: u32) ?*anyopaque;
+pub const CreateInstance = fn (class_userdata: ?*anyopaque) *Object;
+pub const CreateInstance2 = fn (class_userdata: ?*anyopaque, notify_postinitialize: bool) *Object;
+pub const FreeInstance = fn (class_userdata: ?*anyopaque, instance: *anyopaque) void;
+pub const RecreateInstance = fn (class_userdata: ?*anyopaque, object: *Object) *anyopaque;
+pub const GetVirtual = fn (class_userdata: ?*anyopaque, name: StringName) ?*const CallVirtual;
+pub const GetVirtual2 = fn (class_userdata: ?*anyopaque, name: StringName, hash: u32) ?*const CallVirtual;
+pub const GetVirtualCallData = fn (class_userdata: ?*anyopaque, name: StringName) ?*anyopaque;
+pub const GetVirtualCallData2 = fn (class_userdata: ?*anyopaque, name: StringName, hash: u32) ?*anyopaque;
 pub const CallVirtual = fn (instance: *anyopaque, args: []const *anyopaque) *anyopaque;
 pub const CallVirtualWithData = fn (instance: *anyopaque, name: StringName, virtual_call_userdata: ?*anyopaque, args: []const *anyopaque) ?*anyopaque;
 pub const GetRID = fn (instance: *anyopaque) u64;
 
-fn getMethod(instance: *anyopaque, comptime method_name: []const u8) @FieldType(ClassUserdata.VTable, method_name) {
-    const binding: *anyopaque = @ptrCast(godot.interface.objectGetInstanceBinding(instance, godot.interface.library, null).?);
+fn getMethod(instance: ?*anyopaque, comptime method_name: []const u8) @FieldType(ClassUserdata.VTable, method_name) {
+    const ptr = godot.interface.objectGetInstanceBinding(instance.?, godot.interface.library, null).?;
+    const binding: *ClassUserdata.Binding = @ptrCast(@alignCast(ptr));
     return @field(binding.vtable, method_name);
 }
 
@@ -539,8 +540,8 @@ fn unreference(
 fn createInstance(
     userdata: ?*anyopaque,
 ) callconv(.c) c.GDExtensionObjectPtr {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
-    const ret = class_userdata.vtable.createInstance(class_userdata.userdata);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
+    const ret = class_userdata.vtable.createInstance.?(class_userdata.userdata);
 
     return @ptrCast(ret);
 }
@@ -549,8 +550,8 @@ fn createInstance2(
     userdata: ?*anyopaque,
     notify_postinitialize: c.GDExtensionBool,
 ) callconv(.c) c.GDExtensionObjectPtr {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
-    const ret = class_userdata.vtable.createInstance(class_userdata.userdata, notify_postinitialize != 0);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
+    const ret = class_userdata.vtable.createInstance.?(class_userdata.userdata, notify_postinitialize != 0);
 
     return @ptrCast(ret);
 }
@@ -559,20 +560,20 @@ fn freeInstance(
     userdata: ?*anyopaque,
     instance: c.GDExtensionClassInstancePtr,
 ) callconv(.c) void {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_instance: *anyopaque = instance.?;
 
-    class_userdata.vtable.freeInstance(class_userdata.userdata, p_instance);
+    class_userdata.vtable.freeInstance.?(class_userdata.userdata, p_instance);
 }
 
 fn recreateInstance(
     userdata: ?*anyopaque,
     object: c.GDExtensionObjectPtr,
 ) callconv(.c) c.GDExtensionClassInstancePtr {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_object: *Object = @ptrCast(object.?);
 
-    const ret = class_userdata.vtable.recreateInstance(class_userdata.userdata, p_object);
+    const ret = class_userdata.vtable.recreateInstance.?(class_userdata.userdata, p_object);
 
     return @ptrCast(ret);
 }
@@ -596,10 +597,10 @@ fn getVirtual(
     userdata: ?*anyopaque,
     name: c.GDExtensionConstStringNamePtr,
 ) callconv(.c) c.GDExtensionClassCallVirtual {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
-    const ret = class_userdata.vtable.getVirtual(class_userdata.userdata, p_name);
+    const ret = class_userdata.vtable.getVirtual.?(class_userdata.userdata, p_name);
     _ = ret; // autofix
 
     @panic("TODO");
@@ -610,10 +611,10 @@ fn getVirtual2(
     name: c.GDExtensionConstStringNamePtr,
     hash: u32,
 ) callconv(.c) c.GDExtensionClassCallVirtual {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
-    const ret = class_userdata.vtable.getVirtual(class_userdata.userdata, p_name, hash);
+    const ret = class_userdata.vtable.getVirtual.?(class_userdata.userdata, p_name, hash);
     _ = ret; // autofix
 
     @panic("TODO");
@@ -623,10 +624,10 @@ fn getVirtualCallData(
     userdata: ?*anyopaque,
     name: c.GDExtensionConstStringNamePtr,
 ) callconv(.c) ?*anyopaque {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
-    const ret = class_userdata.vtable.getVirtualCallData(class_userdata.userdata, p_name);
+    const ret = class_userdata.vtable.getVirtualCallData.?(class_userdata.userdata, p_name);
 
     return ret;
 }
@@ -636,10 +637,10 @@ fn getVirtualCallData2(
     name: c.GDExtensionConstStringNamePtr,
     hash: u32,
 ) callconv(.c) ?*anyopaque {
-    const class_userdata: *ClassUserdata = @ptrCast(userdata.?);
+    const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
-    const ret = class_userdata.vtable.getVirtualCallData(class_userdata.userdata, p_name, hash);
+    const ret = class_userdata.vtable.getVirtualCallData.?(class_userdata.userdata, p_name, hash);
 
     return ret;
 }
