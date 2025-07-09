@@ -162,10 +162,10 @@ pub fn MethodBinderT(comptime MethodType: type) type {
 
         fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
             // TODO: I think this does not increment refcount on user-defined RefCounted types
-            if (comptime meta.isRefCountedType(T) and meta.isGodotClassType(T)) {
+            if (comptime meta.isRefCountedPtr(T) and meta.isGodotClassPtr(T)) {
                 const obj = godot.interface.refGetObject(p_arg);
                 return @ptrCast(obj.?);
-            } else if (comptime meta.isGodotClassType(T)) {
+            } else if (comptime meta.isGodotClassPtr(T)) {
                 return @ptrCast(@constCast(p_arg.?));
             } else {
                 return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
