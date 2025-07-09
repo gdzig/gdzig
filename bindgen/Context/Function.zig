@@ -132,7 +132,7 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
     self.mode = .final;
     self.self = .{ .constant = builtin_name };
     self.is_vararg = false;
-    self.return_type_initializer = try getReturnTypeInitializer(allocator, self.name, self.base, self.return_type);
+    self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     return self;
 }
@@ -214,7 +214,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         try self.parameters.put(allocator, arg.name, parameter);
     }
     self.return_type = try .from(allocator, api.return_type, false, ctx);
-    self.return_type_initializer = try getReturnTypeInitializer(allocator, self.name, self.base, self.return_type);
+    self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     return self;
 }
@@ -290,7 +290,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     else
         .void;
 
-    self.return_type_initializer = try getReturnTypeInitializer(allocator, self.name, self.base, self.return_type);
+    self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     // TODO: default return values? rv.default_value
 
@@ -357,7 +357,6 @@ pub fn deinit(self: *Function, allocator: Allocator) void {
     }
     self.parameters.deinit(allocator);
     self.return_type.deinit(allocator);
-    if (self.return_type_initializer) |initializer| allocator.free(initializer);
 
     self.* = .{};
 }
@@ -466,29 +465,27 @@ const return_type_init_map: StaticStringMap([]const u8) = .initComptime(.{
 
     .{ "f32", "0.0" },
     .{ "f64", "0.0" },
+
+    .{ "void", "undefined" },
 });
 
 /// Returns the initializer for a given return type.
 ///
 /// Note: Do not use for constructors.
-fn getReturnTypeInitializer(allocator: Allocator, name: []const u8, struct_type: ?[]const u8, return_type: Type) !?[]const u8 {
+fn getReturnTypeInitializer(return_type: Type) ?[]const u8 {
     switch (return_type) {
-        inline .string_name, .string => return try allocator.dupe(u8, ".init()"),
+        inline .string_name, .string => return ".init()",
         inline .class, .basic => |type_name| {
             if (return_type_init_map.get(type_name)) |initializer| {
-                return try allocator.dupe(u8, initializer);
+                return initializer;
             }
 
-            if (std.zig.isPrimitive(type_name)) return null;
-
-            const return_type_same_as_parent = if (struct_type) |b| std.mem.eql(u8, b, type_name) else false;
-            const is_init_function = std.mem.eql(u8, name, "init");
-            const can_call_init = !(is_init_function and return_type_same_as_parent);
-
-            // this assumes that an init function exists on the parent type
-            if (can_call_init) {
-                return try allocator.dupe(u8, ".init()");
+            if (std.zig.isPrimitive(type_name)) {
+                std.debug.panic("No initializer defined for primitive type '{s}'", .{type_name});
             }
+
+            // this should exist for all basic and class types
+            return ".init()";
         },
         else => {},
     }
