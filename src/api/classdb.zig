@@ -223,24 +223,33 @@ pub fn registerClass(
                 return @ptrCast(ret);
             }
         }
+        fn callVirtual(instance: c.GDExtensionClassInstancePtr, args: [*c]const c.GDExtensionConstTypePtr, ret: c.GDExtensionTypePtr, callback_ptr: *anyopaque) callconv(.c) void {
+            std.debug.print("callVirtual\n", .{});
+
+            const callback: *const Info.callback.CallVirtual = @ptrCast(@alignCast(callback_ptr));
+            const p_instance: *T = @ptrCast(@alignCast(instance.?));
+            const p_args: [*]const ?*anyopaque = @ptrCast(args);
+            const r_ret: *anyopaque = @ptrCast(ret);
+
+            callback(p_instance, p_args, r_ret);
+        }
         fn getVirtual(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassCallVirtual {
             std.debug.print("getVirtual\n", .{});
 
             const callback: *const Info.callback.GetVirtual = @ptrCast(@alignCast(callback_ptr));
             const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
-            _ = callback; // autofix
-            _ = p_name; // autofix
+            const ret = ret: {
+                if (Userdata == void) {
+                    break :ret callback(p_name);
+                } else {
+                    const p_userdata: *Userdata = @ptrCast(userdata.?);
 
-            if (Userdata == void) {
-                @panic("TODO: wrap the returned callback");
-                // return callback(p_name);
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-                _ = p_userdata; // autofix
-                @panic("TODO: wrap the returned callback");
-                // return callback(p_userdata, p_name);
-            }
+                    break :ret callback(p_userdata, p_name);
+                }
+            };
+
+            return bind(@This().callVirtual, ret);
         }
         fn getVirtual2(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, hash: u32, callback_ptr: *anyopaque) callconv(.c) c.GDExtensionClassCallVirtual {
             std.debug.print("getVirtual2\n", .{});
@@ -248,19 +257,17 @@ pub fn registerClass(
             const callback: *const Info.callback.GetVirtual2 = @ptrCast(@alignCast(callback_ptr));
             const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
-            _ = hash; // autofix
-            _ = callback; // autofix
-            _ = p_name; // autofix
+            const ret = ret: {
+                if (Userdata == void) {
+                    break :ret callback(p_name, hash);
+                } else {
+                    const p_userdata: *Userdata = @ptrCast(userdata.?);
 
-            if (Userdata == void) {
-                @panic("TODO: wrap the returned callback");
-                // return callback(p_name, hash);
-            } else {
-                const p_userdata: *Userdata = @ptrCast(userdata.?);
-                _ = p_userdata; // autofix
-                @panic("TODO: wrap the returned callback");
-                // return callback(p_userdata, p_name, hash);
-            }
+                    break :ret callback(p_userdata, p_name, hash);
+                }
+            };
+
+            return bind(@This().callVirtual, ret);
         }
         fn getVirtualCallData(userdata: ?*anyopaque, name: c.GDExtensionConstStringNamePtr, callback_ptr: *anyopaque) callconv(.c) ?*anyopaque {
             std.debug.print("getVirtualCallData\n", .{});
@@ -333,23 +340,23 @@ pub fn registerClass(
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime),
             .icon_path = @ptrCast(info.icon_path),
-            .set_func = bind(&Impl.set, info.set),
-            .get_func = bind(&Impl.get, info.get),
-            .get_property_list_func = bind(&Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(&Impl.freePropertyList2, info.free_property_list),
-            .property_can_revert_func = bind(&Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(&Impl.propertyGetRevert, info.property_get_revert),
-            .validate_property_func = bind(&Impl.validateProperty, info.validate_property),
-            .notification_func = bind(&Impl.notification2, info.notification),
-            .to_string_func = bind(&Impl.toString, info.to_string),
-            .reference_func = bind(&Impl.reference, info.reference),
-            .unreference_func = bind(&Impl.unreference, info.unreference),
-            .create_instance_func = bind(&Impl.createInstance2, info.create_instance),
-            .free_instance_func = bind(&Impl.freeInstance, info.free_instance),
-            .recreate_instance_func = bind(&Impl.recreateInstance, info.recreate_instance),
-            .get_virtual_func = bind(&Impl.getVirtual2, info.get_virtual),
-            .get_virtual_call_data_func = bind(&Impl.getVirtualCallData2, info.get_virtual_call_data),
-            .call_virtual_with_data_func = bind(&Impl.callVirtualWithData, info.call_virtual_with_data),
+            .set_func = bind(Impl.set, info.set),
+            .get_func = bind(Impl.get, info.get),
+            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
+            .free_property_list_func = bind(Impl.freePropertyList2, info.free_property_list),
+            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
+            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
+            .validate_property_func = bind(Impl.validateProperty, info.validate_property),
+            .notification_func = bind(Impl.notification2, info.notification),
+            .to_string_func = bind(Impl.toString, info.to_string),
+            .reference_func = bind(Impl.reference, info.reference),
+            .unreference_func = bind(Impl.unreference, info.unreference),
+            .create_instance_func = bind(Impl.createInstance2, info.create_instance),
+            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
+            .recreate_instance_func = bind(Impl.recreateInstance, info.recreate_instance),
+            .get_virtual_func = bind(Impl.getVirtual2, info.get_virtual),
+            .get_virtual_call_data_func = bind(Impl.getVirtualCallData2, info.get_virtual_call_data),
+            .call_virtual_with_data_func = bind(Impl.callVirtualWithData, info.call_virtual_with_data),
             .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
         })
     else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo3"))
@@ -358,24 +365,24 @@ pub fn registerClass(
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed),
             .is_runtime = @intFromBool(info.is_runtime), // added in v3
-            .set_func = bind(&Impl.set, info.set),
-            .get_func = bind(&Impl.get, info.get),
-            .get_property_list_func = bind(&Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(&Impl.freePropertyList2, info.free_property_list),
-            .property_can_revert_func = bind(&Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(&Impl.propertyGetRevert, info.property_get_revert),
-            .validate_property_func = bind(&Impl.validateProperty, info.validate_property),
-            .notification_func = bind(&Impl.notification2, info.notification),
-            .to_string_func = bind(&Impl.toString, info.to_string),
-            .reference_func = bind(&Impl.reference, info.reference),
-            .unreference_func = bind(&Impl.unreference, info.unreference),
-            .create_instance_func = bind(&Impl.createInstance, info.create_instance),
-            .free_instance_func = bind(&Impl.freeInstance, info.free_instance),
-            .recreate_instance_func = bind(&Impl.recreateInstance, info.recreate_instance),
-            .get_virtual_func = bind(&Impl.getVirtual, info.get_virtual),
-            .get_virtual_call_data_func = bind(&Impl.getVirtualCallData, info.get_virtual_call_data),
-            .call_virtual_with_data_func = bind(&Impl.callVirtualWithData, info.call_virtual_with_data),
-            .get_rid_func = bind(&Impl.getRid, info.get_rid),
+            .set_func = bind(Impl.set, info.set),
+            .get_func = bind(Impl.get, info.get),
+            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
+            .free_property_list_func = bind(Impl.freePropertyList2, info.free_property_list),
+            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
+            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
+            .validate_property_func = bind(Impl.validateProperty, info.validate_property),
+            .notification_func = bind(Impl.notification2, info.notification),
+            .to_string_func = bind(Impl.toString, info.to_string),
+            .reference_func = bind(Impl.reference, info.reference),
+            .unreference_func = bind(Impl.unreference, info.unreference),
+            .create_instance_func = bind(Impl.createInstance, info.create_instance),
+            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
+            .recreate_instance_func = bind(Impl.recreateInstance, info.recreate_instance),
+            .get_virtual_func = bind(Impl.getVirtual, info.get_virtual),
+            .get_virtual_call_data_func = bind(Impl.getVirtualCallData, info.get_virtual_call_data),
+            .call_virtual_with_data_func = bind(Impl.callVirtualWithData, info.call_virtual_with_data),
+            .get_rid_func = bind(Impl.getRid, info.get_rid),
             .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
         })
     else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo2"))
@@ -383,44 +390,44 @@ pub fn registerClass(
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
             .is_exposed = @intFromBool(info.is_exposed), // added in v2
-            .set_func = bind(&Impl.set, info.set),
-            .get_func = bind(&Impl.get, info.get),
-            .get_property_list_func = bind(&Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(&Impl.freePropertyList, info.free_property_list),
-            .property_can_revert_func = bind(&Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(&Impl.propertyGetRevert, info.property_get_revert),
-            .validate_property_func = bind(&Impl.validateProperty, info.validate_property),
-            .notification_func = bind(&Impl.notification2, info.notification),
-            .to_string_func = bind(&Impl.toString, info.to_string),
-            .reference_func = bind(&Impl.reference, info.reference),
-            .unreference_func = bind(&Impl.unreference, info.unreference),
-            .create_instance_func = bind(&Impl.createInstance, info.create_instance),
-            .free_instance_func = bind(&Impl.freeInstance, info.free_instance),
-            .recreate_instance_func = bind(&Impl.recreateInstance, info.recreate_instance),
-            .get_virtual_func = bind(&Impl.getVirtual, info.get_virtual),
-            .get_virtual_call_data_func = bind(&Impl.getVirtualCallData, info.get_virtual_call_data),
-            .call_virtual_with_data_func = bind(&Impl.callVirtualWithData, info.call_virtual_with_data),
-            .get_rid_func = bind(&Impl.getRid, info.get_rid),
+            .set_func = bind(Impl.set, info.set),
+            .get_func = bind(Impl.get, info.get),
+            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
+            .free_property_list_func = bind(Impl.freePropertyList, info.free_property_list),
+            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
+            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
+            .validate_property_func = bind(Impl.validateProperty, info.validate_property),
+            .notification_func = bind(Impl.notification2, info.notification),
+            .to_string_func = bind(Impl.toString, info.to_string),
+            .reference_func = bind(Impl.reference, info.reference),
+            .unreference_func = bind(Impl.unreference, info.unreference),
+            .create_instance_func = bind(Impl.createInstance, info.create_instance),
+            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
+            .recreate_instance_func = bind(Impl.recreateInstance, info.recreate_instance),
+            .get_virtual_func = bind(Impl.getVirtual, info.get_virtual),
+            .get_virtual_call_data_func = bind(Impl.getVirtualCallData, info.get_virtual_call_data),
+            .call_virtual_with_data_func = bind(Impl.callVirtualWithData, info.call_virtual_with_data),
+            .get_rid_func = bind(Impl.getRid, info.get_rid),
             .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
         })
     else if (@hasDecl(godot.c, "GDExtensionClassCreationInfo"))
         godot.interface.classdbRegisterExtensionClass(godot.interface.library, class_name, base_name, &.{
             .is_virtual = @intFromBool(info.is_virtual),
             .is_abstract = @intFromBool(info.is_abstract),
-            .set_func = bind(&Impl.set, info.set),
-            .get_func = bind(&Impl.get, info.get),
-            .get_property_list_func = bind(&Impl.getPropertyList, info.get_property_list),
-            .free_property_list_func = bind(&Impl.freePropertyList, info.free_property_list),
-            .property_can_revert_func = bind(&Impl.propertyCanRevert, info.property_can_revert),
-            .property_get_revert_func = bind(&Impl.propertyGetRevert, info.property_get_revert),
-            .notification_func = bind(&Impl.notification, info.notification),
-            .to_string_func = bind(&Impl.toString, info.to_string),
-            .reference_func = bind(&Impl.reference, info.reference),
-            .unreference_func = bind(&Impl.unreference, info.unreference),
-            .create_instance_func = bind(&Impl.createInstance, info.create_instance),
-            .free_instance_func = bind(&Impl.freeInstance, info.free_instance),
-            .get_virtual_func = bind(&Impl.getVirtual, info.get_virtual),
-            .get_rid_func = bind(&Impl.getRid, info.get_rid),
+            .set_func = bind(Impl.set, info.set),
+            .get_func = bind(Impl.get, info.get),
+            .get_property_list_func = bind(Impl.getPropertyList, info.get_property_list),
+            .free_property_list_func = bind(Impl.freePropertyList, info.free_property_list),
+            .property_can_revert_func = bind(Impl.propertyCanRevert, info.property_can_revert),
+            .property_get_revert_func = bind(Impl.propertyGetRevert, info.property_get_revert),
+            .notification_func = bind(Impl.notification, info.notification),
+            .to_string_func = bind(Impl.toString, info.to_string),
+            .reference_func = bind(Impl.reference, info.reference),
+            .unreference_func = bind(Impl.unreference, info.unreference),
+            .create_instance_func = bind(Impl.createInstance, info.create_instance),
+            .free_instance_func = bind(Impl.freeInstance, info.free_instance),
+            .get_virtual_func = bind(Impl.getVirtual, info.get_virtual),
+            .get_rid_func = bind(Impl.getRid, info.get_rid),
             .class_userdata = if (Userdata != void) @ptrCast(info.class_userdata) else null,
         })
     else
