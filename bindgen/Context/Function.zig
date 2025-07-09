@@ -3,6 +3,7 @@ const Function = @This();
 doc: ?[]const u8 = null,
 name: []const u8 = "_",
 name_api: []const u8 = "_",
+type: FunctionType = .method,
 
 /// The name of the parent type that this function belongs to.
 base: ?[]const u8 = null,
@@ -15,6 +16,7 @@ operator_name: ?[]const u8 = null,
 
 parameters: StringArrayHashMap(Parameter) = .empty,
 return_type: Type = .void,
+return_type_initializer: ?[]const u8 = null,
 
 /// The override behavior of the function, in object-oriented terms.
 mode: Mode = .final,
@@ -116,6 +118,7 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
         break :blk try buf.toOwnedSlice(allocator);
     };
     self.name_api = api.name;
+    self.type = .operator;
 
     self.operator_name = operator_enum_names.get(api.name).?;
 
@@ -131,6 +134,7 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
     self.mode = .final;
     self.self = .{ .constant = builtin_name };
     self.is_vararg = false;
+    self.return_type_initializer = try getReturnTypeInitializer(allocator, self.name, self.base, self.return_type);
 
     return self;
 }
@@ -181,6 +185,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
 
     self.return_type = try .from(allocator, builtin_name, false, ctx);
     self.base = builtin_name;
+    self.type = .constructor;
 
     return self;
 }
@@ -203,6 +208,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         .{ .mutable = builtin_name };
     self.is_vararg = api.is_vararg;
     self.base = builtin_name;
+    self.type = .method;
 
     for (api.arguments orelse &.{}) |arg| {
         const parameter: Parameter = if (arg.default_value.len > 0)
@@ -212,6 +218,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         try self.parameters.put(allocator, arg.name, parameter);
     }
     self.return_type = try .from(allocator, api.return_type, false, ctx);
+    self.return_type_initializer = try getReturnTypeInitializer(allocator, self.name, self.base, self.return_type);
 
     return self;
 }
@@ -287,6 +294,8 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     else
         .void;
 
+    self.return_type_initializer = try getReturnTypeInitializer(allocator, self.name, self.base, self.return_type);
+
     // TODO: default return values? rv.default_value
 
     return self;
@@ -303,6 +312,7 @@ pub fn fromClassGetter(allocator: Allocator, class_name: []const u8, name: []con
     self.is_vararg = false;
     self.parameters = .{};
     self.return_type = @"type";
+    self.type = .getter;
 
     return self;
 }
@@ -317,6 +327,7 @@ pub fn fromClassSetter(allocator: Allocator, class_name: []const u8, is_singleto
     self.self = if (is_singleton) .singleton else .{ .mutable = class_name };
     self.is_vararg = false;
     self.return_type = .void;
+    self.type = .setter;
 
     try self.parameters.put(allocator, "value", .{
         .name = "value",
@@ -352,6 +363,7 @@ pub fn deinit(self: *Function, allocator: Allocator) void {
     }
     self.parameters.deinit(allocator);
     self.return_type.deinit(allocator);
+    if (self.return_type_initializer) |initializer| allocator.free(initializer);
 
     self.* = .{};
 }
@@ -431,6 +443,73 @@ pub const Parameter = struct {
         self.* = .{};
     }
 };
+
+pub const FunctionType = enum {
+    method,
+    constructor,
+    destructor,
+    getter,
+    setter,
+    operator,
+};
+
+const return_type_init_map: StaticStringMap([]const u8) = .initComptime(.{
+    // builtins
+    .{ "Vector2", ".zero" },
+    .{ "Vector3", ".zero" },
+    .{ "Vector4", ".zero" },
+    .{ "Vector2i", ".zero" },
+    .{ "Vector3i", ".zero" },
+    .{ "Vector4i", ".zero" },
+    .{ "Basis", ".identity" },
+    .{ "Transform2D", ".identity" },
+    .{ "Transform3D", ".identity" },
+    .{ "Projection", ".identity" },
+
+    // primitives
+    .{ "bool", "false" },
+
+    .{ "u8", "0" },
+    .{ "u16", "0" },
+    .{ "u32", "0" },
+    .{ "u64", "0" },
+
+    .{ "i8", "0" },
+    .{ "i16", "0" },
+    .{ "i32", "0" },
+    .{ "i64", "0" },
+
+    .{ "f32", "0.0" },
+    .{ "f64", "0.0" },
+});
+
+/// Returns the initializer for a given return type.
+///
+/// Note: Do not use for constructors.
+fn getReturnTypeInitializer(allocator: Allocator, name: []const u8, struct_type: ?[]const u8, return_type: Type) !?[]const u8 {
+    switch (return_type) {
+        inline .string_name, .string => return try allocator.dupe(u8, ".init()"),
+        inline .class, .basic => |type_name| {
+            if (return_type_init_map.get(type_name)) |initializer| {
+                return try allocator.dupe(u8, initializer);
+            }
+
+            if (std.zig.isPrimitive(type_name)) return null;
+
+            const return_type_same_as_parent = if (struct_type) |b| std.mem.eql(u8, b, type_name) else false;
+            const is_init_function = std.mem.eql(u8, name, "init");
+            const can_call_init = !(is_init_function and return_type_same_as_parent);
+
+            // this assumes that an init function exists on the parent type
+            if (can_call_init) {
+                return try allocator.dupe(u8, ".init()");
+            }
+        },
+        else => {},
+    }
+
+    return null;
+}
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

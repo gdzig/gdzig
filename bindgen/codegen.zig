@@ -803,9 +803,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
                 if (function.can_init_directly) {
                     try w.writeLine(" = undefined;");
                 } else {
-                    try w.writeAll(" = std.mem.zeroes(");
-                    try writeTypeAtReturn(w, &function.return_type);
-                    try w.writeLine(");");
+                    try w.printLine(" = {s};", .{function.return_type_initializer orelse "undefined"});
                 }
             }
         }
