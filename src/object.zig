@@ -10,6 +10,18 @@ fn assertCanInitialize(comptime T: type) void {
     }
 }
 
+/// Binds an extension class to a Godot object. This function should be called before any other function on the object.
+pub fn bind(object: anytype) void {
+    if (!meta.isExtensionClassPtr(object)) {
+        @compileError("The type '" ++ meta.getTypeShortName(@TypeOf(object)) ++ "' is not an extension class pointer.");
+    }
+
+    const class_name = meta.getNamePtr(meta.Child(@TypeOf(object)));
+
+    godot.interface.objectSetInstance(@ptrCast(object.base), @ptrCast(class_name), @ptrCast(object));
+    godot.interface.objectSetInstanceBinding(@ptrCast(object.base), godot.interface.library, @ptrCast(object), &dummy_callbacks);
+}
+
 /// Create a Godot object.
 pub fn create(comptime T: type) !*T {
     comptime debug.assertIsObjectType(T);

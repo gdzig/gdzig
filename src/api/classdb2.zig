@@ -98,14 +98,12 @@ fn ClassApi(comptime T: type, comptime ClassUserdata: type, comptime VirtualCall
         };
 
         // Static methods
-        pub const CreateInstance = *const fn (userdata: ClassUserdata) *Object;
-        pub const CreateInstance2 = *const fn (userdata: ClassUserdata, notify_postinitialize: bool) *Object;
         pub const FreeInstance = *const fn (userdata: ClassUserdata, instance: *T) void;
         pub const RecreateInstance = *const fn (userdata: ClassUserdata, object: *Object) *anyopaque;
-        pub const GetVirtual = *const fn (userdata: ClassUserdata, name: StringName) ?*const CallVirtual;
-        pub const GetVirtual2 = *const fn (userdata: ClassUserdata, name: StringName, hash: u32) ?*const CallVirtual;
-        pub const GetVirtualCallData = *const fn (userdata: ClassUserdata, name: StringName) ?*anyopaque;
-        pub const GetVirtualCallData2 = *const fn (userdata: ClassUserdata, name: StringName, hash: u32) ?*anyopaque;
+        pub const GetVirtual = *const fn (userdata: ClassUserdata, name: StringName) ?CallVirtual;
+        pub const GetVirtual2 = *const fn (userdata: ClassUserdata, name: StringName, hash: u32) ?CallVirtual;
+        pub const GetVirtualCallData = *const fn (userdata: ClassUserdata, name: StringName) ?*VirtualCallUserdata;
+        pub const GetVirtualCallData2 = *const fn (userdata: ClassUserdata, name: StringName, hash: u32) ?*VirtualCallUserdata;
 
         // Instance methods
         pub const Set = *const fn (instance: *T, name: StringName, value: *const Variant) bool;
@@ -126,6 +124,126 @@ fn ClassApi(comptime T: type, comptime ClassUserdata: type, comptime VirtualCall
         // Callbacks
         pub const CallVirtual = *const fn (instance: *T, args: []const *anyopaque) *anyopaque;
         pub const CallVirtualWithData = *const fn (instance: *T, method_name: StringName, userdata: *VirtualCallUserdata, args: []const *anyopaque) ?*anyopaque;
+
+        pub const CreateInstance = *const fn (userdata: ClassUserdata) *Object;
+
+        fn createInstance(userdata: ?*anyopaque) callconv(.c) c.GDExtensionObjectPtr {
+            std.debug.print("createInstance\n", .{});
+
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            if (extension_data.vtable.init) |createInstance_fn| {
+                const ret = createInstance_fn.?(extension_data.userdata);
+                return @ptrCast(@alignCast(meta.asObject(ret)));
+            } else {
+                const ret = object.create(T) catch unreachable;
+                return @ptrCast(@alignCast(meta.asObject(ret)));
+            }
+
+            return @ptrCast(ret);
+        }
+
+        pub const CreateInstance2 = *const fn (userdata: ClassUserdata, notify_postinitialize: bool) *Object;
+
+        fn createInstance2(p_userdata: ?*anyopaque, p_notify_postinitialize: c.GDExtensionBool) callconv(.c) c.GDExtensionObjectPtr {
+            std.debug.print("createInstance2\n", .{});
+            const userdata: *ClassInternalUserdata = @ptrCast(@alignCast(p_userdata.?));
+
+            const ret = userdata.vtable.init.?(userdata.userdata, p_notify_postinitialize != 0);
+
+            godot.interface.objectSetInstance(@ptrCast(ret.base), @ptrCast(userdata.class_name), @ptrCast(ret));
+            godot.interface.objectSetInstanceBinding(@ptrCast(ret.base), godot.interface.library,
+                // TODO: is this stack allocated? probably needs to be on heap?
+                Binding{
+                    .ptr = @ptrCast(ret),
+                    .vtable = &userdata.vtable,
+                }, &dummy_callbacks);
+
+            return @ptrCast(ret);
+        }
+
+        fn freeInstance(
+            userdata: ?*anyopaque,
+            instance: c.GDExtensionClassInstancePtr,
+        ) callconv(.c) void {
+            std.debug.print("freeInstance\n", .{});
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            const p_instance: *anyopaque = instance.?;
+
+            extension_data.vtable.deinit.?(extension_data.userdata, p_instance);
+        }
+
+        fn recreateInstance(
+            userdata: ?*anyopaque,
+            object: c.GDExtensionObjectPtr,
+        ) callconv(.c) c.GDExtensionClassInstancePtr {
+            std.debug.print("recreateInstance\n", .{});
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            const p_object: *Object = @ptrCast(object.?);
+
+            const ret = extension_data.vtable.reinit.?(extension_data.userdata, p_object);
+
+            return @ptrCast(ret);
+        }
+
+        fn getVirtual(
+            userdata: ?*anyopaque,
+            name: c.GDExtensionConstStringNamePtr,
+        ) callconv(.c) c.GDExtensionClassCallVirtual {
+            std.debug.print("getVirtual\n", .{});
+
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+            const ret = extension_data.vtable.getVirtual.?(extension_data.userdata, p_name);
+            _ = ret; // autofix
+
+            @panic("TODO");
+        }
+
+        fn getVirtual2(
+            userdata: ?*anyopaque,
+            name: c.GDExtensionConstStringNamePtr,
+            hash: u32,
+        ) callconv(.c) c.GDExtensionClassCallVirtual {
+            std.debug.print("getVirtual2\n", .{});
+
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+            const ret = extension_data.vtable.getVirtual.?(extension_data.userdata, p_name, hash);
+            _ = ret; // autofix
+
+            @panic("TODO");
+        }
+
+        fn getVirtualCallData(
+            userdata: ?*anyopaque,
+            name: c.GDExtensionConstStringNamePtr,
+        ) callconv(.c) ?*anyopaque {
+            std.debug.print("getVirtualCallData\n", .{});
+
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+            const ret = extension_data.vtable.getVirtualCallData.?(extension_data.userdata, p_name);
+
+            return ret;
+        }
+
+        fn getVirtualCallData2(
+            userdata: ?*anyopaque,
+            name: c.GDExtensionConstStringNamePtr,
+            hash: u32,
+        ) callconv(.c) ?*anyopaque {
+            std.debug.print("getVirtualCallData2\n", .{});
+
+            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
+
+            const ret = extension_data.vtable.getVirtualCallData.?(extension_data.userdata, p_name, hash);
+
+            return ret;
+        }
 
         fn set(
             instance: c.GDExtensionClassInstancePtr,
@@ -333,65 +451,18 @@ fn ClassApi(comptime T: type, comptime ClassUserdata: type, comptime VirtualCall
             unreference_fn(p_instance);
         }
 
-        fn createInstance(
-            userdata: ?*anyopaque,
-        ) callconv(.c) c.GDExtensionObjectPtr {
-            std.debug.print("createInstance\n", .{});
-
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
-            if (extension_data.vtable.init) |createInstance_fn| {
-                const ret = createInstance_fn.?(extension_data.userdata);
-                return @ptrCast(@alignCast(meta.asObject(ret)));
-            } else {
-                const ret = object.create(T) catch unreachable;
-                return @ptrCast(@alignCast(meta.asObject(ret)));
-            }
-
-            return @ptrCast(ret);
-        }
-
-        fn createInstance2(
-            p_userdata: ?*anyopaque,
-            p_notify_postinitialize: c.GDExtensionBool,
-        ) callconv(.c) c.GDExtensionObjectPtr {
-            std.debug.print("createInstance2\n", .{});
-            const userdata: *ClassInternalUserdata = @ptrCast(@alignCast(p_userdata.?));
-
-            const ret = userdata.vtable.init.?(userdata.userdata, p_notify_postinitialize != 0);
-
-            godot.interface.objectSetInstance(@ptrCast(ret.base), @ptrCast(userdata.class_name), @ptrCast(ret));
-            godot.interface.objectSetInstanceBinding(@ptrCast(ret.base), godot.interface.library,
-                // TODO: is this stack allocated? probably needs to be on heap?
-                Binding{
-                    .ptr = @ptrCast(ret),
-                    .vtable = &userdata.vtable,
-                }, &dummy_callbacks);
-
-            return @ptrCast(ret);
-        }
-
-        fn freeInstance(
-            userdata: ?*anyopaque,
+        fn getRid(
             instance: c.GDExtensionClassInstancePtr,
-        ) callconv(.c) void {
-            std.debug.print("freeInstance\n", .{});
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
+        ) callconv(.c) u64 {
+            std.debug.print("getRid\n", .{});
+
+            const getRid_fn = getMethod(instance, "getRid") orelse return 0;
+
             const p_instance: *anyopaque = instance.?;
 
-            extension_data.vtable.deinit.?(extension_data.userdata, p_instance);
-        }
+            const ret = getRid_fn(p_instance);
 
-        fn recreateInstance(
-            userdata: ?*anyopaque,
-            object: c.GDExtensionObjectPtr,
-        ) callconv(.c) c.GDExtensionClassInstancePtr {
-            std.debug.print("recreateInstance\n", .{});
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
-            const p_object: *Object = @ptrCast(object.?);
-
-            const ret = extension_data.vtable.reinit.?(extension_data.userdata, p_object);
-
-            return @ptrCast(ret);
+            return ret;
         }
 
         fn callVirtual(
@@ -408,66 +479,6 @@ fn ClassApi(comptime T: type, comptime ClassUserdata: type, comptime VirtualCall
 
             const result = callVirtual_fn(p_instance, p_args);
             r_ret.* = result.*;
-        }
-
-        fn getVirtual(
-            userdata: ?*anyopaque,
-            name: c.GDExtensionConstStringNamePtr,
-        ) callconv(.c) c.GDExtensionClassCallVirtual {
-            std.debug.print("getVirtual\n", .{});
-
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = extension_data.vtable.getVirtual.?(extension_data.userdata, p_name);
-            _ = ret; // autofix
-
-            @panic("TODO");
-        }
-
-        fn getVirtual2(
-            userdata: ?*anyopaque,
-            name: c.GDExtensionConstStringNamePtr,
-            hash: u32,
-        ) callconv(.c) c.GDExtensionClassCallVirtual {
-            std.debug.print("getVirtual2\n", .{});
-
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = extension_data.vtable.getVirtual.?(extension_data.userdata, p_name, hash);
-            _ = ret; // autofix
-
-            @panic("TODO");
-        }
-
-        fn getVirtualCallData(
-            userdata: ?*anyopaque,
-            name: c.GDExtensionConstStringNamePtr,
-        ) callconv(.c) ?*anyopaque {
-            std.debug.print("getVirtualCallData\n", .{});
-
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = extension_data.vtable.getVirtualCallData.?(extension_data.userdata, p_name);
-
-            return ret;
-        }
-
-        fn getVirtualCallData2(
-            userdata: ?*anyopaque,
-            name: c.GDExtensionConstStringNamePtr,
-            hash: u32,
-        ) callconv(.c) ?*anyopaque {
-            std.debug.print("getVirtualCallData2\n", .{});
-
-            const extension_data: *ClassInternalUserdata = @ptrCast(@alignCast(userdata.?));
-            const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
-
-            const ret = extension_data.vtable.getVirtualCallData.?(extension_data.userdata, p_name, hash);
-
-            return ret;
         }
 
         fn callVirtualWithData(
@@ -490,20 +501,6 @@ fn ClassApi(comptime T: type, comptime ClassUserdata: type, comptime VirtualCall
             _ = ret;
 
             @panic("TODO: implement");
-        }
-
-        fn getRid(
-            instance: c.GDExtensionClassInstancePtr,
-        ) callconv(.c) u64 {
-            std.debug.print("getRid\n", .{});
-
-            const getRid_fn = getMethod(instance, "getRid") orelse return 0;
-
-            const p_instance: *anyopaque = instance.?;
-
-            const ret = getRid_fn(p_instance);
-
-            return ret;
         }
 
         fn getMethod(instance: ?*anyopaque, comptime method_name: []const u8) @FieldType(ClassInternalUserdata.VTable, method_name) {
