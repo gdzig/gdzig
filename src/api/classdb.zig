@@ -349,6 +349,7 @@ fn set(
     name: c.GDExtensionConstStringNamePtr,
     variant: c.GDExtensionConstVariantPtr,
 ) callconv(.c) c.GDExtensionBool {
+    std.debug.print("set\n", .{});
     const set_fn = getMethod(instance, "set") orelse return 0;
 
     const p_instance: *anyopaque = instance.?;
@@ -365,6 +366,7 @@ fn get(
     name: c.GDExtensionConstStringNamePtr,
     variant: c.GDExtensionVariantPtr,
 ) callconv(.c) c.GDExtensionBool {
+    std.debug.print("get\n", .{});
     const get_fn = getMethod(instance, "get") orelse return 0;
 
     const p_instance: *anyopaque = instance.?;
@@ -385,6 +387,7 @@ fn getPropertyList(
     instance: c.GDExtensionClassInstancePtr,
     count: [*c]u32,
 ) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
+    std.debug.print("getPropertyList\n", .{});
     const getPropertyList_fn = getMethod(instance, "getPropertyList") orelse {
         count.* = 0;
         return null;
@@ -402,6 +405,7 @@ fn freePropertyList(
     instance: c.GDExtensionClassInstancePtr,
     list: [*c]const c.GDExtensionPropertyInfo,
 ) callconv(.c) void {
+    std.debug.print("freePropertyList\n", .{});
     const freePropertyList_fn = getMethod(instance, "freePropertyList") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -414,6 +418,7 @@ fn freePropertyList2(
     list: [*c]const c.GDExtensionPropertyInfo,
     count: u32,
 ) callconv(.c) void {
+    std.debug.print("freePropertyList\n", .{});
     const freePropertyList_fn = getMethod(instance, "freePropertyList") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -425,6 +430,7 @@ fn propertyCanRevert(
     instance: c.GDExtensionClassInstancePtr,
     name: c.GDExtensionConstStringNamePtr,
 ) callconv(.c) c.GDExtensionBool {
+    std.debug.print("propertyCanRevert\n", .{});
     const propertyCanRevert_fn = getMethod(instance, "propertyCanRevert") orelse return 0;
 
     const p_instance: *anyopaque = instance.?;
@@ -440,6 +446,7 @@ fn propertyGetRevert(
     name: c.GDExtensionConstStringNamePtr,
     variant: c.GDExtensionVariantPtr,
 ) callconv(.c) c.GDExtensionBool {
+    std.debug.print("propertyGetRevert\n", .{});
     const propertyGetRevert_fn = getMethod(instance, "propertyGetRevert") orelse return 0;
 
     const p_instance: *anyopaque = instance.?;
@@ -459,6 +466,7 @@ fn validateProperty(
     instance: c.GDExtensionClassInstancePtr,
     property: [*c]c.GDExtensionPropertyInfo,
 ) callconv(.c) c.GDExtensionBool {
+    std.debug.print("validateProperty\n", .{});
     const validateProperty_fn = getMethod(instance, "validateProperty") orelse return 0;
 
     const p_instance: *anyopaque = instance.?;
@@ -473,6 +481,7 @@ fn notification(
     instance: c.GDExtensionClassInstancePtr,
     what: i32,
 ) callconv(.c) void {
+    std.debug.print("notification\n", .{});
     const notification_fn = getMethod(instance, "notification") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -485,6 +494,7 @@ fn notification2(
     what: i32,
     reversed: c.GDExtensionBool,
 ) callconv(.c) void {
+    std.debug.print("notification\n", .{});
     const notification_fn = getMethod(instance, "notification") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -497,6 +507,7 @@ fn toString(
     is_valid: [*c]c.GDExtensionBool,
     string: c.GDExtensionStringPtr,
 ) callconv(.c) void {
+    std.debug.print("toString\n", .{});
     const toString_fn = getMethod(instance, "toString") orelse {
         const r_is_valid: *u8 = @ptrCast(is_valid.?);
         r_is_valid.* = 0;
@@ -520,6 +531,7 @@ fn toString(
 fn reference(
     instance: c.GDExtensionClassInstancePtr,
 ) callconv(.c) void {
+    std.debug.print("reference\n", .{});
     const reference_fn = getMethod(instance, "reference") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -530,6 +542,7 @@ fn reference(
 fn unreference(
     instance: c.GDExtensionClassInstancePtr,
 ) callconv(.c) void {
+    std.debug.print("unreference\n", .{});
     const unreference_fn = getMethod(instance, "unreference") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -540,6 +553,7 @@ fn unreference(
 fn createInstance(
     userdata: ?*anyopaque,
 ) callconv(.c) c.GDExtensionObjectPtr {
+    std.debug.print("createInstance\n", .{});
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const ret = class_userdata.vtable.createInstance.?(class_userdata.userdata);
 
@@ -550,7 +564,9 @@ fn createInstance2(
     userdata: ?*anyopaque,
     notify_postinitialize: c.GDExtensionBool,
 ) callconv(.c) c.GDExtensionObjectPtr {
+    std.debug.print("createInstance2\n", .{});
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
+    std.debug.print("{}", .{class_userdata.*});
     const ret = class_userdata.vtable.createInstance.?(class_userdata.userdata, notify_postinitialize != 0);
 
     return @ptrCast(ret);
@@ -560,6 +576,7 @@ fn freeInstance(
     userdata: ?*anyopaque,
     instance: c.GDExtensionClassInstancePtr,
 ) callconv(.c) void {
+    std.debug.print("freeInstance\n", .{});
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_instance: *anyopaque = instance.?;
 
@@ -570,6 +587,7 @@ fn recreateInstance(
     userdata: ?*anyopaque,
     object: c.GDExtensionObjectPtr,
 ) callconv(.c) c.GDExtensionClassInstancePtr {
+    std.debug.print("recreateInstance\n", .{});
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_object: *Object = @ptrCast(object.?);
 
@@ -583,6 +601,7 @@ fn callVirtual(
     args: [*c]const c.GDExtensionConstTypePtr,
     ret: c.GDExtensionTypePtr,
 ) callconv(.c) void {
+    std.debug.print("callVirtual\n", .{});
     const callVirtual_fn = getMethod(instance, "callVirtual") orelse return;
 
     const p_instance: *anyopaque = instance.?;
@@ -597,6 +616,8 @@ fn getVirtual(
     userdata: ?*anyopaque,
     name: c.GDExtensionConstStringNamePtr,
 ) callconv(.c) c.GDExtensionClassCallVirtual {
+    std.debug.print("getVirtual\n", .{});
+
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
@@ -611,6 +632,8 @@ fn getVirtual2(
     name: c.GDExtensionConstStringNamePtr,
     hash: u32,
 ) callconv(.c) c.GDExtensionClassCallVirtual {
+    std.debug.print("getVirtual2\n", .{});
+
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
@@ -624,6 +647,8 @@ fn getVirtualCallData(
     userdata: ?*anyopaque,
     name: c.GDExtensionConstStringNamePtr,
 ) callconv(.c) ?*anyopaque {
+    std.debug.print("getVirtualCallData\n", .{});
+
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
@@ -637,6 +662,8 @@ fn getVirtualCallData2(
     name: c.GDExtensionConstStringNamePtr,
     hash: u32,
 ) callconv(.c) ?*anyopaque {
+    std.debug.print("getVirtualCallData2\n", .{});
+
     const class_userdata: *ClassUserdata = @ptrCast(@alignCast(userdata.?));
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
@@ -652,6 +679,8 @@ fn callVirtualWithData(
     args: [*c]const c.GDExtensionConstTypePtr,
     ret: c.GDExtensionTypePtr,
 ) callconv(.c) void {
+    std.debug.print("callVirtualWithData\n", .{});
+
     const p_instance: *anyopaque = instance.?;
     const p_name: StringName = @as(*const StringName, @ptrCast(name.?)).*;
 
@@ -668,6 +697,8 @@ fn callVirtualWithData(
 fn getRid(
     instance: c.GDExtensionClassInstancePtr,
 ) callconv(.c) u64 {
+    std.debug.print("getRid\n", .{});
+
     const getRid_fn = getMethod(instance, "getRid") orelse return 0;
 
     const p_instance: *anyopaque = instance.?;

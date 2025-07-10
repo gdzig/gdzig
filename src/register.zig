@@ -72,6 +72,8 @@ pub fn registerClass(
     var info: ClassCreationInfo = opt;
     info.vtable = vtable;
 
+    std.debug.print("{}\n", .{info.vtable.*});
+
     // Register the type in the ClassDB
     godot.api.classdb.registerClass(class_name, base_name, info);
 
