@@ -64,7 +64,7 @@ pub fn entrypointWithUserdata(
             p_library: c.GDExtensionClassLibraryPtr,
             r_initialization: [*c]c.GDExtensionInitialization,
         ) callconv(.c) c.GDExtensionBool {
-            bindings.raw = .init(p_get_proc_address.?, p_library.?);
+            bindings.raw = .init(p_get_proc_address.?, @ptrCast(p_library.?));
             interface = &bindings.raw;
             r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
             r_initialization.*.initialize = @ptrCast(&init);
@@ -113,6 +113,7 @@ pub var interface: *Interface = &bindings.raw;
 const std = @import("std");
 
 const bindings = @import("gdzig_bindings");
+pub const api = bindings.api;
 pub const builtin = bindings.builtin;
 pub const class = bindings.class;
 pub const general = bindings.general;
