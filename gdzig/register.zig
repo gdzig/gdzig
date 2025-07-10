@@ -267,25 +267,17 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
 var registered_signals: std.StringHashMap(void) = undefined;
 pub fn registerSignal(comptime T: type, comptime S: type) void {
     //prevent duplicate registration
-    const fullname = comptime meta.getTypeShortName(T) ++ "::" ++ meta.getTypeShortName(S);
+    const fullname = comptime meta.typeShortName(T) ++ "::" ++ meta.typeShortName(S);
     if (registered_signals.contains(fullname)) {
         return;
     }
     registered_signals.putNoClobber(fullname, {}) catch unreachable;
 
     if (@typeInfo(S) != .@"struct") {
-        @compileError("Signal '" ++ meta.getTypeShortName(S) ++ "' for '" ++ meta.getTypeShortName(T) ++ "' must be a struct");
+        @compileError("Signal '" ++ meta.typeShortName(S) ++ "' for '" ++ meta.typeShortName(T) ++ "' must be a struct");
     }
 
-    const signal_name: [:0]const u8 = comptime blk: {
-        @setEvalBranchQuota(10_000);
-        var signal_type = meta.getTypeShortName(S);
-        if (std.mem.endsWith(u8, signal_type, "Signal")) {
-            signal_type = signal_type[0 .. signal_type.len - "Signal".len];
-        }
-        const signal_type_snake = case.comptimeTo(.snake, signal_type) catch unreachable;
-        break :blk std.fmt.comptimePrint("{s}", .{signal_type_snake});
-    };
+    const signal_name = meta.signalName(S);
 
     var arguments: [std.meta.fields(S).len]object.PropertyInfo = undefined;
     inline for (std.meta.fields(S), 0..) |field, i| {
@@ -344,7 +336,6 @@ pub fn deinit() void {
 }
 
 const std = @import("std");
-const case = @import("case");
 
 const godot = @import("gdzig.zig");
 const c = godot.c;
