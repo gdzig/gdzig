@@ -185,6 +185,19 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
         try w.writeLine("");
     }
 
+    // Helpers
+    try w.printLine(
+        \\/// Returns an opaque pointer to the {0s}.
+        \\pub fn ptr(self: *{0s}) *anyopaque {{
+        \\    return @ptrCast(self);
+        \\}}
+        \\
+        \\/// Returns a constant opaque pointer to the {0s}.
+        \\pub fn constPtr(self: *const {0s}) *const anyopaque {{
+        \\    return @ptrCast(self);
+        \\}}
+    , .{builtin.name});
+
     // Declaration end
     w.indent -= 1;
     try w.writeLine("};");
@@ -445,11 +458,11 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\    comptime oopz.assertIsA(T, {0s});
         \\    const tag = raw.classdbGetClassTag(@ptrCast(&StringName.fromComptimeLatin1("{1s}")));
         \\    const result = raw.objectCastTo(@ptrCast(value), tag);
-        \\    if (result) |ptr| {{
+        \\    if (result) |p| {{
         \\        if (oopz.isOpaqueClass(T)) {{
-        \\            return @ptrCast(@alignCast(ptr));
+        \\            return @ptrCast(@alignCast(p));
         \\        }} else {{
-        \\            const object: *anyopaque = raw.objectGetInstanceBinding(ptr, raw.library, null) orelse return null;
+        \\            const object: *anyopaque = raw.objectGetInstanceBinding(p, raw.library, null) orelse return null;
         \\            return @ptrCast(@alignCast(object));
         \\        }}
         \\    }} else {{
@@ -477,6 +490,19 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         try writeFlag(w, flag);
         try w.writeLine("");
     }
+
+    // Helpers
+    try w.printLine(
+        \\/// Returns an opaque pointer to the {0s}.
+        \\pub fn ptr(self: *{0s}) *anyopaque {{
+        \\    return @ptrCast(self);
+        \\}}
+        \\
+        \\/// Returns a constant opaque pointer to the {0s}.
+        \\pub fn constPtr(self: *const {0s}) *const anyopaque {{
+        \\    return @ptrCast(self);
+        \\}}
+    , .{class.name});
 
     // Declaration end
     w.indent -= 1;
