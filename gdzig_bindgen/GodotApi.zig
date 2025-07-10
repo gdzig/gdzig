@@ -209,6 +209,7 @@ pub const Class = struct {
     pub const Signal = struct {
         name: []const u8,
         arguments: ?[]Argument = null,
+        description: ?[]const u8 = null,
 
         pub const Argument = struct {
             name: []const u8,

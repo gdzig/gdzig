@@ -3,14 +3,17 @@ const Self = @This();
 base: *Control, //this makes @Self a valid gdextension class
 color_rect: *ColorRect = undefined,
 
-pub fn _bindMethods() void {
-    godot.registerSignal(Self, "signal1", &[_]PropertyInfo{
-        PropertyInfo.init(godot.heap.general_allocator, .string, "name") catch unreachable,
-        PropertyInfo.init(godot.heap.general_allocator, .vector3, "position") catch unreachable,
-    });
+pub const Signal1 = struct {
+    name: []const u8,
+    position: Vector3,
+};
+pub const Signal2 = struct {};
+pub const Signal3 = struct {};
 
-    godot.registerSignal(Self, "signal2", &.{});
-    godot.registerSignal(Self, "signal3", &.{});
+pub fn _bindMethods() void {
+    godot.registerSignal(Self, Signal1);
+    godot.registerSignal(Self, Signal2);
+    godot.registerSignal(Self, Signal3);
 }
 
 pub fn _enterTree(self: *Self) void {
@@ -85,9 +88,5 @@ const Color = godot.builtin.Color;
 const ColorRect = godot.class.ColorRect;
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
-const Node = godot.class.Node;
-const PropertyInfo = godot.object.PropertyInfo;
-const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
-const Vector2 = godot.builtin.Vector2;
 const Vector3 = godot.builtin.Vector3;

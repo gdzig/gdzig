@@ -265,34 +265,54 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
 }
 
 var registered_signals: std.StringHashMap(void) = undefined;
-pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, arguments: []const object.PropertyInfo) void {
+pub fn registerSignal(comptime T: type, comptime S: type) void {
     //prevent duplicate registration
-    const fullname = std.mem.concat(heap.general_allocator, u8, &[_][]const u8{ meta.typeShortName(T), "::", signal_name }) catch unreachable;
+    const fullname = comptime meta.getTypeShortName(T) ++ "::" ++ meta.getTypeShortName(S);
     if (registered_signals.contains(fullname)) {
-        heap.general_allocator.free(fullname);
         return;
     }
-    registered_signals.put(fullname, {}) catch unreachable;
+    registered_signals.putNoClobber(fullname, {}) catch unreachable;
 
-    var propertyies: [32]c.GDExtensionPropertyInfo = undefined;
-    if (arguments.len > 32) {
-        std.log.err("why you need so many arguments for a single signal? whatever, you can increase the upper limit as you want", .{});
+    if (@typeInfo(S) != .@"struct") {
+        @compileError("Signal '" ++ meta.getTypeShortName(S) ++ "' for '" ++ meta.getTypeShortName(T) ++ "' must be a struct");
     }
 
-    for (arguments, 0..) |*a, i| {
-        propertyies[i].type = @intFromEnum(a.type);
-        propertyies[i].hint = @intCast(@intFromEnum(a.hint));
-        propertyies[i].usage = @bitCast(a.usage);
-        propertyies[i].name = @ptrCast(@constCast(&a.name));
-        propertyies[i].class_name = @ptrCast(@constCast(&a.class_name));
-        propertyies[i].hint_string = @ptrCast(@constCast(&a.hint_string));
+    const signal_name: [:0]const u8 = comptime blk: {
+        @setEvalBranchQuota(10_000);
+        var signal_type = meta.getTypeShortName(S);
+        if (std.mem.endsWith(u8, signal_type, "Signal")) {
+            signal_type = signal_type[0 .. signal_type.len - "Signal".len];
+        }
+        const signal_type_snake = case.comptimeTo(.snake, signal_type) catch unreachable;
+        break :blk std.fmt.comptimePrint("{s}", .{signal_type_snake});
+    };
+
+    var arguments: [std.meta.fields(S).len]object.PropertyInfo = undefined;
+    inline for (std.meta.fields(S), 0..) |field, i| {
+        arguments[i] = object.PropertyInfo.init(godot.heap.general_allocator, .string, field.name) catch unreachable;
     }
 
-    if (arguments.len > 0) {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name, false), &propertyies[0], @intCast(arguments.len));
+    var properties: [32]c.GDExtensionPropertyInfo = undefined;
+    if (comptime arguments.len > 32) {
+        @compileError("why you need so many arguments for a single signal? whatever, you can increase the upper limit as you want");
+    }
+
+    inline for (arguments, 0..) |a, i| {
+        properties[i].type = @intFromEnum(a.type);
+        properties[i].hint = @intCast(@intFromEnum(a.hint));
+        properties[i].usage = @bitCast(a.usage);
+        properties[i].name = @ptrCast(@constCast(&a.name));
+        properties[i].class_name = @ptrCast(@constCast(&a.class_name));
+        properties[i].hint_string = @ptrCast(@constCast(&a.hint_string));
+    }
+
+    if (comptime arguments.len > 0) {
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name), &properties[0], @intCast(arguments.len));
     } else {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name, false), null, 0);
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name, false), null, 0);
     }
+
+    std.debug.print("Signal registered: {s}\n", .{signal_name});
 }
 
 pub fn init() void {
@@ -318,19 +338,13 @@ pub fn deinit() void {
         }
     }
 
-    {
-        var keys = registered_signals.keyIterator();
-        while (keys.next()) |it| {
-            heap.general_allocator.free(it.*);
-        }
-    }
-
     registered_signals.deinit();
     registered_methods.deinit();
     registered_classes.deinit();
 }
 
 const std = @import("std");
+const case = @import("case");
 
 const godot = @import("gdzig.zig");
 const c = godot.c;

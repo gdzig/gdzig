@@ -206,10 +206,6 @@ fn collectFunctionImports(self: *Context, function: GodotApi.UtilityFunction) !v
 
 fn parseClasses(self: *Context) !void {
     for (self.api.classes) |bc| {
-        // TODO: why?
-        if (std.mem.eql(u8, bc.name, "ClassDB")) {
-            continue;
-        }
         try self.engine_classes.put(self.allocator(), bc.name, bc.is_refcounted);
     }
 

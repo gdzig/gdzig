@@ -2,9 +2,11 @@ const Signal = @This();
 
 name: []const u8 = "_",
 name_api: []const u8 = "_",
+struct_name: []const u8 = "_",
+doc: ?[]const u8 = null,
 parameters: StringArrayHashMap(Parameter) = .empty,
 
-pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Signal, ctx: *const Context) !Signal {
+pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Class.Signal, ctx: *const Context) !Signal {
     var self = Signal{};
 
     self.name = blk: {
@@ -12,6 +14,14 @@ pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Signal, ctx: *const C
         break :blk try allocator.dupe(u8, api.name);
     };
     self.name_api = api.name;
+
+    self.struct_name = try std.fmt.allocPrint(allocator, "{s}Signal", .{
+        case_utils.fmtSliceCasePascal(api.name),
+    });
+
+    self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+        .current_class = class_name,
+    }) else null;
 
     for (api.arguments orelse &.{}) |arg| {
         try self.parameters.put(allocator, arg.name, try Parameter.fromClass(allocator, arg, ctx));
@@ -55,6 +65,8 @@ pub const Parameter = struct {
 };
 
 const std = @import("std");
+const docs = @import("docs.zig");
+const case_utils = @import("../case_utils.zig");
 const Allocator = std.mem.Allocator;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 

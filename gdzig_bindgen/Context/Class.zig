@@ -133,7 +133,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Signals
     for (api.signals orelse &.{}) |signal| {
-        try self.signals.put(allocator, signal.name, try Signal.fromClass(allocator, signal, ctx));
+        try self.signals.put(allocator, signal.name, try Signal.fromClass(allocator, api.name, signal, ctx));
     }
 
     return self;
