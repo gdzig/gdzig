@@ -33,10 +33,14 @@ const self_closing_tags: std.StaticStringMap(void) = .initComptime(.{
     .{"br"},
 });
 
+pub const DocumentConfig = struct {
+    base_url: []const u8,
+};
+
 pub const DocumentContext = struct {
-    // TODO: add support for setting a configurable base url
     const link_prefix = "#gdzig.";
 
+    base_url: []const u8,
     symbol_lookup: StringHashMap(Symbol),
     codegen_ctx: *const CodegenContext,
     current_class: ?[]const u8 = null,
@@ -44,8 +48,9 @@ pub const DocumentContext = struct {
     // SAFETY: will be initialized in fromWriteContext
     writer: *std.io.AnyWriter = undefined,
 
-    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol)) DocumentContext {
+    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
         return DocumentContext{
+            .base_url = config.base_url,
             .codegen_ctx = codegen_ctx,
             .current_class = current_class,
             .symbol_lookup = symbol_lookup,
@@ -106,8 +111,8 @@ pub const DocumentContext = struct {
     }
 
     pub fn writeSymbolLink(self: DocumentContext, symbol: Symbol) anyerror!bool {
-        const symbol_link_fmt = std.fmt.comptimePrint("[{{s}}]({s}{{s}})", .{link_prefix});
-        try self.writer.print(symbol_link_fmt, .{ symbol.label, symbol.path });
+        const symbol_link_fmt = std.fmt.comptimePrint("[{{s}}]({{s}}{s}{{s}})", .{link_prefix});
+        try self.writer.print(symbol_link_fmt, .{ symbol.label, self.base_url, symbol.path });
         return true;
     }
 
@@ -219,7 +224,9 @@ pub const Options = struct {
 };
 
 pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext, options: Options) ![]const u8 {
-    var doc_ctx = DocumentContext.init(ctx, options.current_class, ctx.symbol_lookup);
+    var doc_ctx = DocumentContext.init(ctx, options.current_class, ctx.symbol_lookup, .{
+        .base_url = "https://gdzig.github.io/gdzig/",
+    });
 
     var doc = try Document.loadFromBuffer(allocator, input, .{
         .verbatim_tags = verbatim_tags,
