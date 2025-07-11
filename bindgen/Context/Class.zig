@@ -42,7 +42,6 @@ imports: Imports = .empty,
 
 pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !Class {
     var self: Class = .{};
-    errdefer self.deinit(allocator);
 
     // Documentation
     self.doc = if (api.description) |desc|

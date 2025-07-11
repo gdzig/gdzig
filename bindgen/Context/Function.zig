@@ -221,7 +221,6 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
 
 pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bool, api: GodotApi.Class.Method, ctx: *const Context) !Function {
     var self = Function{};
-    errdefer self.deinit(allocator);
 
     self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = class_name,

@@ -20,6 +20,19 @@ const Element = enum {
     br,
 };
 
+const self_closing_tags: std.StaticStringMap(void) = .initComptime(.{
+    .{"method"},
+    .{"member"},
+    .{"constant"},
+    .{"enum"},
+    .{"annotation"},
+    .{"param"},
+    .{"bool"},
+    .{"int"},
+    .{"float"},
+    .{"br"},
+});
+
 pub const DocumentContext = struct {
     // TODO: add support for setting a configurable base url
     const link_prefix = "#gdzig.";
@@ -188,23 +201,17 @@ pub const DocumentContext = struct {
     }
 };
 
-const self_closing_tags: std.StaticStringMap(void) = .initComptime(.{
-    .{"method"},
-    .{"member"},
-    .{"constant"},
-    .{"enum"},
-    .{"annotation"},
-    // TODO: segfaults for some reason?
-    // .{"param"},
-    .{"bool"},
-    .{"int"},
-    .{"float"},
-    .{"br"},
-});
-
 fn isSelfClosing(user_data: ?*anyopaque, token: Token) bool {
-    const self: *const DocumentContext = @ptrCast(@alignCast(user_data));
-    return self_closing_tags.has(token.name) or self.symbol_lookup.contains(token.name);
+    if (self_closing_tags.has(token.name)) {
+        return true;
+    }
+
+    if (user_data) |ud| {
+        const self: *const DocumentContext = @ptrCast(@alignCast(ud));
+        return self.symbol_lookup.contains(token.name);
+    }
+
+    return false;
 }
 
 pub const Options = struct {
@@ -241,6 +248,10 @@ fn getWriteContext(ptr: ?*const anyopaque) *const WriteContext {
 
 fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
     const doc_ctx: *DocumentContext = .fromWriteContext(getWriteContext(ctx_ptr));
+
+    if (node.type == .text) {
+        return false;
+    }
 
     const node_name = try node.getName();
     if (doc_ctx.symbolLookup(node_name)) |sym| {
