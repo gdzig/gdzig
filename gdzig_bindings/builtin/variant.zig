@@ -19,15 +19,15 @@ pub const Variant = extern struct {
         const T = @TypeOf(value);
 
         const tag = comptime Tag.forType(T);
-        const constructor = bindVariantFrom(tag);
-        var result: Variant = undefined;
+        const variantFromType = getVariantFromTypeConstructor(tag);
 
+        var result: Variant = undefined;
         if (tag == .object) {
-            constructor(@ptrCast(&result), @ptrCast(@constCast(&meta.asObject(value))));
+            variantFromType(@ptrCast(&result), @ptrCast(@constCast(&oopz.upcast(*Object, value))));
         } else if (@typeInfo(T) == .pointer) {
-            constructor(@ptrCast(&result), @ptrCast(@constCast(value)));
+            variantFromType(@ptrCast(&result), @ptrCast(@constCast(value)));
         } else {
-            constructor(@ptrCast(&result), @ptrCast(@constCast(&value)));
+            variantFromType(@ptrCast(&result), @ptrCast(@constCast(&value)));
         }
 
         return result;
@@ -35,7 +35,7 @@ pub const Variant = extern struct {
 
     pub fn deinit(self: Variant) void {
         // TODO: what happens when you deinit an extension class contained in a Variant?
-        godot.interface.variantDestroy(@ptrCast(@constCast(&self)));
+        raw.variantDestroy(@ptrCast(@constCast(&self)));
     }
 
     pub fn as(self: Variant, comptime T: type) ?T {
@@ -45,16 +45,21 @@ pub const Variant = extern struct {
             return null;
         }
 
+        const variantToType = getVariantToTypeConstructor(tag);
+
         if (tag != .object) {
             var result: T = undefined;
-            const variantTo = bindVariantTo(tag);
-            variantTo(@ptrCast(&result), @ptrCast(@constCast(&self)));
+            variantToType(@ptrCast(&result), @ptrCast(@constCast(&self)));
             return result;
         } else {
             var object: ?*Object = null;
-            const variantToObject = bindVariantTo(tag);
-            variantToObject(@ptrCast(&object), @ptrCast(@constCast(&self)));
-            return meta.downcast(T, object);
+            variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
+            if (oopz.isOpaqueClassPtr(T)) {
+                return @ptrCast(@alignCast(object));
+            } else {
+                const instance: *anyopaque = raw.objectGetInstanceBinding(object, raw.library, null) orelse return null;
+                return @ptrCast(@alignCast(instance));
+            }
         }
     }
 
@@ -144,7 +149,7 @@ pub const Variant = extern struct {
                 inline else => switch (@typeInfo(T)) {
                     .@"enum" => .int,
                     .@"struct" => |info| if (info.backing_integer != null) .int else null,
-                    .pointer => |ptr| if (meta.isClassType(ptr.child)) .object else forType(ptr.child),
+                    .pointer => |ptr| if (oopz.isClassPtr(T)) .object else forType(ptr.child),
                     else => null,
                 },
             };
@@ -225,116 +230,137 @@ pub const Variant = extern struct {
     };
 };
 
-const tests = struct {
-    const Tag = Tag;
-    const testing = std.testing;
+inline fn getVariantFromTypeConstructor(comptime tag: Variant.Tag) Child(c.GDExtensionVariantFromTypeConstructorFunc) {
+    const function = &struct {
+        var _ = .{tag};
+        var function: c.GDExtensionVariantFromTypeConstructorFunc = null;
+    }.function;
 
-    test "forType" {
-        const pairs = .{
-            .{ .aabb, AABB },
-            .{ .array, Array },
-            .{ .basis, Basis },
-            .{ .callable, Callable },
-            .{ .color, Color },
-            .{ .dictionary, Dictionary },
-            .{ .node_path, NodePath },
-            .{ .object, Object },
-            .{ .packed_byte_array, PackedByteArray },
-            .{ .packed_color_array, PackedColorArray },
-            .{ .packed_float32_array, PackedFloat32Array },
-            .{ .packed_float64_array, PackedFloat64Array },
-            .{ .packed_int32_array, PackedInt32Array },
-            .{ .packed_int64_array, PackedInt64Array },
-            .{ .packed_string_array, PackedStringArray },
-            .{ .packed_vector2_array, PackedVector2Array },
-            .{ .packed_vector3_array, PackedVector3Array },
-            .{ .plane, Plane },
-            .{ .projection, Projection },
-            .{ .quaternion, Quaternion },
-            .{ .rid, RID },
-            .{ .rect2, Rect2 },
-            .{ .rect2i, Rect2i },
-            .{ .signal, Signal },
-            .{ .string, String },
-            .{ .string_name, StringName },
-            .{ .transform2d, Transform2D },
-            .{ .transform3d, Transform3D },
-            .{ .vector2, Vector2 },
-            .{ .vector2i, Vector2i },
-            .{ .vector3, Vector3 },
-            .{ .vector3i, Vector3i },
-            .{ .vector4, Vector4 },
-            .{ .vector4i, Vector4i },
-
-            .{ .nil, void },
-            .{ .bool, bool },
-            .{ .int, i32 },
-            .{ .int, i64 },
-            .{ .int, u32 },
-            .{ .int, u64 },
-            .{ .float, f32 },
-            .{ .float, f64 },
-            .{ .int, godot.global.JoyAxis },
-            .{ .int, godot.global.KeyModifierMask },
-        };
-
-        inline for (pairs) |pair| {
-            const tag = pair[0];
-            const T = pair[1];
-
-            try testing.expectEqual(tag, Tag.forType(T));
-            try testing.expectEqual(tag, Tag.forType(*T));
-            try testing.expectEqual(tag, Tag.forType(*const T));
-            try testing.expectEqual(tag, Tag.forType(?*T));
-            try testing.expectEqual(tag, Tag.forType(?*const T));
-        }
+    if (function.* == null) {
+        function.* = raw.getVariantFromTypeConstructor(@intFromEnum(tag));
     }
-};
 
-comptime {
-    _ = tests;
+    return function.*.?;
 }
+
+inline fn getVariantToTypeConstructor(comptime tag: Variant.Tag) Child(c.GDExtensionTypeFromVariantConstructorFunc) {
+    const function = &struct {
+        var _ = .{tag};
+        var function: c.GDExtensionTypeFromVariantConstructorFunc = null;
+    }.function;
+
+    if (function.* == null) {
+        function.* = raw.getVariantToTypeConstructor(@intFromEnum(tag));
+    }
+
+    return function.*.?;
+}
+
+test "forType" {
+    const pairs = .{
+        .{ .aabb, AABB },
+        .{ .array, Array },
+        .{ .basis, Basis },
+        .{ .callable, Callable },
+        .{ .color, Color },
+        .{ .dictionary, Dictionary },
+        .{ .node_path, NodePath },
+        .{ .object, Object },
+        .{ .packed_byte_array, PackedByteArray },
+        .{ .packed_color_array, PackedColorArray },
+        .{ .packed_float32_array, PackedFloat32Array },
+        .{ .packed_float64_array, PackedFloat64Array },
+        .{ .packed_int32_array, PackedInt32Array },
+        .{ .packed_int64_array, PackedInt64Array },
+        .{ .packed_string_array, PackedStringArray },
+        .{ .packed_vector2_array, PackedVector2Array },
+        .{ .packed_vector3_array, PackedVector3Array },
+        .{ .plane, Plane },
+        .{ .projection, Projection },
+        .{ .quaternion, Quaternion },
+        .{ .rid, RID },
+        .{ .rect2, Rect2 },
+        .{ .rect2i, Rect2i },
+        .{ .signal, Signal },
+        .{ .string, String },
+        .{ .string_name, StringName },
+        .{ .transform2d, Transform2D },
+        .{ .transform3d, Transform3D },
+        .{ .vector2, Vector2 },
+        .{ .vector2i, Vector2i },
+        .{ .vector3, Vector3 },
+        .{ .vector3i, Vector3i },
+        .{ .vector4, Vector4 },
+        .{ .vector4i, Vector4i },
+
+        .{ .nil, void },
+        .{ .bool, bool },
+        .{ .int, i32 },
+        .{ .int, i64 },
+        .{ .int, u32 },
+        .{ .int, u64 },
+        .{ .float, f32 },
+        .{ .float, f64 },
+        .{ .int, enum(u32) {} },
+    };
+
+    inline for (pairs) |pair| {
+        const tag = pair[0];
+        const T = pair[1];
+
+        try testing.expectEqual(tag, Variant.Tag.forType(T));
+        try testing.expectEqual(tag, Variant.Tag.forType(*T));
+        try testing.expectEqual(tag, Variant.Tag.forType(*const T));
+        try testing.expectEqual(tag, Variant.Tag.forType(?*T));
+        try testing.expectEqual(tag, Variant.Tag.forType(?*const T));
+    }
+}
+
+const raw = &@import("../gdzig_bindings.zig").raw;
 
 const std = @import("std");
 const Atomic = std.atomic.Value;
+const Child = std.meta.Child;
 const mem = std.mem;
-const precision = @import("build_options").precision;
+const testing = std.testing;
 
-const godot = @import("../gdzig.zig");
-const AABB = godot.builtin.AABB;
-const Array = godot.builtin.Array;
-const Basis = godot.builtin.Basis;
-const bindVariantFrom = godot.support.bindVariantFrom;
-const bindVariantTo = godot.support.bindVariantTo;
-const Callable = godot.builtin.Callable;
-const Color = godot.builtin.Color;
-const Dictionary = godot.builtin.Dictionary;
-const meta = godot.meta;
-const NodePath = godot.builtin.NodePath;
-const Object = godot.class.Object;
-const PackedByteArray = godot.builtin.PackedByteArray;
-const PackedColorArray = godot.builtin.PackedColorArray;
-const PackedFloat32Array = godot.builtin.PackedFloat32Array;
-const PackedFloat64Array = godot.builtin.PackedFloat64Array;
-const PackedInt32Array = godot.builtin.PackedInt32Array;
-const PackedInt64Array = godot.builtin.PackedInt64Array;
-const PackedStringArray = godot.builtin.PackedStringArray;
-const PackedVector2Array = godot.builtin.PackedVector2Array;
-const PackedVector3Array = godot.builtin.PackedVector3Array;
-const Plane = godot.builtin.Plane;
-const Projection = godot.builtin.Projection;
-const Quaternion = godot.builtin.Quaternion;
-const Rect2 = godot.builtin.Rect2;
-const Rect2i = godot.builtin.Rect2i;
-const RID = godot.builtin.RID;
-const Signal = godot.builtin.Signal;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
-const Transform2D = godot.builtin.Transform2D;
-const Transform3D = godot.builtin.Transform3D;
-const Vector2 = godot.builtin.Vector2;
-const Vector2i = godot.builtin.Vector2i;
-const Vector3 = godot.builtin.Vector3;
-const Vector3i = godot.builtin.Vector3i;
-const Vector4 = godot.builtin.Vector4;
-const Vector4i = godot.builtin.Vector4i;
+const c = @import("gdextension");
+const oopz = @import("oopz");
+const precision = @import("options").precision;
+
+const builtin = @import("../builtin.zig");
+const AABB = builtin.AABB;
+const Array = builtin.Array;
+const Basis = builtin.Basis;
+const Callable = builtin.Callable;
+const Color = builtin.Color;
+const Dictionary = builtin.Dictionary;
+const NodePath = builtin.NodePath;
+const PackedByteArray = builtin.PackedByteArray;
+const PackedColorArray = builtin.PackedColorArray;
+const PackedFloat32Array = builtin.PackedFloat32Array;
+const PackedFloat64Array = builtin.PackedFloat64Array;
+const PackedInt32Array = builtin.PackedInt32Array;
+const PackedInt64Array = builtin.PackedInt64Array;
+const PackedStringArray = builtin.PackedStringArray;
+const PackedVector2Array = builtin.PackedVector2Array;
+const PackedVector3Array = builtin.PackedVector3Array;
+const Plane = builtin.Plane;
+const Projection = builtin.Projection;
+const Quaternion = builtin.Quaternion;
+const Rect2 = builtin.Rect2;
+const Rect2i = builtin.Rect2i;
+const RID = builtin.RID;
+const Signal = builtin.Signal;
+const String = builtin.String;
+const StringName = builtin.StringName;
+const Transform2D = builtin.Transform2D;
+const Transform3D = builtin.Transform3D;
+const Vector2 = builtin.Vector2;
+const Vector2i = builtin.Vector2i;
+const Vector3 = builtin.Vector3;
+const Vector3i = builtin.Vector3i;
+const Vector4 = builtin.Vector4;
+const Vector4i = builtin.Vector4i;
+const class = @import("../class.zig");
+const Object = class.Object;

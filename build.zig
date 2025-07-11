@@ -24,35 +24,43 @@ pub fn build(b: *Build) !void {
     };
 
     // Targets
+    const bbcodez = buildBbcodez(b);
     const case = buildCase(b);
     const mvzr = buildMvzr(b);
-    const zimdjson = buildZimdjson(b);
-    const bbcodez = buildBbcodez(b);
+    const oopz = buildOopz(b);
     const temp = buildTemp(b);
+    const zimdjson = buildZimdjson(b);
 
     const headers = installHeaders(b, opt);
 
     const gdextension = buildGdExtension(b, opt, headers.header);
-    const bindgen = buildBindgen(b, opt);
-    const bindings = buildBindings(b, opt, bindgen.exe, headers.root);
+    const gdzig_bindgen = buildBindgen(b, opt);
+    const generated = buildGenerated(b, opt, gdzig_bindgen.exe, headers.root);
 
-    const gdzig = buildLibrary(b, opt, bindings.path);
+    const gdzig_bindings = buildGdzigBindings(b, opt, generated.path);
+    const gdzig = buildGdzig(b, opt);
     const docs = buildDocs(b, gdzig.lib);
-    const tests = buildTests(b, gdzig.mod, bindgen.mod);
+    const tests = buildTests(b, gdzig.mod, gdzig_bindgen.mod);
 
     // Dependencies
-    bindgen.mod.addImport("gdextension", gdextension.mod);
-    bindgen.mod.addImport("case", case.mod);
-    bindgen.mod.addImport("mvzr", mvzr.mod);
-    bindgen.mod.addImport("zimdjson", zimdjson.mod);
-    bindgen.mod.addImport("bbcodez", bbcodez.mod);
-    bindgen.mod.addImport("temp", temp.mod);
+    gdzig_bindgen.mod.addImport("bbcodez", bbcodez.mod);
+    gdzig_bindgen.mod.addImport("case", case.mod);
+    gdzig_bindgen.mod.addImport("gdextension", gdextension.mod);
+    gdzig_bindgen.mod.addImport("mvzr", mvzr.mod);
+    gdzig_bindgen.mod.addImport("temp", temp.mod);
+    gdzig_bindgen.mod.addImport("zimdjson", zimdjson.mod);
 
+    gdzig_bindings.mod.addImport("gdextension", gdextension.mod);
+    gdzig_bindings.mod.addImport("oopz", oopz.mod);
+
+    gdzig.mod.addImport("gdzig_bindings", gdzig_bindings.mod);
     gdzig.mod.addImport("gdextension", gdextension.mod);
+    gdzig.mod.addImport("oopz", oopz.mod);
 
     // Steps
-    b.step("bindgen", "Build the bindgen executable").dependOn(&bindgen.install.step);
-    b.step("bindings", "Generate bindings").dependOn(&bindings.install.step);
+    b.step("bindgen", "Build the gdzig_bindgen executable").dependOn(&gdzig_bindgen.install.step);
+    b.step("bindings", "Build the gdzig_bindings library").dependOn(&gdzig_bindings.lib.step);
+    b.step("generated", "Run bindgen to generate builtin/class code").dependOn(&generated.install.step);
     b.step("docs", "Install docs into zig-out/docs").dependOn(docs.step);
 
     const test_ = b.step("test", "Run tests");
@@ -60,7 +68,8 @@ pub fn build(b: *Build) !void {
     test_.dependOn(&tests.module.step);
 
     // Install
-    b.installArtifact(bindgen.exe);
+    b.installArtifact(gdzig_bindgen.exe);
+    b.installArtifact(gdzig_bindings.lib);
     b.installArtifact(gdzig.lib);
 }
 
@@ -85,6 +94,16 @@ const GdzDependency = struct {
     mod: *Module,
 };
 
+// Dependency: bbcodez
+fn buildBbcodez(
+    b: *Build,
+) GdzDependency {
+    const dep = b.dependency("bbcodez", .{});
+    const mod = dep.module("bbcodez");
+
+    return .{ .dep = dep, .mod = mod };
+}
+
 // Dependency: case
 fn buildCase(
     b: *Build,
@@ -105,22 +124,12 @@ fn buildMvzr(
     return .{ .dep = dep, .mod = mod };
 }
 
-// Dependency: zimdjson
-fn buildZimdjson(
+// Dependency: oopz
+fn buildOopz(
     b: *Build,
 ) GdzDependency {
-    const dep = b.dependency("zimdjson", .{});
-    const mod = dep.module("zimdjson");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: bbcodez
-fn buildBbcodez(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("bbcodez", .{});
-    const mod = dep.module("bbcodez");
+    const dep = b.dependency("oopz", .{});
+    const mod = dep.module("oopz");
 
     return .{ .dep = dep, .mod = mod };
 }
@@ -131,6 +140,16 @@ fn buildTemp(
 ) GdzDependency {
     const dep = b.dependency("temp", .{});
     const mod = dep.module("temp");
+
+    return .{ .dep = dep, .mod = mod };
+}
+
+// Dependency: zimdjson
+fn buildZimdjson(
+    b: *Build,
+) GdzDependency {
+    const dep = b.dependency("zimdjson", .{});
+    const mod = dep.module("zimdjson");
 
     return .{ .dep = dep, .mod = mod };
 }
@@ -211,10 +230,10 @@ fn buildBindgen(
     mod: *Module,
     exe: *Step.Compile,
 } {
-    const mod = b.addModule("bindgen", .{
+    const mod = b.addModule("gdzig_bindgen", .{
         .target = opt.target,
         .optimize = opt.optimize,
-        .root_source_file = b.path("bindgen/main.zig"),
+        .root_source_file = b.path("gdzig_bindgen/main.zig"),
         .link_libc = true,
     });
 
@@ -224,7 +243,7 @@ fn buildBindgen(
     mod.addOptions("build_options", options);
 
     const exe = b.addExecutable(.{
-        .name = "bindgen",
+        .name = "gdzig-bindgen",
         .root_module = mod,
     });
 
@@ -234,7 +253,7 @@ fn buildBindgen(
 }
 
 // Bindgen
-fn buildBindings(
+fn buildGenerated(
     b: *Build,
     opt: Options,
     bindgen: *Step.Compile,
@@ -260,8 +279,8 @@ fn buildBindings(
     return .{ .install = install, .run = run, .path = path };
 }
 
-// Godot
-fn buildLibrary(
+// gdzig_bindings
+fn buildGdzigBindings(
     b: *Build,
     opt: Options,
     bindings: Build.LazyPath,
@@ -272,27 +291,57 @@ fn buildLibrary(
     const tmp = b.addWriteFiles();
     // Copy the bindings first
     _ = tmp.addCopyDirectory(bindings, "./", .{});
-    // Copy the source code separate -- allows manual overrides
-    const src = tmp.addCopyDirectory(b.path("src"), "./", .{});
+    // Copy the source code separately; allows manual overrides
+    const src = tmp.addCopyDirectory(b.path("gdzig_bindings"), "./", .{
+        .exclude_extensions = &.{},
+    });
 
-    const root = b.addModule("gdzig", .{
-        .root_source_file = src.path(b, "gdzig.zig"),
+    const mod = b.addModule("gdzig_bindings", .{
+        .root_source_file = src.path(b, "gdzig_bindings.zig"),
         .target = opt.target,
         .optimize = opt.optimize,
+    });
+
+    const lib = b.addLibrary(.{
+        .name = "gdzig",
+        .root_module = mod,
+        .linkage = .dynamic,
     });
 
     const options = b.addOptions();
     options.addOption([]const u8, "architecture", opt.architecture);
     options.addOption([]const u8, "precision", opt.precision);
-    root.addOptions("build_options", options);
+    mod.addOptions("options", options);
+
+    return .{ .lib = lib, .mod = mod };
+}
+
+// gdzig
+fn buildGdzig(
+    b: *Build,
+    opt: Options,
+) struct {
+    lib: *Step.Compile,
+    mod: *Module,
+} {
+    const mod = b.addModule("gdzig", .{
+        .root_source_file = b.path("gdzig/gdzig.zig"),
+        .target = opt.target,
+        .optimize = opt.optimize,
+    });
 
     const lib = b.addLibrary(.{
         .name = "gdzig",
-        .root_module = root,
-        .linkage = .dynamic,
+        .root_module = mod,
+        .linkage = .static,
     });
 
-    return .{ .lib = lib, .mod = root };
+    const options = b.addOptions();
+    options.addOption([]const u8, "architecture", opt.architecture);
+    options.addOption([]const u8, "precision", opt.precision);
+    mod.addOptions("build_options", options);
+
+    return .{ .lib = lib, .mod = mod };
 }
 
 // Tests

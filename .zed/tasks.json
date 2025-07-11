@@ -1,13 +1,19 @@
 [
   {
-    "label": "Build Bindings",
-    "command": "zig build bindings",
+    "label": "Generate Code",
+    "command": "zig build generated",
     "reveal_target": "dock",
     "use_new_terminal": false
   },
   {
     "label": "Build Bindgen",
     "command": "zig build bindgen",
+    "reveal_target": "dock",
+    "use_new_terminal": false
+  },
+  {
+    "label": "Build Bindings",
+    "command": "zig build bindings",
     "reveal_target": "dock",
     "use_new_terminal": false
   },

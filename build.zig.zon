@@ -31,6 +31,10 @@
             .url = "git+https://github.com/abhinav/temp.zig#382a711f253d54a88f222650e6c03b62411373c6",
             .hash = "temp-0.3.0-Ogl1FSSBAAB2WXv3QbTYO3NYfVFoYTBkZsVK3MYvbxFE",
         },
+        .oopz = .{
+            .url = "git+https://github.com/gdzig/oopz#a02a3eb8d0914437ecf317d36fca426fee300e72",
+            .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
+        },
     },
     .minimum_zig_version = "0.14.1",
 

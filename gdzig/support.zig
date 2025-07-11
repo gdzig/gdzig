@@ -19,7 +19,7 @@ pub inline fn bindClassMethod(
 ) ClassMethod {
     const callback = struct {
         fn callback(string_name: godot.builtin.StringName) ClassMethod {
-            const class_name = godot.meta.getNamePtr(T);
+            const class_name = godot.meta.typeName(T);
             return godot.interface.classdbGetMethodBind(@ptrCast(class_name), @ptrCast(@constCast(&string_name)), hash).?;
         }
     }.callback;
@@ -63,26 +63,6 @@ pub inline fn bindFunction(
     }.callback;
 
     return bind(name, callback);
-}
-
-pub inline fn bindVariantFrom(comptime @"type": Variant.Tag) VariantFrom {
-    const callback = struct {
-        fn callback() VariantFrom {
-            return godot.interface.getVariantFromTypeConstructor(@intFromEnum(@"type")).?;
-        }
-    }.callback;
-
-    return bind(null, callback);
-}
-
-pub inline fn bindVariantTo(comptime @"type": Variant.Tag) VariantTo {
-    const callback = struct {
-        fn callback() VariantTo {
-            return godot.interface.getVariantToTypeConstructor(@intFromEnum(@"type")).?;
-        }
-    }.callback;
-
-    return bind(null, callback);
 }
 
 pub inline fn bindVariantOperator(comptime op: Variant.Operator, comptime lhs: Variant.Tag, comptime rhs: ?Variant.Tag) VariantOperatorEvaluator {
@@ -162,10 +142,10 @@ pub fn MethodBinderT(comptime MethodType: type) type {
 
         fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
             // TODO: I think this does not increment refcount on user-defined RefCounted types
-            if (comptime meta.isRefCountedPtr(T) and meta.isGodotClassPtr(T)) {
+            if (comptime object.isRefCountedPtr(T) and object.isOpaqueClassPtr(T)) {
                 const obj = godot.interface.refGetObject(p_arg);
                 return @ptrCast(obj.?);
-            } else if (comptime meta.isGodotClassPtr(T)) {
+            } else if (comptime object.isOpaqueClassPtr(T)) {
                 return @ptrCast(@constCast(p_arg.?));
             } else {
                 return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
@@ -214,3 +194,4 @@ const Object = godot.class.Object;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const c = godot.c;
+const object = @import("object.zig");

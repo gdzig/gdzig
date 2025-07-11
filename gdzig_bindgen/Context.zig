@@ -2,21 +2,6 @@ const Context = @This();
 
 const logger = std.log.scoped(.context);
 
-pub const Builtin = @import("Context/Builtin.zig");
-pub const Class = @import("Context/Class.zig");
-pub const Constant = @import("Context/Constant.zig");
-pub const Enum = @import("Context/Enum.zig");
-pub const Flag = @import("Context/Flag.zig");
-pub const Field = @import("Context/Field.zig");
-pub const Function = @import("Context/Function.zig");
-pub const Imports = @import("Context/Imports.zig");
-pub const Interface = @import("Context/Interface.zig");
-pub const Module = @import("Context/Module.zig");
-pub const Property = @import("Context/Property.zig");
-pub const Signal = @import("Context/Signal.zig");
-pub const Type = @import("Context/type.zig").Type;
-pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
-
 pub const Symbol = struct {
     path: []const u8,
     label: []const u8,
@@ -147,6 +132,8 @@ fn collectBuiltinImports(self: *Context, builtin: GodotApi.Builtin) !void {
         try imports.put(self.allocator(), self.correctType(operator.return_type, ""));
     }
 
+    try imports.put(self.allocator(), "StringName");
+
     try self.builtin_imports.put(self.allocator(), builtin.name, imports);
 
     if (self.builtins.getPtr(builtin.name)) |context_builtin| {
@@ -172,6 +159,8 @@ fn collectClassImports(self: *Context, class: *Class) !void {
             try self.typeImport(&class.imports, &parameter.type);
         }
     }
+
+    try class.imports.put(self.allocator(), "RefCounted");
 
     // Index imports from the parent class hierarchy
     if (class.getBasePtr(self)) |base| {
@@ -205,6 +194,8 @@ fn collectFunctionImports(self: *Context, function: GodotApi.UtilityFunction) !v
     for (function.arguments orelse &.{}) |argument| {
         try imports.put(self.allocator(), argument.type);
     }
+
+    try imports.put(self.allocator(), "StringName");
 
     // TODO: remove function_imports
     var module = self.modules.getPtr(function.category).?;
@@ -652,8 +643,22 @@ const StringHashMap = std.StringHashMapUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const case = @import("case");
-const case_utils = @import("case_utils.zig");
 
+const case_utils = @import("case_utils.zig");
+const Config = @import("Config.zig");
+pub const Builtin = @import("Context/Builtin.zig");
+pub const Class = @import("Context/Class.zig");
+pub const Constant = @import("Context/Constant.zig");
+pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
+pub const Enum = @import("Context/Enum.zig");
+pub const Field = @import("Context/Field.zig");
+pub const Flag = @import("Context/Flag.zig");
+pub const Function = @import("Context/Function.zig");
+pub const Imports = @import("Context/Imports.zig");
+pub const Interface = @import("Context/Interface.zig");
+pub const Module = @import("Context/Module.zig");
+pub const Property = @import("Context/Property.zig");
+pub const Signal = @import("Context/Signal.zig");
+pub const Type = @import("Context/type.zig").Type;
 const GodotApi = @import("GodotApi.zig");
 const util = @import("util.zig");
-const Config = @import("Config.zig");

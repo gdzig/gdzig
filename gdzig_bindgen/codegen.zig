@@ -102,31 +102,31 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
         try w.writeLine(
             \\pub fn fromLatin1(chars: []const u8) String {
             \\    var self: String = undefined;
-            \\    godot.interface.stringNewWithLatin1CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
+            \\    raw.stringNewWithLatin1CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\
             \\pub fn fromUtf8(chars: []const u8) String {
             \\    var self: String = undefined;
-            \\    godot.interface.stringNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
+            \\    raw.stringNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\
-            \\pub fn fromUtf16(chars: []const godot.char16_t) String {
+            \\pub fn fromUtf16(chars: []const c.char16_t) String {
             \\    var self: String = undefined;
-            \\    godot.interface.stringNewWithUtf16CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
+            \\    raw.stringNewWithUtf16CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\
-            \\pub fn fromUtf32(chars: []const godot.char32_t) String {
+            \\pub fn fromUtf32(chars: []const c.char32_t) String {
             \\    var self: String = undefined;
-            \\    godot.interface.stringNewWithUtf32CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
+            \\    raw.stringNewWithUtf32CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\
-            \\pub fn fromWide(chars: []const godot.wchar_t) String {
+            \\pub fn fromWide(chars: []const c.wchar_t) String {
             \\    var self: String = undefined;
-            \\    godot.interface.stringNewWithWideCharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
+            \\    raw.stringNewWithWideCharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\
@@ -136,19 +136,19 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
         try w.writeLine(
             \\pub fn fromComptimeLatin1(comptime chars: [:0]const u8) StringName {
             \\    var self: StringName = undefined;
-            \\    godot.interface.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 1);
+            \\    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 1);
             \\    return self;
             \\}
             \\
             \\pub fn fromLatin1(chars: [:0]const u8) StringName {
             \\    var self: StringName = undefined;
-            \\    godot.interface.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 0);
+            \\    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 0);
             \\    return self;
             \\}
             \\
             \\pub fn fromUtf8(chars: []const u8) StringName {
             \\    var self: StringName = undefined;
-            \\    godot.interface.stringNameNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
+            \\    raw.stringNameNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
             \\    return self;
             \\}
             \\
@@ -209,22 +209,33 @@ fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *c
         }
     } else {
         try w.printLine(
-            \\const constructor = godot.support.bindConstructor({s}, {d});
-            \\constructor(@ptrCast(&result), @ptrCast(&args));
+            \\if ({0s}_ptr == null) {{
+            \\    {0s}_ptr = raw.variantGetPtrConstructor(@intFromEnum(Variant.Tag.forType({2s})), {1d});
+            \\}}
+            \\{0s}_ptr.?(@ptrCast(&result), @ptrCast(&args));
         , .{
-            builtin_name,
+            constructor.name,
             constructor.index.?,
+            builtin_name,
         });
     }
     try writeFunctionFooter(w, constructor);
+    if (!constructor.can_init_directly) {
+        try w.printLine(
+            \\var {0s}_ptr: c.GDExtensionPtrConstructor = null;
+        , .{constructor.name});
+    }
 }
 
 fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
     try w.printLine(
         \\pub fn deinit(self: *{0s}) void {{
-        \\    const method = godot.support.bindDestructor({0s});
-        \\    method(@ptrCast(self));
+        \\    if (deinit_ptr == null) {{
+        \\        deinit_ptr = raw.variantGetPtrDestructor(@intFromEnum(Variant.Tag.forType({0s}))).?;
+        \\    }}
+        \\    deinit_ptr.?(@ptrCast(self));
         \\}}
+        \\var deinit_ptr: c.GDExtensionPtrDestructor = null;
         \\
     , .{
         builtin.name,
@@ -234,12 +245,15 @@ fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
 fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Context.Function) !void {
     try writeFunctionHeader(w, method);
     try w.printLine(
-        \\const method = godot.support.bindBuiltinMethod({s}, "{s}", {d});
-        \\method({s}, @ptrCast(&args), @ptrCast(&result), args.len);
+        \\if ({0s}_ptr == null) {{
+        \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
+        \\}}
+        \\{0s}_ptr.?({4s}, @ptrCast(&args), @ptrCast(&result), args.len);
     , .{
-        builtin_name,
+        method.name,
         method.name_api,
         method.hash.?,
+        builtin_name,
         switch (method.self) {
             .static => "null",
             .singleton => @panic("singleton builtins not supported"),
@@ -249,26 +263,35 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
         },
     });
     try writeFunctionFooter(w, method);
+    try w.printLine(
+        \\var {0s}_ptr: c.GDExtensionPtrBuiltInMethod = null;
+    , .{method.name});
 }
 
 fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const Context.Function) !void {
     try writeFunctionHeader(w, operator);
 
     // Lookup the method
-    try w.print("const op = godot.support.bindVariantOperator(.{s}, .forType({s}), ", .{ operator.operator_name.?, builtin_name });
+    try w.print(
+        \\if ({0s}_ptr == null) {{
+        \\    {0s}_ptr = raw.variantGetPtrOperatorEvaluator(@intFromEnum(Variant.Operator.{1s}), @intFromEnum(Variant.Tag.forType({2s})),
+    , .{ operator.name, operator.operator_name.?, builtin_name });
     w.indent += 1;
     if (operator.parameters.getPtr("rhs")) |rhs| {
-        try w.writeAll(".forType(");
+        try w.writeAll(" @intFromEnum(Variant.Tag.forType(");
         try writeTypeAtField(w, &rhs.type);
-        try w.writeAll(")");
+        try w.writeAll("))");
     } else {
-        try w.writeAll("null");
+        try w.writeAll(" null");
     }
     w.indent -= 1;
-    try w.writeLine(");");
+    try w.writeLine(
+        \\);
+        \\}
+    );
 
     // Call the method
-    try w.writeAll("op(");
+    try w.print("{0s}_ptr.?(", .{operator.name});
     w.indent += 1;
     try w.writeAll("@ptrCast(self), ");
     if (operator.parameters.getPtr("rhs")) |_| {
@@ -281,6 +304,9 @@ fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const C
     try w.writeLine(");");
 
     try writeFunctionFooter(w, operator);
+    try w.printLine(
+        \\var {0s}_ptr: c.GDExtensionPtrOperatorEvaluator = null;
+    , .{operator.name});
 }
 
 fn writeClasses(ctx: *const Context) !void {
@@ -334,6 +360,11 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
             \\pub const Base = {0s};
             \\
         , .{base});
+    } else {
+        try w.writeLine(
+            \\pub const Base = void;
+            \\
+        );
     }
 
     // Singleton storage
@@ -362,7 +393,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
             try w.printLine(
                 \\/// Allocates an empty {0s}.
                 \\pub fn init() *{0s} {{
-                \\    return @ptrCast(godot.interface.classdbConstructObject(@ptrCast(godot.meta.getNamePtr({0s}))).?);
+                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
                 \\}}
                 \\
             , .{class.name});
@@ -370,7 +401,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
             try w.printLine(
                 \\/// Allocates an empty {0s}.
                 \\pub fn init() {0s} {{
-                \\    return @ptrCast(godot.interface.classdbConstructObject(@ptrCast(godot.meta.getNamePtr({0s}))).?);
+                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
                 \\}}
                 \\
             , .{class.name});
@@ -397,7 +428,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\///
         \\/// This is a zero cost, compile time operation.
         \\pub fn upcast(value: anytype) *{0s} {{
-        \\    return godot.meta.upcast(*{0s}, value);
+        \\    return oopz.upcast(*{0s}, value);
         \\}}
         \\
         \\/// Downcasts a parent type to a `{0s}`.
@@ -406,11 +437,29 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
         \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
         \\/// and may return `null`.
         \\pub fn downcast(value: anytype) ?*{0s} {{
-        \\    return godot.meta.downcast(*{0s}, value);
+        \\    const T = comptime sw: switch (@typeInfo(@TypeOf(value))) {{
+        \\        .optional => |info| continue :sw @typeInfo(info.child),
+        \\        .pointer => |info| break :sw info.child,
+        \\        else => @compileError("downcasted value should be a pointer, found '" ++ @typeName(@TypeOf(value)) ++ "'"),
+        \\    }};
+        \\    comptime oopz.assertIsA(T, {0s});
+        \\    const tag = raw.classdbGetClassTag(@ptrCast(&StringName.fromComptimeLatin1("{1s}")));
+        \\    const result = raw.objectCastTo(@ptrCast(value), tag);
+        \\    if (result) |ptr| {{
+        \\        if (oopz.isOpaqueClass(T)) {{
+        \\            return @ptrCast(@alignCast(ptr));
+        \\        }} else {{
+        \\            const object: *anyopaque = raw.objectGetInstanceBinding(ptr, raw.library, null) orelse return null;
+        \\            return @ptrCast(@alignCast(object));
+        \\        }}
+        \\    }} else {{
+        \\        return null;
+        \\    }}
         \\}}
         \\
     , .{
         class.name,
+        class.name_api,
     });
 
     // Virtual dispatch
@@ -434,6 +483,10 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     try w.writeLine("};");
 
     // Imports
+    try w.writeLine(
+        \\const oopz = @import("oopz");
+        \\const typeName = @import("../gdzig_bindings.zig").typeName;
+    );
     try writeImports(w, "..", &class.imports, ctx);
 }
 
@@ -443,23 +496,28 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     if (class.is_singleton) {
         try w.printLine(
             \\if (instance == null) {{
-            \\    instance = @ptrCast(godot.interface.globalGetSingleton(@ptrCast(godot.meta.getNamePtr({0s}))).?);
+            \\    instance = @ptrCast(raw.globalGetSingleton(@ptrCast(typeName({0s}))).?);
             \\}}
         , .{class.name});
     }
 
     if (function.is_vararg) {
-        try w.writeLine("var err: godot.c.GDExtensionCallError = undefined;");
+        try w.writeLine("var err: c.GDExtensionCallError = undefined;");
     }
 
-    try w.printLine("const method = godot.support.bindClassMethod({s}, \"{s}\", {d});", .{
-        function.base.?,
+    try w.printLine(
+        \\if ({0s}_ptr == null) {{
+        \\    {0s}_ptr = raw.classdbGetMethodBind(@ptrCast(typeName({2s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {3d});
+        \\}}
+    , .{
+        function.name,
         function.name_api,
+        function.base.?,
         function.hash.?,
     });
 
     if (function.is_vararg) {
-        try w.writeAll("godot.interface.objectMethodBindCall(method, ");
+        try w.print("raw.objectMethodBindCall({0s}_ptr, ", .{function.name});
         try writeClassFunctionObjectPtr(w, class, function, ctx);
         try w.printLine(", @ptrCast(@alignCast(&args[0])), args.len, {s}, &err);", .{
             if (function.return_type != .void)
@@ -468,7 +526,7 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
                 "null",
         });
     } else {
-        try w.writeAll("godot.interface.objectMethodBindPtrcall(method, ");
+        try w.print("raw.objectMethodBindPtrcall({0s}_ptr, ", .{function.name});
         try writeClassFunctionObjectPtr(w, class, function, ctx);
         try w.printLine(", @ptrCast(&args), {s});", .{
             if (function.return_type != .void)
@@ -479,6 +537,9 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     }
 
     try writeFunctionFooter(w, function);
+    try w.printLine(
+        \\var {0s}_ptr: c.GDExtensionMethodBindPtr = null;
+    , .{function.name});
 }
 
 fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
@@ -499,7 +560,7 @@ fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function
 
 fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
     try w.writeLine(
-        \\pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: godot.c.GDExtensionConstStringNamePtr) godot.c.GDExtensionClassCallVirtual {
+        \\pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) c.GDExtensionClassCallVirtual {
     );
     w.indent += 1;
 
@@ -510,13 +571,33 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
             if (function.mode == .final) continue;
             try w.printLine(
                 \\if (@hasDecl(T, "{0s}") and @import("std").meta.eql(@as(*StringName, @ptrCast(@constCast(p_name))).*, StringName.fromComptimeLatin1("{1s}"))) {{
-                \\    const MethodBinder = struct {{
-                \\        pub fn {0s}(p_instance: godot.c.GDExtensionClassInstancePtr, p_args: [*c]const godot.c.GDExtensionConstTypePtr, p_ret: godot.c.GDExtensionTypePtr) callconv(.C) void {{
-                \\            const MethodBinder = godot.support.MethodBinderT(@TypeOf(T.{0s}));
-                \\            MethodBinder.bindPtrcall(@ptrCast(@constCast(&T.{0s})), p_instance, p_args, p_ret);
+                \\    return &struct {{
+                \\        fn call(p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.C) void {{
+                \\            const Fn = @TypeOf(T.{0s});
+                \\            const info = @typeInfo(Fn).@"fn";
+                \\            const method: *Fn = @ptrCast(@constCast(&T.{0s}));
+                \\            var args: std.meta.ArgsTuple(Fn) = undefined;
+                \\            if (info.params.len > 0) {{
+                \\                args[0] = @ptrCast(@alignCast(p_instance));
+                \\                inline for (1..info.params.len, 0..) |i, j| {{
+                \\                    const Arg = @TypeOf(args[i]);
+                \\                    if (comptime oopz.isA(RefCounted, Arg)) {{
+                \\                        const obj = raw.refGetObject(p_args[j]);
+                \\                        args[i] = @ptrCast(obj.?);
+                \\                    }} else if (comptime oopz.isOpaqueClassPtr(Arg)) {{
+                \\                        args[i] = @ptrCast(@constCast(p_args[j].?));
+                \\                    }} else {{
+                \\                        args[i] = @as(*Arg, @ptrCast(@constCast(@alignCast(p_args[j])))).*;
+                \\                    }}
+                \\                }}
+                \\            }}
+                \\            if (info.return_type == void or info.return_type == null) {{
+                \\                @call(.auto, method, args);
+                \\            }} else {{
+                \\                @as(*info.return_type.?, @ptrCast(@alignCast(p_return))).* = @call(.auto, method, args);
+                \\            }}
                 \\        }}
-                \\    }};
-                \\    return MethodBinder.{0s};
+                \\    }}.call;
                 \\}}
             , .{ function.name, function.name_api });
         }
@@ -753,19 +834,9 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
         // try generateFunctionParameterTypeCheck(w, param);
     }
 
-    // Variadic argument type checking
-    if (function.is_vararg) {
-        // try w.writeLine(
-        //     \\inline for (0..@"...".len) |i| {
-        //     \\    godot.debug.assertVariantLike(@field(@"...", i));
-        //     \\}
-        // );
-    }
-
     // Fixed argument slice variable
     if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
-        // todo: parameter comptime coercisions
-        try w.printLine("var args: [{d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
+        try w.printLine("var args: [{d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
             try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
         }
@@ -776,7 +847,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
 
     // Variadic argument slice variable
     if (function.is_vararg and function.operator_name == null) {
-        try w.printLine("var args: [@\"...\".len + {d}]godot.c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
+        try w.printLine("var args: [@\"...\".len + {d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
             try w.printLine("args[{d}] = &Variant.init(&{s});", .{ i, param.name });
         }
@@ -849,7 +920,11 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
 fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, ctx: *const Context) !void {
     try w.printLine(
         \\const std = @import("std");
-        \\const godot = @import("{0s}/gdzig.zig");
+        \\
+        \\const c = @import("gdextension");
+        \\
+        \\const raw = &@import("{0s}/gdzig_bindings.zig").raw;
+        \\
     , .{root});
 
     var iter = imports.iterator();
@@ -884,19 +959,19 @@ fn writeInterface(ctx: *Context) !void {
         \\
     );
     try w.writeLine(
-        \\library: Child(godot.c.GDExtensionClassLibraryPtr),
+        \\library: Child(c.GDExtensionClassLibraryPtr),
         \\
     );
 
     for (ctx.interface.functions.items) |function| {
         try writeDocBlock(&w, function.docs);
         try w.printLine(
-            \\{s}: Child(godot.c.{s}),
+            \\{s}: Child(c.{s}),
             \\
         , .{ function.name, function.ptr_type });
     }
 
-    try w.writeLine("pub fn init(getProcAddress: Child(godot.c.GDExtensionInterfaceGetProcAddress), library: Child(godot.c.GDExtensionClassLibraryPtr)) Interface {");
+    try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) Interface {");
     w.indent += 1;
 
     try w.writeLine(
@@ -917,26 +992,27 @@ fn writeInterface(ctx: *Context) !void {
         \\
     );
 
-    for (ctx.builtins.values()) |builtin| {
-        try w.printLine(
-            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(builtin.{0s})), @ptrCast("{1s}"), 1);
-        , .{ builtin.name, builtin.name_api });
-    }
-    for (ctx.classes.values()) |class| {
-        try w.printLine(
-            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(class.{0s})), @ptrCast("{1s}"), 1);
-        , .{ class.name, class.name_api });
-    }
-    for (ctx.enums.values()) |@"enum"| {
-        try w.printLine(
-            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(global.{0s})), @ptrCast("{1s}"), 1);
-        , .{ @"enum".name, @"enum".name_api });
-    }
-    for (ctx.flags.values()) |flag| {
-        try w.printLine(
-            \\self.stringNameNewWithLatin1Chars(@ptrCast(getNamePtr(global.{0s})), @ptrCast("{1s}"), 1);
-        , .{ flag.name, flag.name_api });
-    }
+    // TODO: static string map
+    // for (ctx.builtins.values()) |builtin| {
+    //     try w.printLine(
+    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(builtin.{0s})), @ptrCast("{1s}"), 1);
+    //     , .{ builtin.name, builtin.name_api });
+    // }
+    // for (ctx.classes.values()) |class| {
+    //     try w.printLine(
+    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(class.{0s})), @ptrCast("{1s}"), 1);
+    //     , .{ class.name, class.name_api });
+    // }
+    // for (ctx.enums.values()) |@"enum"| {
+    //     try w.printLine(
+    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(global.{0s})), @ptrCast("{1s}"), 1);
+    //     , .{ @"enum".name, @"enum".name_api });
+    // }
+    // for (ctx.flags.values()) |flag| {
+    //     try w.printLine(
+    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(global.{0s})), @ptrCast("{1s}"), 1);
+    //     , .{ flag.name, flag.name_api });
+    // }
 
     w.indent -= 1;
     try w.writeLine(
@@ -949,12 +1025,13 @@ fn writeInterface(ctx: *Context) !void {
         \\const std = @import("std");
         \\const Child = std.meta.Child;
         \\
-        \\const godot = @import("gdzig.zig");
-        \\const builtin = godot.builtin;
-        \\const class = godot.class;
-        \\const global = godot.global;
+        \\const c = @import("gdextension");
+        \\
+        \\const builtin = @import("builtin.zig");
+        \\const class = @import("class.zig");
+        \\const global = @import("global.zig");
+        \\const typeName = @import("gdzig_bindings.zig").typeName;
     );
-    try w.writeLine("const getNamePtr = godot.meta.getNamePtr;");
 
     try buf.flush();
     try file.sync();
@@ -988,15 +1065,21 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
     try writeFunctionHeader(w, function);
 
     try w.printLine(
-        \\const function = godot.support.bindFunction("{s}", {d});
-        \\function({s}, @ptrCast(&args), args.len);
+        \\if ({0s}_ptr == null) {{
+        \\    {0s}_ptr = raw.variantGetPtrUtilityFunction(@ptrCast(StringName.fromComptimeLatin1("{1s}")), {2d});
+        \\}}
+        \\{0s}_ptr.?({3s}, @ptrCast(&args), args.len);
     , .{
+        function.name,
         function.name_api,
         function.hash.?,
         if (function.return_type != .void) "@ptrCast(&result)" else "null",
     });
-
     try writeFunctionFooter(w, function);
+    try w.printLine(
+        \\var {0s}_ptr: c.GDExtensionPtrUtilityFunction = null;
+        \\
+    , .{function.name});
 }
 
 fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
@@ -1072,34 +1155,6 @@ fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !
         .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
         inline else => |s| try w.writeAll(s),
-    }
-}
-
-/// Writes out code necessary to both assert that arguments are the right type, and coerce them
-/// into the form necessary to pass to the Godot function.
-fn writeTypeCheck(w: *Writer, parameter: *const Context.Function.Parameter) !void {
-    switch (parameter.type) {
-        .class => |class| {
-            try w.printLine(
-                \\godot.debug.assertIs(godot.class.{0s}, {1s});
-            , .{ class, parameter.name });
-        },
-        .node_path => {
-            try w.printLine(
-                \\godot.debug.assertPathLike({0s});
-            , .{parameter.name});
-        },
-        .string, .string_name => {
-            try w.printLine(
-                \\godot.debug.assertStringLike({0s});
-            , .{parameter.name});
-        },
-        .variant => {
-            try w.printLine(
-                \\godot.debug.assertVariantLike({0s});
-            , .{parameter.name});
-        },
-        else => return,
     }
 }
 

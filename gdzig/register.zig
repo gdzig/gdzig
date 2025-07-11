@@ -4,12 +4,10 @@ const ClassUserData = struct {
 
 var registered_classes: std.StringHashMap(void) = undefined;
 pub fn registerClass(comptime T: type) void {
-    const class_name = comptime meta.getTypeShortName(T);
+    const class_name = comptime meta.typeShortName(T);
 
     if (registered_classes.contains(class_name)) return;
     registered_classes.put(class_name, {}) catch unreachable;
-
-    meta.getNamePtr(T).* = StringName.fromComptimeLatin1(class_name);
 
     const PerClassData = struct {
         pub var class_info = init_blk: {
@@ -160,7 +158,7 @@ pub fn registerClass(comptime T: type) void {
         pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.C) c.GDExtensionObjectPtr {
             _ = p_userdata;
             const ret = object.create(T) catch unreachable;
-            return @ptrCast(meta.asObject(ret));
+            return @ptrCast(object.asObject(ret));
         }
 
         pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.C) c.GDExtensionClassInstancePtr {
@@ -182,7 +180,7 @@ pub fn registerClass(comptime T: type) void {
         }
 
         pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.C) c.GDExtensionClassCallVirtual {
-            const virtual_bind = @field(meta.BaseOf(T), "getVirtualDispatch");
+            const virtual_bind = @field(object.BaseOf(T), "getVirtualDispatch");
             return virtual_bind(T, p_class_userdata, p_name);
         }
 
@@ -198,7 +196,12 @@ pub fn registerClass(comptime T: type) void {
     else
         @compileError("Godot 4.2 or higher is required.");
 
-    classdbRegisterExtensionClass(@ptrCast(godot.interface.library), @ptrCast(meta.getNamePtr(T)), @ptrCast(meta.getNamePtr(meta.BaseOf(T))), @ptrCast(&PerClassData.class_info));
+    classdbRegisterExtensionClass(
+        @ptrCast(godot.interface.library),
+        @ptrCast(bindings.typeName(T)),
+        @ptrCast(bindings.typeName(object.BaseOf(T))),
+        @ptrCast(&PerClassData.class_info),
+    );
 
     if (@hasDecl(T, "_bindMethods")) {
         T._bindMethods();
@@ -208,7 +211,7 @@ pub fn registerClass(comptime T: type) void {
 var registered_methods: std.StringHashMap(void) = undefined;
 pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     //prevent duplicate registration
-    const fullname = std.mem.concat(heap.general_allocator, u8, &[_][]const u8{ meta.getTypeShortName(T), "::", name }) catch unreachable;
+    const fullname = std.mem.concat(heap.general_allocator, u8, &[_][]const u8{ meta.typeShortName(T), "::", name }) catch unreachable;
     if (registered_methods.contains(fullname)) {
         heap.general_allocator.free(fullname);
         return;
@@ -233,7 +236,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
         MethodBinder.arg_properties[i] = c.GDExtensionPropertyInfo{
             .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ArgsTuple[i].type)),
             .name = @ptrCast(@constCast(&StringName.init())),
-            .class_name = meta.getNamePtr(MethodBinder.ArgsTuple[i].type),
+            .class_name = meta.typeName(MethodBinder.ArgsTuple[i].type),
             .hint = @intFromEnum(PropertyHint.property_hint_none),
             .hint_string = @ptrCast(@constCast(&String.init())),
             .usage = @bitCast(PropertyUsageFlags.property_usage_none),
@@ -258,13 +261,13 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
         .default_arguments = null,
     };
 
-    godot.interface.classdbRegisterExtensionClassMethod(godot.interface.library, meta.getNamePtr(T), &MethodBinder.method_info);
+    godot.interface.classdbRegisterExtensionClassMethod(godot.interface.library, meta.typeName(T), &MethodBinder.method_info);
 }
 
 var registered_signals: std.StringHashMap(void) = undefined;
 pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, arguments: []const object.PropertyInfo) void {
     //prevent duplicate registration
-    const fullname = std.mem.concat(heap.general_allocator, u8, &[_][]const u8{ meta.getTypeShortName(T), "::", signal_name }) catch unreachable;
+    const fullname = std.mem.concat(heap.general_allocator, u8, &[_][]const u8{ meta.typeShortName(T), "::", signal_name }) catch unreachable;
     if (registered_signals.contains(fullname)) {
         heap.general_allocator.free(fullname);
         return;
@@ -286,9 +289,9 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 
     if (arguments.len > 0) {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.getNamePtr(T), &StringName.fromLatin1(signal_name), &propertyies[0], @intCast(arguments.len));
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name), &propertyies[0], @intCast(arguments.len));
     } else {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.getNamePtr(T), &StringName.fromLatin1(signal_name), null, 0);
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name), null, 0);
     }
 }
 
@@ -329,15 +332,17 @@ pub fn deinit() void {
 
 const std = @import("std");
 
+const bindings = @import("gdzig_bindings");
+const String = bindings.builtin.String;
+const StringName = bindings.builtin.StringName;
+const Variant = bindings.builtin.Variant;
+const PropertyUsageFlags = bindings.global.PropertyUsageFlags;
+const PropertyHint = bindings.global.PropertyHint;
+const Interface = bindings.Interface;
+
 const godot = @import("gdzig.zig");
 const c = godot.c;
-const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const PropertyHint = godot.global.PropertyHint;
 const heap = godot.heap;
-const Interface = godot.Interface;
 const meta = godot.meta;
 const object = godot.object;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
 const support = godot.support;
-const Variant = godot.builtin.Variant;

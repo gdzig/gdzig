@@ -17,16 +17,13 @@
 //!
 //! We also provide a framework around the generated code that helps you write your extension:
 //!
-//! - `debug` - Debug assertions and validation
 //! - `heap` - Work with Godot's allocator
 //! - `meta` - Type introspection and class hierarchy
-//! - `object` - Object creation, destruction, and lifecycle management
+//! - `object` - Object lifecycle and class inheritance
 //! - `register` - Class, method, plugin and signal registration
 //! - `string` - String handling utilities and conversions
 //! - `support` - Method binding and constructor utilities
 //!
-
-pub var interface: Interface = undefined;
 
 pub const InitializationLevel = enum(c_int) {
     core = 0,
@@ -67,7 +64,8 @@ pub fn entrypointWithUserdata(
             p_library: c.GDExtensionClassLibraryPtr,
             r_initialization: [*c]c.GDExtensionInitialization,
         ) callconv(.c) c.GDExtensionBool {
-            interface = .init(p_get_proc_address.?, p_library.?);
+            bindings.raw = .init(p_get_proc_address.?, p_library.?);
+            interface = &bindings.raw;
             r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
             r_initialization.*.initialize = @ptrCast(&init);
             r_initialization.*.deinitialize = @ptrCast(&deinit);
@@ -110,30 +108,28 @@ test {
     std.testing.refAllDecls(@This());
 }
 
+pub var interface: *Interface = &bindings.raw;
+
 const std = @import("std");
 
-// Bindgen modules
-pub const builtin = @import("builtin.zig");
-pub const class = @import("class.zig");
-pub const general = @import("general.zig");
-pub const global = @import("global.zig");
-pub const Interface = @import("Interface.zig");
-pub const math = @import("math.zig");
-pub const random = @import("random.zig");
-
-// Local modules
+const bindings = @import("gdzig_bindings");
+pub const builtin = bindings.builtin;
+pub const class = bindings.class;
+pub const general = bindings.general;
+pub const global = bindings.global;
+pub const Interface = bindings.Interface;
+pub const math = bindings.math;
+pub const random = bindings.random;
 pub const c = @import("gdextension");
-pub const debug = @import("debug.zig");
+
 pub const heap = @import("heap.zig");
 pub const meta = @import("meta.zig");
 pub const object = @import("object.zig");
-pub const register = @import("register.zig");
-pub const string = @import("string.zig");
-pub const support = @import("support.zig");
-
-// Re-exports
 pub const connect = object.connect;
+pub const register = @import("register.zig");
 pub const registerClass = register.registerClass;
 pub const registerMethod = register.registerMethod;
 pub const registerPlugin = register.registerPlugin;
 pub const registerSignal = register.registerSignal;
+pub const string = @import("string.zig");
+pub const support = @import("support.zig");
