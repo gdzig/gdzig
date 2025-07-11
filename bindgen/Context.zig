@@ -568,7 +568,7 @@ fn symbolTableClasses(self: *Context, classes: anytype, module: []const u8) !voi
 
         for (class.enums orelse &.{}) |@"enum"| {
             const enum_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, @"enum".name });
-            const enum_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class_path, enum_name });
+            const enum_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class_path, @"enum".name });
             try self.symbol_lookup.putNoClobber(self.allocator(), enum_name, .{
                 .label = enum_name,
                 .path = enum_path,
