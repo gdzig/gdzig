@@ -2845,6 +2845,271 @@ pub const InterfaceFunctionPtr = fn () callconv(.c) void;
 pub const InterfaceGetProcAddress = fn (p_function_name: [*c]const u8) callconv(.c) ?*const InterfaceFunctionPtr;
 pub const InitializationFunction = fn (p_get_proc_address: ?*const InterfaceGetProcAddress, p_library: c.GDExtensionClassLibraryPtr, r_initialization: [*c]c.GDExtensionInitialization) callconv(.c) c.GDExtensionBool;
 
+// Return value callbacks
+
+fn wrapVariantFromTypeConstructorFunc(comptime original: Child(c.GDExtensionVariantFromTypeConstructorFunc)) *const VariantFromTypeConstructorFunc {
+    _ = original; // autofix
+}
+fn wrapTypeFromVariantConstructorFunc(comptime original: Child(c.GDExtensionTypeFromVariantConstructorFunc)) *const TypeFromVariantConstructorFunc {
+    _ = original; // autofix
+}
+fn wrapVariantGetInternalPtrFunc(comptime original: Child(c.GDExtensionVariantGetInternalPtrFunc)) *const VariantGetInternalPtrFunc {
+    _ = original; // autofix
+}
+fn wrapPtrOperatorEvaluator(comptime original: Child(c.GDExtensionPtrOperatorEvaluator)) *const PtrOperatorEvaluator {
+    _ = original; // autofix
+}
+fn wrapPtrBuiltInMethod(comptime original: Child(c.GDExtensionPtrBuiltInMethod)) *const PtrBuiltInMethod {
+    _ = original; // autofix
+}
+fn wrapPtrConstructor(comptime original: Child(c.GDExtensionPtrConstructor)) *const PtrConstructor {
+    _ = original; // autofix
+}
+fn wrapPtrDestructor(comptime original: Child(c.GDExtensionPtrDestructor)) *const PtrDestructor {
+    _ = original; // autofix
+}
+fn wrapPtrSetter(comptime original: Child(c.GDExtensionPtrSetter)) *const PtrSetter {
+    _ = original; // autofix
+}
+fn wrapPtrGetter(comptime original: Child(c.GDExtensionPtrGetter)) *const PtrGetter {
+    _ = original; // autofix
+}
+fn wrapPtrIndexedSetter(comptime original: Child(c.GDExtensionPtrIndexedSetter)) *const PtrIndexedSetter {
+    _ = original; // autofix
+}
+fn wrapPtrIndexedGetter(comptime original: Child(c.GDExtensionPtrIndexedGetter)) *const PtrIndexedGetter {
+    _ = original; // autofix
+}
+fn wrapPtrKeyedSetter(comptime original: Child(c.GDExtensionPtrKeyedSetter)) *const PtrKeyedSetter {
+    _ = original; // autofix
+}
+fn wrapPtrKeyedGetter(comptime original: Child(c.GDExtensionPtrKeyedGetter)) *const PtrKeyedGetter {
+    _ = original; // autofix
+}
+fn wrapPtrKeyedChecker(comptime original: Child(c.GDExtensionPtrKeyedChecker)) *const PtrKeyedChecker {
+    _ = original; // autofix
+}
+fn wrapPtrUtilityFunction(comptime original: Child(c.GDExtensionPtrUtilityFunction)) *const PtrUtilityFunction {
+    _ = original; // autofix
+}
+fn wrapClassConstructor(comptime original: Child(c.GDExtensionClassConstructor)) *const ClassConstructor {
+    _ = original; // autofix
+}
+
+// Parameter value callbacks
+
+fn wrapInstanceBindingCreateCallback(comptime original: Child(c.GDExtensionInstanceBindingCreateCallback)) *const InstanceBindingCreateCallback {
+    return comptime define(struct {
+        fn call(original: Child(c.GDExtensionInstanceBindingCreateCallback)) void {
+            // todo: implement
+        }
+    }.call, .{original});
+}
+fn wrapInstanceBindingFreeCallback(comptime original: Child(c.GDExtensionInstanceBindingFreeCallback)) *const InstanceBindingFreeCallback {
+    _ = original; // autofix
+}
+fn wrapInstanceBindingReferenceCallback(comptime original: Child(c.GDExtensionInstanceBindingReferenceCallback)) *const InstanceBindingReferenceCallback {
+    _ = original; // autofix
+}
+fn wrapClassSet(comptime original: Child(c.GDExtensionClassSet)) *const ClassSet {
+    _ = original; // autofix
+}
+fn wrapClassGet(comptime original: Child(c.GDExtensionClassGet)) *const ClassGet {
+    _ = original; // autofix
+}
+fn wrapClassGetRID(comptime original: Child(c.GDExtensionClassGetRID)) *const ClassGetRID {
+    _ = original; // autofix
+}
+fn wrapClassGetPropertyList(comptime original: Child(c.GDExtensionClassGetPropertyList)) *const ClassGetPropertyList {
+    _ = original; // autofix
+}
+fn wrapClassFreePropertyList(comptime original: Child(c.GDExtensionClassFreePropertyList)) *const ClassFreePropertyList {
+    _ = original; // autofix
+}
+fn wrapClassFreePropertyList2(comptime original: Child(c.GDExtensionClassFreePropertyList2)) *const ClassFreePropertyList2 {
+    _ = original; // autofix
+}
+fn wrapClassPropertyCanRevert(comptime original: Child(c.GDExtensionClassPropertyCanRevert)) *const ClassPropertyCanRevert {
+    _ = original; // autofix
+}
+fn wrapClassPropertyGetRevert(comptime original: Child(c.GDExtensionClassPropertyGetRevert)) *const ClassPropertyGetRevert {
+    _ = original; // autofix
+}
+fn wrapClassValidateProperty(comptime original: Child(c.GDExtensionClassValidateProperty)) *const ClassValidateProperty {
+    _ = original; // autofix
+}
+fn wrapClassNotification(comptime original: Child(c.GDExtensionClassNotification)) *const ClassNotification {
+    _ = original; // autofix
+}
+fn wrapClassNotification2(comptime original: Child(c.GDExtensionClassNotification2)) *const ClassNotification2 {
+    _ = original; // autofix
+}
+fn wrapClassToString(comptime original: Child(c.GDExtensionClassToString)) *const ClassToString {
+    _ = original; // autofix
+}
+fn wrapClassReference(comptime original: Child(c.GDExtensionClassReference)) *const ClassReference {
+    _ = original; // autofix
+}
+fn wrapClassUnreference(comptime original: Child(c.GDExtensionClassUnreference)) *const ClassUnreference {
+    _ = original; // autofix
+}
+fn wrapClassCallVirtual(comptime original: Child(c.GDExtensionClassCallVirtual)) *const ClassCallVirtual {
+    _ = original; // autofix
+}
+fn wrapClassCreateInstance(comptime original: Child(c.GDExtensionClassCreateInstance)) *const ClassCreateInstance {
+    _ = original; // autofix
+}
+fn wrapClassCreateInstance2(comptime original: Child(c.GDExtensionClassCreateInstance2)) *const ClassCreateInstance2 {
+    _ = original; // autofix
+}
+fn wrapClassFreeInstance(comptime original: Child(c.GDExtensionClassFreeInstance)) *const ClassFreeInstance {
+    _ = original; // autofix
+}
+fn wrapClassRecreateInstance(comptime original: Child(c.GDExtensionClassRecreateInstance)) *const ClassRecreateInstance {
+    _ = original; // autofix
+}
+fn wrapClassGetVirtual(comptime original: Child(c.GDExtensionClassGetVirtual)) *const ClassGetVirtual {
+    _ = original; // autofix
+}
+fn wrapClassGetVirtual2(comptime original: Child(c.GDExtensionClassGetVirtual2)) *const ClassGetVirtual2 {
+    _ = original; // autofix
+}
+fn wrapClassGetVirtualCallData(comptime original: Child(c.GDExtensionClassGetVirtualCallData)) *const ClassGetVirtualCallData {
+    _ = original; // autofix
+}
+fn wrapClassGetVirtualCallData2(comptime original: Child(c.GDExtensionClassGetVirtualCallData2)) *const ClassGetVirtualCallData2 {
+    _ = original; // autofix
+}
+fn wrapClassCallVirtualWithData(comptime original: Child(c.GDExtensionClassCallVirtualWithData)) *const ClassCallVirtualWithData {
+    _ = original; // autofix
+}
+fn wrapClassMethodCall(comptime original: Child(c.GDExtensionClassMethodCall)) *const ClassMethodCall {
+    _ = original; // autofix
+}
+fn wrapClassMethodValidatedCall(comptime original: Child(c.GDExtensionClassMethodValidatedCall)) *const ClassMethodValidatedCall {
+    _ = original; // autofix
+}
+fn wrapClassMethodPtrCall(comptime original: Child(c.GDExtensionClassMethodPtrCall)) *const ClassMethodPtrCall {
+    _ = original; // autofix
+}
+fn wrapCallableCustomCall(comptime original: Child(c.GDExtensionCallableCustomCall)) *const CallableCustomCall {
+    _ = original; // autofix
+}
+fn wrapCallableCustomIsValid(comptime original: Child(c.GDExtensionCallableCustomIsValid)) *const CallableCustomIsValid {
+    _ = original; // autofix
+}
+fn wrapCallableCustomFree(comptime original: Child(c.GDExtensionCallableCustomFree)) *const CallableCustomFree {
+    _ = original; // autofix
+}
+fn wrapCallableCustomHash(comptime original: Child(c.GDExtensionCallableCustomHash)) *const CallableCustomHash {
+    _ = original; // autofix
+}
+fn wrapCallableCustomEqual(comptime original: Child(c.GDExtensionCallableCustomEqual)) *const CallableCustomEqual {
+    _ = original; // autofix
+}
+fn wrapCallableCustomLessThan(comptime original: Child(c.GDExtensionCallableCustomLessThan)) *const CallableCustomLessThan {
+    _ = original; // autofix
+}
+fn wrapCallableCustomToString(comptime original: Child(c.GDExtensionCallableCustomToString)) *const CallableCustomToString {
+    _ = original; // autofix
+}
+fn wrapCallableCustomGetArgumentCount(comptime original: Child(c.GDExtensionCallableCustomGetArgumentCount)) *const CallableCustomGetArgumentCount {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceSet(comptime original: Child(c.GDExtensionScriptInstanceSet)) *const ScriptInstanceSet {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGet(comptime original: Child(c.GDExtensionScriptInstanceGet)) *const ScriptInstanceGet {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetPropertyList(comptime original: Child(c.GDExtensionScriptInstanceGetPropertyList)) *const ScriptInstanceGetPropertyList {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceFreePropertyList(comptime original: Child(c.GDExtensionScriptInstanceFreePropertyList)) *const ScriptInstanceFreePropertyList {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceFreePropertyList2(comptime original: Child(c.GDExtensionScriptInstanceFreePropertyList2)) *const ScriptInstanceFreePropertyList2 {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetClassCategory(comptime original: Child(c.GDExtensionScriptInstanceGetClassCategory)) *const ScriptInstanceGetClassCategory {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetPropertyType(comptime original: Child(c.GDExtensionScriptInstanceGetPropertyType)) *const ScriptInstanceGetPropertyType {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceValidateProperty(comptime original: Child(c.GDExtensionScriptInstanceValidateProperty)) *const ScriptInstanceValidateProperty {
+    _ = original; // autofix
+}
+fn wrapScriptInstancePropertyCanRevert(comptime original: Child(c.GDExtensionScriptInstancePropertyCanRevert)) *const ScriptInstancePropertyCanRevert {
+    _ = original; // autofix
+}
+fn wrapScriptInstancePropertyGetRevert(comptime original: Child(c.GDExtensionScriptInstancePropertyGetRevert)) *const ScriptInstancePropertyGetRevert {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetOwner(comptime original: Child(c.GDExtensionScriptInstanceGetOwner)) *const ScriptInstanceGetOwner {
+    _ = original; // autofix
+}
+fn wrapScriptInstancePropertyStateAdd(comptime original: Child(c.GDExtensionScriptInstancePropertyStateAdd)) *const ScriptInstancePropertyStateAdd {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetPropertyState(comptime original: Child(c.GDExtensionScriptInstanceGetPropertyState)) *const ScriptInstanceGetPropertyState {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetMethodList(comptime original: Child(c.GDExtensionScriptInstanceGetMethodList)) *const ScriptInstanceGetMethodList {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceFreeMethodList(comptime original: Child(c.GDExtensionScriptInstanceFreeMethodList)) *const ScriptInstanceFreeMethodList {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceFreeMethodList2(comptime original: Child(c.GDExtensionScriptInstanceFreeMethodList2)) *const ScriptInstanceFreeMethodList2 {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceHasMethod(comptime original: Child(c.GDExtensionScriptInstanceHasMethod)) *const ScriptInstanceHasMethod {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetMethodArgumentCount(comptime original: Child(c.GDExtensionScriptInstanceGetMethodArgumentCount)) *const ScriptInstanceGetMethodArgumentCount {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceCall(comptime original: Child(c.GDExtensionScriptInstanceCall)) *const ScriptInstanceCall {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceNotification(comptime original: Child(c.GDExtensionScriptInstanceNotification)) *const ScriptInstanceNotification {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceNotification2(comptime original: Child(c.GDExtensionScriptInstanceNotification2)) *const ScriptInstanceNotification2 {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceToString(comptime original: Child(c.GDExtensionScriptInstanceToString)) *const ScriptInstanceToString {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceRefCountIncremented(comptime original: Child(c.GDExtensionScriptInstanceRefCountIncremented)) *const ScriptInstanceRefCountIncremented {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceRefCountDecremented(comptime original: Child(c.GDExtensionScriptInstanceRefCountDecremented)) *const ScriptInstanceRefCountDecremented {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetScript(comptime original: Child(c.GDExtensionScriptInstanceGetScript)) *const ScriptInstanceGetScript {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceIsPlaceholder(comptime original: Child(c.GDExtensionScriptInstanceIsPlaceholder)) *const ScriptInstanceIsPlaceholder {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceGetLanguage(comptime original: Child(c.GDExtensionScriptInstanceGetLanguage)) *const ScriptInstanceGetLanguage {
+    _ = original; // autofix
+}
+fn wrapScriptInstanceFree(comptime original: Child(c.GDExtensionScriptInstanceFree)) *const ScriptInstanceFree {
+    _ = original; // autofix
+}
+fn wrapInterfaceFunctionPtr(comptime original: Child(c.GDExtensionInterfaceFunctionPtr)) *const InterfaceFunctionPtr {
+    _ = original; // autofix
+}
+fn wrapInterfaceGetProcAddress(comptime original: Child(c.GDExtensionInterfaceGetProcAddress)) *const InterfaceGetProcAddress {
+    _ = original; // autofix
+}
+fn wrapInitializationFunction(comptime original: Child(c.GDExtensionInitializationFunction)) *const InitializationFunction {
+    _ = original; // autofix
+}
+
 const std = @import("std");
 const Child = std.meta.Child;
 
