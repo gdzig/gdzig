@@ -293,7 +293,10 @@ fn buildGdzigBindings(
     _ = tmp.addCopyDirectory(bindings, "./", .{});
     // Copy the source code separately; allows manual overrides
     const src = tmp.addCopyDirectory(b.path("gdzig_bindings"), "./", .{
-        .exclude_extensions = &.{},
+        .exclude_extensions = &.{
+            "builtin.zig",
+            "class.zig",
+        },
     });
 
     const mod = b.addModule("gdzig_bindings", .{
