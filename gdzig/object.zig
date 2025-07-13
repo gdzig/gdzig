@@ -71,14 +71,10 @@ pub fn unreference(instance: anytype) void {
 }
 
 pub fn connect(obj: anytype, comptime S: type, callable: Callable) void {
-    if (!isClassPtr(obj)) {
-        @compileError("pointer type expected for parameter 'obj'");
-    }
+    var signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
+    defer signal_name.deinit();
 
-    const signal_name = comptime meta.signalName(S);
-
-    // TODO: I think this is a memory leak??
-    _ = obj.connect(.fromComptimeLatin1(signal_name), callable, .{});
+    _ = obj.connect(signal_name, callable, .{});
 }
 
 /// Downcast a value to a child type in the class hierarchy. Has some compile time checks, but returns null at runtime if the cast fails.
