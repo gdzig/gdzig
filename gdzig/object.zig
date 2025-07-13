@@ -70,13 +70,14 @@ pub fn unreference(instance: anytype) void {
     }
 }
 
-pub fn connect(obj: anytype, comptime signal_name: [:0]const u8, instance: anytype, comptime method_name: [:0]const u8) void {
-    if (@typeInfo(@TypeOf(instance)) != .pointer) {
-        @compileError("pointer type expected for parameter 'instance'");
+pub fn connect(obj: anytype, comptime S: type, callable: Callable) void {
+    if (!isClassPtr(obj)) {
+        @compileError("pointer type expected for parameter 'obj'");
     }
+
+    const signal_name = comptime meta.signalName(S);
+
     // TODO: I think this is a memory leak??
-    godot.register.registerMethod(std.meta.Child(@TypeOf(instance)), method_name);
-    const callable = Callable.initObjectMethod(@ptrCast(asObject(instance)), .fromComptimeLatin1(method_name));
     _ = obj.connect(.fromComptimeLatin1(signal_name), callable, .{});
 }
 

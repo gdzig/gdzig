@@ -51,6 +51,39 @@ pub fn _enterTree(self: *Self) void {
     godot.connect(self.base, "signal3", self, "onSignal3");
 }
 
+fn callableClosureFunc(userdata: ?*anyopaque, args: [*c]const godot.c.GDExtensionConstVariantPtr, arg_count: godot.c.GDExtensionInt, ret: godot.c.GDExtensionVariantPtr, err: [*c]godot.c.GDExtensionCallError) callconv(.c) void {
+    _ = userdata; // autofix
+    _ = args; // autofix
+    _ = arg_count; // autofix
+    _ = ret; // autofix
+    _ = err; // autofix
+
+}
+
+const CallableUserdata = struct {
+    obj: *godot.class.Object,
+    function_ptr: *anyopaque,
+};
+
+pub fn fromClosure(p_instance: anytype, p_function_ptr: anytype) godot.builtin.Callable {
+    const userdata = godot.heap.general_allocator.create(CallableUserdata) catch @panic("Failed to allocate CallableUserdata");
+    userdata.* = .{
+        .obj = godot.meta.asObject(p_instance),
+        .function_ptr = @ptrCast(@constCast(p_function_ptr)),
+    };
+
+    var custom_info: godot.c.GDExtensionCallableCustomInfo2 = .{
+        .token = godot.interface.library,
+        .call_func = &callableClosureFunc,
+        .callable_userdata = @ptrCast(@constCast(userdata)),
+    };
+
+    var callable: godot.builtin.Callable = undefined;
+    godot.interface.callableCustomCreate2(@ptrCast(&callable), &custom_info);
+
+    return callable;
+}
+
 pub fn _exitTree(self: *Self) void {
     _ = self;
 }

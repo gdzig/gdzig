@@ -108,10 +108,10 @@ pub fn _enterTree(self: *ExampleNode) void {
     var timer = self.base.getTree().?.createTimer(1.0, .{}).?;
     defer _ = timer.unreference();
 
-    godot.connect(timer, "timeout", self, "onTimeout");
-    godot.connect(sp, "resized", self, "onResized");
+    godot.connect(timer, SceneTreeTimer.TimeoutSignal, .fromClosure(self, &onTimeout));
+    godot.connect(sp, Control.ResizedSignal, .fromClosure(self, &onResized));
+    godot.connect(itemList, ItemList.ItemSelectedSignal, .fromClosure(self, &onItemFocused));
 
-    godot.connect(itemList, "item_selected", self, "onItemFocused");
     self.panel = PanelContainer.init();
     self.panel.setHSizeFlags(.{ .size_fill = true });
     self.panel.setVSizeFlags(.{ .size_fill = true });
@@ -228,13 +228,12 @@ const HSplitContainer = godot.class.HSplitContainer;
 const ItemList = godot.class.ItemList;
 const Label = godot.class.Label;
 const Node = godot.class.Node;
-const Node3D = godot.class.Node3D;
 const PanelContainer = godot.class.PanelContainer;
-const PropertyInfo = godot.object.PropertyInfo;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const Vector3 = godot.builtin.Vector3;
+const SceneTreeTimer = godot.class.SceneTreeTimer;
 
 const GuiNode = @import("GuiNode.zig");
 const SignalNode = @import("SignalNode.zig");
