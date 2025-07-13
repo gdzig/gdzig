@@ -148,6 +148,10 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
     try w.writeLine("};");
 
     // Imports
+    try w.writeAll(
+        \\const oopz = @import("oopz");
+        \\
+    );
     try writeImports(w, "..", &builtin.imports, ctx);
 }
 
