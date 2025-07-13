@@ -132,11 +132,31 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
     }
 
     // Signals
-    for (api.signals orelse &.{}) |signal| {
+    var signals = try getAllSignalsIncludingInherits(ctx.rawAllocator(), api, ctx);
+    defer signals.deinit(ctx.rawAllocator());
+
+    for (signals.items) |signal| {
         try self.signals.put(allocator, signal.name, try Signal.fromClass(allocator, api.name, signal, ctx));
     }
 
     return self;
+}
+
+fn getAllSignalsIncludingInherits(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !ArrayList(GodotApi.Class.Signal) {
+    var signals: ArrayList(GodotApi.Class.Signal) = .empty;
+
+    var current_class: ?GodotApi.Class = api;
+    while (current_class) |api_class| {
+        try signals.appendSlice(allocator, api_class.signals orelse &.{});
+
+        if (ctx.api.findClass(api_class.inherits)) |child_class| {
+            current_class = child_class;
+        } else {
+            current_class = null;
+        }
+    }
+
+    return signals;
 }
 
 pub fn deinit(self: *Class, allocator: Allocator) void {
@@ -195,6 +215,7 @@ pub fn getNearestSingleton(self: *const Class, ctx: *const Context) ?*const Clas
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
+const ArrayList = std.ArrayListUnmanaged;
 
 const case = @import("case");
 

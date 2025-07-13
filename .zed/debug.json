@@ -12,7 +12,7 @@
     "label": "Debug Bindgen",
     "adapter": "CodeLLDB",
     "request": "launch",
-    "program": "${ZED_WORKTREE_ROOT}/zig-out/bin/bindgen",
+    "program": "${ZED_WORKTREE_ROOT}/zig-out/bin/gdzig-bindgen",
     "args": ["vendor", "zig-out/bindings", "float", "64", "verbose"],
     "build": "Build Bindgen"
   }

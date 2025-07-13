@@ -109,7 +109,7 @@ pub fn _enterTree(self: *ExampleNode) void {
     defer _ = timer.unreference();
 
     godot.connect(timer, SceneTreeTimer.TimeoutSignal, .fromClosure(self, &onTimeout));
-    godot.connect(sp, Control.ResizedSignal, .fromClosure(self, &onResized));
+    godot.connect(sp, HSplitContainer.ResizedSignal, .fromClosure(self, &onResized));
     godot.connect(itemList, ItemList.ItemSelectedSignal, .fromClosure(self, &onItemFocused));
 
     self.panel = PanelContainer.init();
@@ -228,7 +228,6 @@ pub fn _bindMethods() void {
 const std = @import("std");
 
 const godot = @import("gdzig");
-const Control = godot.class.Control;
 const Engine = godot.class.Engine;
 const HSplitContainer = godot.class.HSplitContainer;
 const ItemList = godot.class.ItemList;

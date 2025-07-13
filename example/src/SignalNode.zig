@@ -49,9 +49,9 @@ pub fn _enterTree(self: *Self) void {
     self.color_rect.setColor(.initRGBA(1, 0, 0, 1));
     self.base.addChild(.upcast(self.color_rect), .{});
 
-    godot.connect(signal1_btn, BaseButton.PressedSignal, .fromClosure(self, &emitSignal1));
-    godot.connect(signal2_btn, BaseButton.PressedSignal, .fromClosure(self, &emitSignal2));
-    godot.connect(signal3_btn, BaseButton.PressedSignal, .fromClosure(self, &emitSignal3));
+    godot.connect(signal1_btn, Button.PressedSignal, .fromClosure(self, &emitSignal1));
+    godot.connect(signal2_btn, Button.PressedSignal, .fromClosure(self, &emitSignal2));
+    godot.connect(signal3_btn, Button.PressedSignal, .fromClosure(self, &emitSignal3));
     godot.connect(self.base, Signal1, .fromClosure(self, &onSignal1));
     godot.connect(self.base, Signal2, .fromClosure(self, &onSignal2));
     godot.connect(self.base, Signal3, .fromClosure(self, &onSignal3));
@@ -90,7 +90,6 @@ const std = @import("std");
 
 const godot = @import("gdzig");
 const Button = godot.class.Button;
-const BaseButton = godot.class.BaseButton;
 const Color = godot.builtin.Color;
 const ColorRect = godot.class.ColorRect;
 const Control = godot.class.Control;
