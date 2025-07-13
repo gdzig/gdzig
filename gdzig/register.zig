@@ -2,12 +2,12 @@ const ClassUserData = struct {
     class_name: []const u8,
 };
 
-var registered_classes: std.StringHashMap(void) = undefined;
+var registered_classes: StringHashMap(void) = .empty;
 pub fn registerClass(comptime T: type) void {
     const class_name = comptime meta.typeShortName(T);
 
     if (registered_classes.contains(class_name)) return;
-    registered_classes.put(class_name, {}) catch unreachable;
+    registered_classes.putNoClobber(godot.heap.general_allocator, class_name, {}) catch unreachable;
 
     const PerClassData = struct {
         pub var class_info = init_blk: {
@@ -208,15 +208,12 @@ pub fn registerClass(comptime T: type) void {
     }
 }
 
-var registered_methods: std.StringHashMap(void) = undefined;
+var registered_methods: StringHashMap(void) = .empty;
 pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     //prevent duplicate registration
-    const fullname = std.mem.concat(heap.general_allocator, u8, &[_][]const u8{ meta.typeShortName(T), "::", name }) catch unreachable;
-    if (registered_methods.contains(fullname)) {
-        heap.general_allocator.free(fullname);
-        return;
-    }
-    registered_methods.put(fullname, {}) catch unreachable;
+    const fullname = comptime meta.typeShortName(T) ++ "::" ++ name;
+    if (registered_methods.contains(fullname)) return;
+    registered_methods.putNoClobber(godot.heap.general_allocator, fullname, {}) catch unreachable;
 
     const p_method = @field(T, name);
     const MethodBinder = support.MethodBinderT(@TypeOf(p_method));
@@ -264,14 +261,12 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     godot.interface.classdbRegisterExtensionClassMethod(godot.interface.library, meta.typeName(T), &MethodBinder.method_info);
 }
 
-var registered_signals: std.StringHashMap(void) = undefined;
+var registered_signals: StringHashMap(void) = .empty;
 pub fn registerSignal(comptime T: type, comptime S: type) void {
     //prevent duplicate registration
     const fullname = comptime meta.typeShortName(T) ++ "::" ++ meta.typeShortName(S);
-    if (registered_signals.contains(fullname)) {
-        return;
-    }
-    registered_signals.putNoClobber(fullname, {}) catch unreachable;
+    if (registered_signals.contains(fullname)) return;
+    registered_signals.putNoClobber(godot.heap.general_allocator, fullname, {}) catch unreachable;
 
     if (@typeInfo(S) != .@"struct") {
         @compileError("Signal '" ++ meta.typeShortName(S) ++ "' for '" ++ meta.typeShortName(T) ++ "' must be a struct");
@@ -307,35 +302,16 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
     std.debug.print("Signal registered: {s}\n", .{signal_name});
 }
 
-pub fn init() void {
-    registered_classes = std.StringHashMap(void).init(std.heap.page_allocator);
-    registered_methods = std.StringHashMap(void).init(std.heap.page_allocator);
-    registered_signals = std.StringHashMap(void).init(std.heap.page_allocator);
-}
+pub fn init() void {}
 
 pub fn deinit() void {
-    {
-        var keys = registered_classes.keyIterator();
-        while (keys.next()) |it| {
-            var class_name = StringName.fromUtf8(it.*);
-            defer class_name.deinit();
-            godot.interface.classdbUnregisterExtensionClass(godot.interface.library, @ptrCast(&class_name));
-        }
-    }
-
-    {
-        var keys = registered_methods.keyIterator();
-        while (keys.next()) |it| {
-            heap.general_allocator.free(it.*);
-        }
-    }
-
-    registered_signals.deinit();
-    registered_methods.deinit();
-    registered_classes.deinit();
+    registered_signals.deinit(godot.heap.general_allocator);
+    registered_methods.deinit(godot.heap.general_allocator);
+    registered_classes.deinit(godot.heap.general_allocator);
 }
 
 const std = @import("std");
+const StringHashMap = std.StringHashMapUnmanaged;
 
 const godot = @import("gdzig.zig");
 const c = godot.c;
