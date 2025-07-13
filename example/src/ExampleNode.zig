@@ -219,6 +219,12 @@ pub fn _toString(_: *ExampleNode) ?String {
     return String.fromLatin1("ExampleNode");
 }
 
+pub fn _bindMethods() void {
+    godot.registerMethod(ExampleNode, "onTimeout");
+    godot.registerMethod(ExampleNode, "onResized");
+    godot.registerMethod(ExampleNode, "onItemFocused");
+}
+
 const std = @import("std");
 
 const godot = @import("gdzig");

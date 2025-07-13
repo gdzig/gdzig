@@ -28,7 +28,10 @@ pub fn _ready(self: *Self) void {
     self.rng = prng.random();
     self.sprites = std.ArrayList(Sprite).init(godot.heap.general_allocator);
 
-    const tex = ResourceLoader.load(.fromLatin1("res://textures/logo.png"), .{}).?;
+    var logo_path: String = .fromLatin1("res://textures/logo.png");
+    defer logo_path.deinit();
+
+    const tex = ResourceLoader.load(logo_path, .{}).?;
     defer _ = tex.unreference();
 
     const sz = self.base.getParentAreaSize();
@@ -80,8 +83,8 @@ const std = @import("std");
 const godot = @import("gdzig");
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
-const Node = godot.class.Node;
 const ResourceLoader = godot.class.ResourceLoader;
 const Sprite2D = godot.class.Sprite2D;
 const Texture2D = godot.class.Texture2D;
 const Vector2 = godot.builtin.Vector2;
+const String = godot.builtin.String;

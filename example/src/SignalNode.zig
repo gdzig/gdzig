@@ -11,6 +11,12 @@ pub const Signal2 = struct {};
 pub const Signal3 = struct {};
 
 pub fn _bindMethods() void {
+    godot.registerMethod(Self, "onSignal1");
+    godot.registerMethod(Self, "onSignal2");
+    godot.registerMethod(Self, "onSignal3");
+    godot.registerMethod(Self, "emitSignal1");
+    godot.registerMethod(Self, "emitSignal2");
+    godot.registerMethod(Self, "emitSignal3");
     godot.registerSignal(Self, Signal1);
     godot.registerSignal(Self, Signal2);
     godot.registerSignal(Self, Signal3);
@@ -43,45 +49,12 @@ pub fn _enterTree(self: *Self) void {
     self.color_rect.setColor(.initRGBA(1, 0, 0, 1));
     self.base.addChild(.upcast(self.color_rect), .{});
 
-    godot.connect(signal1_btn, "pressed", self, "emitSignal1");
-    godot.connect(signal2_btn, "pressed", self, "emitSignal2");
-    godot.connect(signal3_btn, "pressed", self, "emitSignal3");
-    godot.connect(self.base, "signal1", self, "onSignal1");
-    godot.connect(self.base, "signal2", self, "onSignal2");
-    godot.connect(self.base, "signal3", self, "onSignal3");
-}
-
-fn callableClosureFunc(userdata: ?*anyopaque, args: [*c]const godot.c.GDExtensionConstVariantPtr, arg_count: godot.c.GDExtensionInt, ret: godot.c.GDExtensionVariantPtr, err: [*c]godot.c.GDExtensionCallError) callconv(.c) void {
-    _ = userdata; // autofix
-    _ = args; // autofix
-    _ = arg_count; // autofix
-    _ = ret; // autofix
-    _ = err; // autofix
-
-}
-
-const CallableUserdata = struct {
-    obj: *godot.class.Object,
-    function_ptr: *anyopaque,
-};
-
-pub fn fromClosure(p_instance: anytype, p_function_ptr: anytype) godot.builtin.Callable {
-    const userdata = godot.heap.general_allocator.create(CallableUserdata) catch @panic("Failed to allocate CallableUserdata");
-    userdata.* = .{
-        .obj = godot.meta.asObject(p_instance),
-        .function_ptr = @ptrCast(@constCast(p_function_ptr)),
-    };
-
-    var custom_info: godot.c.GDExtensionCallableCustomInfo2 = .{
-        .token = godot.interface.library,
-        .call_func = &callableClosureFunc,
-        .callable_userdata = @ptrCast(@constCast(userdata)),
-    };
-
-    var callable: godot.builtin.Callable = undefined;
-    godot.interface.callableCustomCreate2(@ptrCast(&callable), &custom_info);
-
-    return callable;
+    godot.connect(signal1_btn, BaseButton.PressedSignal, .fromClosure(self, &emitSignal1));
+    godot.connect(signal2_btn, BaseButton.PressedSignal, .fromClosure(self, &emitSignal2));
+    godot.connect(signal3_btn, BaseButton.PressedSignal, .fromClosure(self, &emitSignal3));
+    godot.connect(self.base, Signal1, .fromClosure(self, &onSignal1));
+    godot.connect(self.base, Signal2, .fromClosure(self, &onSignal2));
+    godot.connect(self.base, Signal3, .fromClosure(self, &onSignal3));
 }
 
 pub fn _exitTree(self: *Self) void {
@@ -117,6 +90,7 @@ const std = @import("std");
 
 const godot = @import("gdzig");
 const Button = godot.class.Button;
+const BaseButton = godot.class.BaseButton;
 const Color = godot.builtin.Color;
 const ColorRect = godot.class.ColorRect;
 const Control = godot.class.Control;

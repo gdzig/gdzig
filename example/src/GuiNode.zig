@@ -18,10 +18,10 @@ pub fn _enterTree(self: *Self) void {
     toggle_btn.setSize(.initXY(100, 50), .{});
     toggle_btn.setText(.fromLatin1("Toggle Me"));
 
-    godot.connect(toggle_btn, "toggled", self, "onToggled");
-    godot.connect(normal_btn, "pressed", self, "onPressed");
+    godot.connect(toggle_btn, BaseButton.ToggledSignal, .fromClosure(self, &onToggled));
+    godot.connect(normal_btn, BaseButton.PressedSignal, .fromClosure(self, &onPressed));
 
-    const res_name = String.fromLatin1("res://textures/logo.png");
+    const res_name: String = .fromLatin1("res://textures/logo.png");
     const texture = ResourceLoader.load(res_name, .{}).?;
     defer _ = texture.unreference();
     self.sprite = Sprite2D.init();
@@ -45,13 +45,18 @@ pub fn onToggled(self: *Self, toggled_on: bool) void {
     std.debug.print("on_toggled {any}\n", .{toggled_on});
 }
 
+pub fn _bindMethods() void {
+    godot.registerMethod(@This(), "onPressed");
+    godot.registerMethod(@This(), "onToggled");
+}
+
 const std = @import("std");
 const godot = @import("gdzig");
 const Button = godot.class.Button;
+const BaseButton = godot.class.BaseButton;
 const CheckBox = godot.class.CheckBox;
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
-const Node = godot.class.Node;
 const ResourceLoader = godot.class.ResourceLoader;
 const Sprite2D = godot.class.Sprite2D;
 const String = godot.builtin.String;
