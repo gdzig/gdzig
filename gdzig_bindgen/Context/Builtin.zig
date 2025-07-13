@@ -116,6 +116,10 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         }
     }
 
+    if (std.mem.eql(u8, api.name, "Callable")) {
+        try self.imports.put(allocator, "Object");
+    }
+
     return self;
 }
 
