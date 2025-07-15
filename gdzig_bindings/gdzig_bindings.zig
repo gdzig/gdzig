@@ -1,3 +1,4 @@
+/// TODO: make this private once API is ready
 pub var raw: Interface = undefined;
 
 pub fn typeName(comptime T: type) *builtin.StringName {
@@ -19,6 +20,10 @@ pub fn typeName(comptime T: type) *builtin.StringName {
     return &Static.name;
 }
 
+comptime {
+    std.testing.refAllDeclsRecursive(@This());
+}
+
 const std = @import("std");
 
 const c = @import("gdextension");
@@ -28,6 +33,7 @@ pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
 pub const general = @import("general.zig");
 pub const global = @import("global.zig");
+/// TODO: make this private once API is ready
 pub const Interface = @import("Interface.zig");
 pub const math = @import("math.zig");
 pub const random = @import("random.zig");
