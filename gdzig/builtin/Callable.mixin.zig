@@ -25,3 +25,11 @@ pub fn fromClosure(p_instance: anytype, p_function_ptr: anytype) Callable {
 
     return .initObjectMethod(oopz.upcast(*Object, p_instance), method_string_name);
 }
+// @mixin stop
+
+const Callable = @import("callable.zig").Callable;
+const StringName = @import("string_name.zig").StringName;
+const Object = @import("../class/object.zig").Object;
+
+const std = @import("std");
+const oopz = @import("oopz");
