@@ -276,7 +276,7 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
 
     var arguments: [std.meta.fields(S).len]object.PropertyInfo = undefined;
     inline for (std.meta.fields(S), 0..) |field, i| {
-        arguments[i] = object.PropertyInfo.init(godot.heap.general_allocator, .string, field.name) catch unreachable;
+        arguments[i] = object.PropertyInfo.fromField(godot.heap.general_allocator, S, field.name, .{}) catch unreachable;
     }
 
     var properties: [32]c.GDExtensionPropertyInfo = undefined;
