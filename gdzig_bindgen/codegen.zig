@@ -961,9 +961,15 @@ fn writeMixin(w: *Writer, comptime fmt: []const u8, args: anytype, ctx: *const C
     if (file) |f| {
         defer f.close();
         const reader = f.reader();
-        const writer = w.writer();
-        var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 }).init();
-        try fifo.pump(reader, writer);
+
+        var buf: [1024]u8 = undefined;
+        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+            if (std.mem.startsWith(u8, line, "// @mixin stop")) {
+                break;
+            }
+
+            try w.writeLine(line);
+        }
     }
 }
 
