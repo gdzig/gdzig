@@ -6,11 +6,3 @@
 script = ExtResource("1_6gvlp")
 
 [node name="ExampleNode" type="ExampleNode" parent="."]
-_import_path = NodePath("")
-unique_name_in_owner = false
-process_mode = 0
-process_priority = 0
-process_physics_priority = 0
-process_thread_group = 0
-editor_description = ""
-script = null

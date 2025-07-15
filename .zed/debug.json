@@ -4,8 +4,9 @@
     "adapter": "CodeLLDB",
     "request": "launch",
     "program": "godot",
-    "args": ["--path", "${ZED_WORKTREE_ROOT}/example/project"],
-    "build": "Build Example"
+    "args": [],
+    "build": "Build Example",
+    "cwd": "${ZED_WORKTREE_ROOT}/example/project"
   },
   {
     "label": "Debug Bindgen",
