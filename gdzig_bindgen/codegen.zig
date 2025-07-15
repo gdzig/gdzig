@@ -96,65 +96,6 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
         try w.writeLine("");
     }
 
-    // Hardcoded constructors
-    // TODO: move the hardcoding of these overrides to an overrides module
-    if (std.mem.eql(u8, builtin.name, "String")) {
-        try w.writeLine(
-            \\pub fn fromLatin1(chars: []const u8) String {
-            \\    var self: String = undefined;
-            \\    raw.stringNewWithLatin1CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
-            \\    return self;
-            \\}
-            \\
-            \\pub fn fromUtf8(chars: []const u8) String {
-            \\    var self: String = undefined;
-            \\    raw.stringNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
-            \\    return self;
-            \\}
-            \\
-            \\pub fn fromUtf16(chars: []const c.char16_t) String {
-            \\    var self: String = undefined;
-            \\    raw.stringNewWithUtf16CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
-            \\    return self;
-            \\}
-            \\
-            \\pub fn fromUtf32(chars: []const c.char32_t) String {
-            \\    var self: String = undefined;
-            \\    raw.stringNewWithUtf32CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
-            \\    return self;
-            \\}
-            \\
-            \\pub fn fromWide(chars: []const c.wchar_t) String {
-            \\    var self: String = undefined;
-            \\    raw.stringNewWithWideCharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
-            \\    return self;
-            \\}
-            \\
-        );
-    }
-    if (std.mem.eql(u8, builtin.name, "StringName")) {
-        try w.writeLine(
-            \\pub fn fromComptimeLatin1(comptime chars: [:0]const u8) StringName {
-            \\    var self: StringName = undefined;
-            \\    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 1);
-            \\    return self;
-            \\}
-            \\
-            \\pub fn fromLatin1(chars: [:0]const u8) StringName {
-            \\    var self: StringName = undefined;
-            \\    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), chars.ptr, 0);
-            \\    return self;
-            \\}
-            \\
-            \\pub fn fromUtf8(chars: []const u8) StringName {
-            \\    var self: StringName = undefined;
-            \\    raw.stringNameNewWithUtf8CharsAndLen(@ptrCast(&self), chars.ptr, @intCast(chars.len));
-            \\    return self;
-            \\}
-            \\
-        );
-    }
-
     // Constructors
     for (builtin.constructors.items) |*constructor| {
         try writeBuiltinConstructor(w, builtin.name, constructor);
