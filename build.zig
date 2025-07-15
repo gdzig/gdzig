@@ -37,7 +37,7 @@ pub fn build(b: *Build) !void {
     const gdzig_bindgen = buildBindgen(b, opt);
     const generated = buildGenerated(b, opt, gdzig_bindgen.exe, headers.root);
 
-    const gdzig_bindings = buildGdzigBindings(b, opt, generated.path);
+    const gdzig_bindings = buildGdzigBindings(b, opt, generated.install);
     const gdzig = buildGdzig(b, opt);
     const docs = buildDocs(b, gdzig.lib);
     const tests = buildTests(b, gdzig.mod, gdzig_bindgen.mod);
@@ -261,43 +261,42 @@ fn buildGenerated(
 ) struct {
     run: *Step.Run,
     install: *Step.InstallDir,
-    path: Build.LazyPath,
 } {
+    const clean = b.addSystemCommand(&.{ "git", "clean", "-qdfX" });
+    clean.addFileArg(b.path("gdzig_bindings"));
+    clean.has_side_effects = true;
+
     const run = b.addRunArtifact(bindgen);
     run.addDirectoryArg(headers);
+    run.addDirectoryArg(b.path("gdzig_bindings"));
     const path = run.addOutputDirectoryArg(b.path("bindings").getPath(b));
     run.addArg(opt.precision);
     run.addArg(opt.architecture);
     run.addArg(if (b.verbose) "verbose" else "quiet");
+    run.step.dependOn(&clean.step);
+    run.has_side_effects = true;
 
     const install = b.addInstallDirectory(.{
         .source_dir = path,
-        .install_dir = .prefix,
-        .install_subdir = "bindings",
+        .install_dir = .{ .custom = "../" },
+        .install_subdir = "gdzig_bindings",
     });
+    install.step.dependOn(&run.step);
 
-    return .{ .install = install, .run = run, .path = path };
+    return .{ .install = install, .run = run };
 }
 
 // gdzig_bindings
 fn buildGdzigBindings(
     b: *Build,
     opt: Options,
-    bindings: Build.LazyPath,
+    generated: *Step.InstallDir,
 ) struct {
     lib: *Step.Compile,
     mod: *Module,
 } {
-    const tmp = b.addWriteFiles();
-    // Copy the bindings first
-    _ = tmp.addCopyDirectory(bindings, "./", .{});
-    // Copy the source code separately; allows manual overrides
-    const src = tmp.addCopyDirectory(b.path("gdzig_bindings"), "./", .{
-        .exclude_extensions = &.{},
-    });
-
     const mod = b.addModule("gdzig_bindings", .{
-        .root_source_file = src.path(b, "gdzig_bindings.zig"),
+        .root_source_file = b.path("gdzig_bindings/gdzig_bindings.zig"),
         .target = opt.target,
         .optimize = opt.optimize,
     });
@@ -307,6 +306,7 @@ fn buildGdzigBindings(
         .root_module = mod,
         .linkage = .dynamic,
     });
+    lib.step.dependOn(&generated.step);
 
     const options = b.addOptions();
     options.addOption([]const u8, "architecture", opt.architecture);

@@ -4,7 +4,8 @@
     "**/.direnv",
     "**/.git",
     "**/Thumbs.db",
-    "**/.zig-cache"
+    "**/.zig-cache",
+    "**/zig-out"
   ],
-  "file_scan_inclusions": ["**/zig-out/bindings"]
+  "file_scan_inclusions": ["gdzig_bindings/**/*.zig"]
 }

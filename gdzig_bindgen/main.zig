@@ -1,3 +1,10 @@
+const std = @import("std");
+
+const codegen = @import("codegen.zig");
+const Config = @import("Config.zig");
+const Context = @import("Context.zig");
+const GodotApi = @import("GodotApi.zig");
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -55,13 +62,6 @@ pub fn main() !void {
         std.debug.print("API JSON: {s}/extension_api.json\n", .{args[1]});
     }
 }
-
-const std = @import("std");
-
-const codegen = @import("codegen.zig");
-const Config = @import("Config.zig");
-const Context = @import("Context.zig");
-const GodotApi = @import("GodotApi.zig");
 
 comptime {
     _ = @import("writer.zig");

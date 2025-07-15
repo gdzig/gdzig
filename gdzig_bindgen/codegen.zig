@@ -181,9 +181,12 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
 
     // Enums
     for (builtin.enums.values()) |*@"enum"| {
-        try writeEnum(w, @"enum");
+        try writeEnum(w, @"enum", ctx);
         try w.writeLine("");
     }
+
+    // Mixin
+    try writeMixin(w, "builtin/{s}.mixin.zig", .{builtin.name}, ctx);
 
     // Declaration end
     w.indent -= 1;
@@ -468,15 +471,18 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
 
     // Enums
     for (class.enums.values()) |*@"enum"| {
-        try writeEnum(w, @"enum");
+        try writeEnum(w, @"enum", ctx);
         try w.writeLine("");
     }
 
     // Flags
     for (class.flags.values()) |*flag| {
-        try writeFlag(w, flag);
+        try writeFlag(w, flag, ctx);
         try w.writeLine("");
     }
+
+    // Mixin
+    try writeMixin(w, "class/{s}.mixin.zig", .{class.name}, ctx);
 
     // Declaration end
     w.indent -= 1;
@@ -675,7 +681,7 @@ fn writeGlobals(ctx: *const Context) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeEnum(&writer, @"enum");
+        try writeEnum(&writer, @"enum", ctx);
 
         try buf.flush();
     }
@@ -690,13 +696,13 @@ fn writeGlobals(ctx: *const Context) !void {
         var buf = bufferedWriter(file.writer());
         var writer = codeWriter(buf.writer().any());
 
-        try writeFlag(&writer, flag);
+        try writeFlag(&writer, flag, ctx);
 
         try buf.flush();
     }
 }
 
-fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
+fn writeEnum(w: *Writer, @"enum": *const Context.Enum, ctx: *const Context) !void {
     try writeDocBlock(w, @"enum".doc);
     try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
@@ -705,6 +711,7 @@ fn writeEnum(w: *Writer, @"enum": *const Context.Enum) !void {
         try writeDocBlock(w, value.doc);
         try w.printLine("{s} = {d},", .{ value.name, value.value });
     }
+    try writeMixin(w, "global/{s}.mixin.zig", .{@"enum".name}, ctx);
     w.indent -= 1;
     try w.writeLine("};");
 }
@@ -719,7 +726,7 @@ fn writeField(w: *Writer, field: *const Context.Field) !void {
     );
 }
 
-fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
+fn writeFlag(w: *Writer, flag: *const Context.Flag, ctx: *const Context) !void {
     try writeDocBlock(w, flag.doc);
     try w.printLine("pub const {s} = packed struct({s}) {{", .{
         flag.name, switch (flag.representation) {
@@ -742,6 +749,7 @@ fn writeFlag(w: *Writer, flag: *const Context.Flag) !void {
             .u64 => "u64",
         }, @"const".value });
     }
+    try writeMixin(w, "global/{s}.mixin.zig", .{flag.module}, ctx);
     w.indent -= 1;
     try w.writeLine("};");
 }
@@ -944,6 +952,18 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
         } else {
             // TODO: native structures?
         }
+    }
+}
+
+fn writeMixin(w: *Writer, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {
+    const filename = try std.fmt.allocPrint(ctx.arena.allocator(), fmt, args);
+    const file: ?std.fs.File = ctx.config.input.openFile(filename, .{}) catch null;
+    if (file) |f| {
+        defer f.close();
+        const reader = f.reader();
+        const writer = w.writer();
+        var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 }).init();
+        try fifo.pump(reader, writer);
     }
 }
 

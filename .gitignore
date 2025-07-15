@@ -11,3 +11,17 @@ project/lib/
 !**/.godot/extension_list.cfg
 !**/.godot/global_script_class_cache.cfg
 
+
+gdzig_bindings/builtin/*.zig
+gdzig_bindings/class/*.zig
+gdzig_bindings/global/*.zig
+!gdzig_bindings/builtin/variant.zig
+!gdzig_bindings/**/*.mixin.zig
+!gdzig_bindings/**/*.replace.zig
+gdzig_bindings/builtin.zig
+gdzig_bindings/class.zig
+gdzig_bindings/global.zig
+gdzig_bindings/general.zig
+gdzig_bindings/Interface.zig
+gdzig_bindings/math.zig
+gdzig_bindings/random.zig
