@@ -15,6 +15,6 @@ pub fn typeShortName(comptime T: type) [:0]const u8 {
 
 const std = @import("std");
 
-const bindings = @import("gdzig_bindings");
-const StringName = bindings.StringName;
-pub const typeName = bindings.typeName;
+const godot = @import("gdzig.zig");
+const StringName = godot.builtin.StringName;
+pub const typeName = godot.typeName;

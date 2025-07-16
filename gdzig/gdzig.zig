@@ -64,14 +64,12 @@ pub fn entrypointWithUserdata(
             p_library: c.GDExtensionClassLibraryPtr,
             r_initialization: [*c]c.GDExtensionInitialization,
         ) callconv(.c) c.GDExtensionBool {
-            bindings.raw = .init(p_get_proc_address.?, p_library.?);
-            interface = &bindings.raw;
+            raw = .init(p_get_proc_address.?, p_library.?);
+            interface = &raw;
             r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
             r_initialization.*.initialize = @ptrCast(&init);
             r_initialization.*.deinitialize = @ptrCast(&deinit);
             r_initialization.*.minimum_initialization_level = @intFromEnum(opt.minimum_initialization_level);
-            // TODO: remove
-            heap.general_allocator = std.heap.page_allocator;
             return 1;
         }
 
@@ -94,8 +92,10 @@ pub fn entrypointWithUserdata(
                 } else {
                     deinit_cb(@ptrCast(userdata.?), @enumFromInt(p_level));
                 }
-                // TODO: remove
-                register.deinit();
+                if (p_level == c.GDEXTENSION_INITIALIZATION_CORE) {
+                    // TODO: remove
+                    register.deinit();
+                }
             }
         }
     }.entrypoint, .{
@@ -108,24 +108,48 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-pub var interface: *Interface = &bindings.raw;
+/// TODO: make this private once API is ready
+pub var interface: *Interface = &raw;
+pub var raw: Interface = undefined;
+
+pub fn typeName(comptime T: type) *builtin.StringName {
+    const Static = &struct {
+        const _ = T;
+        var name: builtin.StringName = undefined;
+        var init: bool = false;
+    };
+
+    if (!Static.init) {
+        Static.name = builtin.StringName.fromComptimeLatin1(blk: {
+            const full = @typeName(T);
+            const pos = std.mem.lastIndexOfScalar(u8, full, '.') orelse break :blk full;
+            break :blk full[pos + 1 ..];
+        });
+        Static.init = true;
+    }
+
+    return &Static.name;
+}
+
+comptime {
+    std.testing.refAllDeclsRecursive(@This());
+}
 
 const std = @import("std");
 
-const bindings = @import("gdzig_bindings");
-pub const builtin = bindings.builtin;
-pub const class = bindings.class;
-pub const general = bindings.general;
-pub const global = bindings.global;
-pub const Interface = bindings.Interface;
-pub const math = bindings.math;
-pub const random = bindings.random;
 pub const c = @import("gdextension");
 
+pub const builtin = @import("builtin.zig");
+pub const class = @import("class.zig");
+pub const general = @import("general.zig");
+pub const global = @import("global.zig");
 pub const heap = @import("heap.zig");
+pub const Interface = @import("Interface.zig");
+pub const math = @import("math.zig");
 pub const meta = @import("meta.zig");
 pub const object = @import("object.zig");
 pub const connect = object.connect;
+pub const random = @import("random.zig");
 pub const register = @import("register.zig");
 pub const registerClass = register.registerClass;
 pub const registerMethod = register.registerMethod;

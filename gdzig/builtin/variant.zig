@@ -326,17 +326,17 @@ test "forType" {
     }
 }
 
-const raw = &@import("../gdzig_bindings.zig").raw;
+const raw = &@import("../gdzig.zig").raw;
 
 const std = @import("std");
 const Atomic = std.atomic.Value;
 const Child = std.meta.Child;
 const mem = std.mem;
 const testing = std.testing;
+const precision = @import("build_options").precision;
 
 const c = @import("gdextension");
 const oopz = @import("oopz");
-const precision = @import("options").precision;
 
 const builtin = @import("../builtin.zig");
 const AABB = builtin.AABB;

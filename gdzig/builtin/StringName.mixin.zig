@@ -13,7 +13,7 @@
 /// **Since Godot 4.2**
 pub inline fn fromLatin1(str: [:0]const u8, is_static: bool) StringName {
     var string_name: StringName = undefined;
-    raw.stringNameNewWithLatin1Chars(string_name.ptr(), str.ptr, is_static);
+    raw.stringNameNewWithLatin1Chars(string_name.ptr(), @ptrCast(str.ptr), @intFromBool(is_static));
     return string_name;
 }
 
@@ -28,7 +28,7 @@ pub inline fn fromLatin1(str: [:0]const u8, is_static: bool) StringName {
 /// **Since Godot 4.2**
 pub fn fromComptimeLatin1(comptime str: [:0]const u8) StringName {
     var self: StringName = undefined;
-    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), str.ptr, 1);
+    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), @ptrCast(str.ptr), 1);
     return self;
 }
 
@@ -41,7 +41,7 @@ pub fn fromComptimeLatin1(comptime str: [:0]const u8) StringName {
 /// **Since Godot 4.1**
 pub inline fn fromUtf8(str: []const u8) StringName {
     var string_name: StringName = undefined;
-    raw.stringNameNewWithUtf8CharsAndLen(string_name.ptr(), str.ptr, str.len);
+    raw.stringNameNewWithUtf8CharsAndLen(string_name.ptr(), @ptrCast(str.ptr), @intCast(str.len));
     return string_name;
 }
 
@@ -54,13 +54,13 @@ pub inline fn fromUtf8(str: []const u8) StringName {
 /// **Since Godot 4.2**
 pub inline fn fromNullTerminatedUtf8(str: [:0]const u8) StringName {
     var string_name: StringName = undefined;
-    raw.stringNameNewWithUtf8Chars(string_name.ptr(), str.ptr);
+    raw.stringNameNewWithUtf8Chars(string_name.ptr(), @ptrCast(str.ptr));
     return string_name;
 }
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
 const StringName = @import("./string_name.zig").StringName;

@@ -138,7 +138,7 @@ fn wrapTask(comptime Userdata: type, comptime original: *const Task(Userdata)) f
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const std = @import("std");
 

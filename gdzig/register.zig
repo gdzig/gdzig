@@ -198,8 +198,8 @@ pub fn registerClass(comptime T: type) void {
 
     classdbRegisterExtensionClass(
         @ptrCast(godot.interface.library),
-        @ptrCast(bindings.typeName(T)),
-        @ptrCast(bindings.typeName(object.BaseOf(T))),
+        @ptrCast(godot.typeName(T)),
+        @ptrCast(godot.typeName(object.BaseOf(T))),
         @ptrCast(&PerClassData.class_info),
     );
 
@@ -289,16 +289,16 @@ pub fn registerSignal(comptime T: type, comptime signal_name: [:0]const u8, argu
     }
 
     if (arguments.len > 0) {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name), &propertyies[0], @intCast(arguments.len));
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name, false), &propertyies[0], @intCast(arguments.len));
     } else {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name), null, 0);
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromLatin1(signal_name, false), null, 0);
     }
 }
 
 pub fn init() void {
-    registered_classes = std.StringHashMap(void).init(heap.general_allocator);
-    registered_methods = std.StringHashMap(void).init(heap.general_allocator);
-    registered_signals = std.StringHashMap(void).init(heap.general_allocator);
+    registered_classes = std.StringHashMap(void).init(std.heap.page_allocator);
+    registered_methods = std.StringHashMap(void).init(std.heap.page_allocator);
+    registered_signals = std.StringHashMap(void).init(std.heap.page_allocator);
 }
 
 pub fn deinit() void {
@@ -332,17 +332,15 @@ pub fn deinit() void {
 
 const std = @import("std");
 
-const bindings = @import("gdzig_bindings");
-const String = bindings.builtin.String;
-const StringName = bindings.builtin.StringName;
-const Variant = bindings.builtin.Variant;
-const PropertyUsageFlags = bindings.global.PropertyUsageFlags;
-const PropertyHint = bindings.global.PropertyHint;
-const Interface = bindings.Interface;
-
 const godot = @import("gdzig.zig");
 const c = godot.c;
 const heap = godot.heap;
 const meta = godot.meta;
 const object = godot.object;
 const support = godot.support;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+const Variant = godot.builtin.Variant;
+const PropertyUsageFlags = godot.global.PropertyUsageFlags;
+const PropertyHint = godot.global.PropertyHint;
+const Interface = godot.Interface;

@@ -7,5 +7,5 @@
     "**/.zig-cache",
     "**/zig-out"
   ],
-  "file_scan_inclusions": ["gdzig_bindings/**/*.zig"]
+  "file_scan_inclusions": ["gdzig/**/*.zig"]
 }

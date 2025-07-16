@@ -37,8 +37,7 @@ pub fn build(b: *Build) !void {
     const gdzig_bindgen = buildBindgen(b, opt);
     const generated = buildGenerated(b, opt, gdzig_bindgen.exe, headers.root);
 
-    const gdzig_bindings = buildGdzigBindings(b, opt, generated.install);
-    const gdzig = buildGdzig(b, opt);
+    const gdzig = buildGdzig(b, opt, generated.output);
     const docs = buildDocs(b, gdzig.lib);
     const tests = buildTests(b, gdzig.mod, gdzig_bindgen.mod);
 
@@ -50,16 +49,11 @@ pub fn build(b: *Build) !void {
     gdzig_bindgen.mod.addImport("temp", temp.mod);
     gdzig_bindgen.mod.addImport("zimdjson", zimdjson.mod);
 
-    gdzig_bindings.mod.addImport("gdextension", gdextension.mod);
-    gdzig_bindings.mod.addImport("oopz", oopz.mod);
-
-    gdzig.mod.addImport("gdzig_bindings", gdzig_bindings.mod);
     gdzig.mod.addImport("gdextension", gdextension.mod);
     gdzig.mod.addImport("oopz", oopz.mod);
 
     // Steps
     b.step("bindgen", "Build the gdzig_bindgen executable").dependOn(&gdzig_bindgen.install.step);
-    b.step("bindings", "Build the gdzig_bindings library").dependOn(&gdzig_bindings.lib.step);
     b.step("generated", "Run bindgen to generate builtin/class code").dependOn(&generated.install.step);
     b.step("docs", "Install docs into zig-out/docs").dependOn(docs.step);
 
@@ -69,7 +63,6 @@ pub fn build(b: *Build) !void {
 
     // Install
     b.installArtifact(gdzig_bindgen.exe);
-    b.installArtifact(gdzig_bindings.lib);
     b.installArtifact(gdzig.lib);
 }
 
@@ -261,71 +254,47 @@ fn buildGenerated(
 ) struct {
     run: *Step.Run,
     install: *Step.InstallDir,
+    output: Build.LazyPath,
 } {
-    const clean = b.addSystemCommand(&.{ "git", "clean", "-qdfX" });
-    clean.addFileArg(b.path("gdzig_bindings"));
-    clean.has_side_effects = true;
+    const files = b.addWriteFiles();
+    const input = files.addCopyDirectory(b.path("gdzig"), "input", .{
+        .include_extensions = &.{".mixin.zig"},
+    });
 
     const run = b.addRunArtifact(bindgen);
     run.addDirectoryArg(headers);
-    run.addDirectoryArg(b.path("gdzig_bindings"));
-    const path = run.addOutputDirectoryArg(b.path("bindings").getPath(b));
+    run.addDirectoryArg(input);
+    const output = run.addOutputDirectoryArg("generated");
     run.addArg(opt.precision);
     run.addArg(opt.architecture);
     run.addArg(if (b.verbose) "verbose" else "quiet");
-    run.step.dependOn(&clean.step);
-    run.has_side_effects = true;
 
     const install = b.addInstallDirectory(.{
-        .source_dir = path,
+        .source_dir = output,
         .install_dir = .{ .custom = "../" },
-        .install_subdir = "gdzig_bindings",
-    });
-    install.step.dependOn(&run.step);
-
-    return .{ .install = install, .run = run };
-}
-
-// gdzig_bindings
-fn buildGdzigBindings(
-    b: *Build,
-    opt: Options,
-    generated: *Step.InstallDir,
-) struct {
-    lib: *Step.Compile,
-    mod: *Module,
-} {
-    const mod = b.addModule("gdzig_bindings", .{
-        .root_source_file = b.path("gdzig_bindings/gdzig_bindings.zig"),
-        .target = opt.target,
-        .optimize = opt.optimize,
+        .install_subdir = "gdzig",
     });
 
-    const lib = b.addLibrary(.{
-        .name = "gdzig",
-        .root_module = mod,
-        .linkage = .dynamic,
-    });
-    lib.step.dependOn(&generated.step);
-
-    const options = b.addOptions();
-    options.addOption([]const u8, "architecture", opt.architecture);
-    options.addOption([]const u8, "precision", opt.precision);
-    mod.addOptions("options", options);
-
-    return .{ .lib = lib, .mod = mod };
+    return .{ .install = install, .run = run, .output = output };
 }
 
 // gdzig
 fn buildGdzig(
     b: *Build,
     opt: Options,
+    generated: Build.LazyPath,
 ) struct {
     lib: *Step.Compile,
     mod: *Module,
 } {
+    const files = b.addWriteFiles();
+    const combined = files.addCopyDirectory(b.path("gdzig"), "gdzig", .{
+        .exclude_extensions = &.{".mixin.zig"},
+    });
+    _ = files.addCopyDirectory(generated, "gdzig", .{});
+
     const mod = b.addModule("gdzig", .{
-        .root_source_file = b.path("gdzig/gdzig.zig"),
+        .root_source_file = combined.path(b, "gdzig.zig"),
         .target = opt.target,
         .optimize = opt.optimize,
     });

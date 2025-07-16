@@ -243,13 +243,6 @@ fn assertCanInitialize(comptime T: type) void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const bindings = @import("gdzig_bindings");
-const Object = bindings.class.Object;
-const RefCounted = bindings.class.RefCounted;
-const Callable = bindings.builtin.Callable;
-const String = bindings.builtin.String;
-const StringName = bindings.builtin.StringName;
-const Variant = bindings.builtin.Variant;
 const oopz = @import("oopz");
 pub const assertIsA = oopz.assertIsA;
 pub const assertIsAny = oopz.assertIsAny;
@@ -274,3 +267,9 @@ const meta = godot.meta;
 const PropertyHint = godot.global.PropertyHint;
 const PropertyUsageFlags = godot.global.PropertyUsageFlags;
 const typeName = meta.typeName;
+const Object = godot.class.Object;
+const RefCounted = godot.class.RefCounted;
+const Callable = godot.builtin.Callable;
+const String = godot.builtin.String;
+const StringName = godot.builtin.StringName;
+const Variant = godot.builtin.Variant;

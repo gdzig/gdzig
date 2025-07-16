@@ -18,9 +18,9 @@ pub inline fn indexConst(self: *const PackedColorArray, index_: usize) *const Co
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
-const typeName = @import("../gdzig_bindings.zig").typeName;
+const typeName = @import("../gdzig.zig").typeName;
 const Interface = @import("../Interface.zig");
 const Color = @import("./color.zig").Color;
 const PackedColorArray = @import("./packed_color_array.zig").PackedColorArray;

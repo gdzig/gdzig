@@ -18,9 +18,9 @@ pub inline fn indexConst(self: *const PackedVector3Array, index_: usize) *const 
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
-const typeName = @import("../gdzig_bindings.zig").typeName;
+const typeName = @import("../gdzig.zig").typeName;
 const Interface = @import("../Interface.zig");
 const PackedVector3Array = @import("./packed_vector3_array.zig").PackedVector3Array;
 const StringName = @import("./string_name.zig").StringName;

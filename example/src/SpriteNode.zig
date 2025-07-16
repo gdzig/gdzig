@@ -76,6 +76,7 @@ pub fn _physicsProcess(self: *Self, delta: f64) void {
 }
 
 const std = @import("std");
+
 const godot = @import("gdzig");
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;

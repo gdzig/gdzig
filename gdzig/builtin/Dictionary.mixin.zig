@@ -13,7 +13,7 @@ pub inline fn setTyped(
     key_script: ?*const Variant,
     value_script: ?*const Variant,
 ) void {
-    const typeName = @import("../gdzig_bindings.zig").typeName;
+    const typeName = @import("../gdzig.zig").typeName;
 
     const key_tag = Variant.Tag.forType(K);
     const value_tag = Variant.Tag.forType(V);
@@ -51,7 +51,7 @@ pub inline fn indexConst(self: *const Dictionary, key: *const Variant) *const Va
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const builtin = @import("../builtin.zig");
 const Array = builtin.Array;

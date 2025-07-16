@@ -31,7 +31,7 @@ pub inline fn readBuf(self: *const FileAccess, buf: []u8) []u8 {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
 const FileAccess = @import("./file_access.zig").FileAccess;

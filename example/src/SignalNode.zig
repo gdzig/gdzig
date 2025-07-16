@@ -78,6 +78,7 @@ pub fn emitSignal3(self: *Self) void {
 }
 
 const std = @import("std");
+
 const godot = @import("gdzig");
 const Button = godot.class.Button;
 const Color = godot.builtin.Color;

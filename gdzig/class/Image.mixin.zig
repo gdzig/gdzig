@@ -18,7 +18,7 @@ pub inline fn constSlice(self: *const Image) []const u8 {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
 const Image = @import("./image.zig").Image;

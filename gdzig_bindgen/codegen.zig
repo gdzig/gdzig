@@ -460,7 +460,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     // Imports
     try w.writeLine(
         \\const oopz = @import("oopz");
-        \\const typeName = @import("../gdzig_bindings.zig").typeName;
+        \\const typeName = @import("../gdzig.zig").typeName;
     );
     try writeImports(w, "..", &class.imports, ctx);
 }
@@ -900,7 +900,7 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
         \\
         \\const c = @import("gdextension");
         \\
-        \\const raw = &@import("{0s}/gdzig_bindings.zig").raw;
+        \\const raw = &@import("{0s}/gdzig.zig").raw;
         \\
     , .{root});
 
@@ -1025,7 +1025,7 @@ fn writeInterface(ctx: *Context) !void {
         \\const builtin = @import("builtin.zig");
         \\const class = @import("class.zig");
         \\const global = @import("global.zig");
-        \\const typeName = @import("gdzig_bindings.zig").typeName;
+        \\const typeName = @import("gdzig.zig").typeName;
     );
 
     try buf.flush();

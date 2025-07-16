@@ -14,7 +14,7 @@ pub inline fn ref(self: *Array, from: *const Array) void {
 ///
 /// **Since Godot 4.1**
 pub inline fn setTyped(self: *Array, comptime T: type, script: ?*const Variant) void {
-    const typeName = @import("../gdzig_bindings.zig").typeName;
+    const typeName = @import("../gdzig.zig").typeName;
 
     const tag = Variant.Tag.forType(T);
     const name = if (tag == .object) typeName(T).constPtr() else null;
@@ -41,7 +41,7 @@ pub inline fn indexConst(self: *const Array, index_: usize) *const Variant {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
 const Array = @import("./array.zig").Array;

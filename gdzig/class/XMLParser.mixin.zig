@@ -9,7 +9,7 @@ pub inline fn openBuf(self: *XMLParser, buf: []const u8) void {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig_bindings.zig").raw;
+const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
 const XMLParser = @import("./xmlparser.zig").XMLParser;
