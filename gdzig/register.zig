@@ -272,7 +272,7 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
         @compileError("Signal '" ++ meta.typeShortName(S) ++ "' for '" ++ meta.typeShortName(T) ++ "' must be a struct");
     }
 
-    const signal_name = meta.signalName(S);
+    const signal_name = comptime meta.signalName(S);
 
     var arguments: [std.meta.fields(S).len]object.PropertyInfo = undefined;
     inline for (std.meta.fields(S), 0..) |field, i| {
@@ -296,7 +296,7 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
     if (comptime arguments.len > 0) {
         godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name), &properties[0], @intCast(arguments.len));
     } else {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name, false), null, 0);
+        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name), null, 0);
     }
 }
 
