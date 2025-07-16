@@ -4,7 +4,7 @@ base: *Control, //this makes @Self a valid gdextension class
 color_rect: *ColorRect = undefined,
 
 pub const Signal1 = struct {
-    name: []const u8,
+    name: String,
     position: Vector3,
 };
 pub const Signal2 = struct {};
@@ -61,9 +61,9 @@ pub fn _exitTree(self: *Self) void {
     _ = self;
 }
 
-pub fn onSignal1(_: *Self, name: StringName, position: Vector3) void {
+pub fn onSignal1(_: *Self, name: String, position: Vector3) void {
     var buf: [256]u8 = undefined;
-    const n = godot.string.stringNameToAscii(name, &buf);
+    const n = godot.string.stringToAscii(name, &buf);
     std.debug.print("signal1 received : name = {s} position={any}\n", .{ n, position });
 }
 
@@ -95,4 +95,5 @@ const ColorRect = godot.class.ColorRect;
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
 const StringName = godot.builtin.StringName;
+const String = godot.builtin.String;
 const Vector3 = godot.builtin.Vector3;
