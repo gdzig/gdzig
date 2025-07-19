@@ -38,11 +38,20 @@ pub const Variant = extern struct {
         raw.variantDestroy(@ptrCast(@constCast(&self)));
     }
 
+    fn isCompatibleCast(self: Variant, tag: Tag) bool {
+        return switch (tag) {
+            .string, .string_name => self.tag == .string_name or self.tag == .string,
+            else => self.tag == tag,
+        };
+    }
+
     pub fn as(self: Variant, comptime T: type) ?T {
         const tag = comptime Tag.forType(T);
 
-        if (tag != self.tag) {
-            return null;
+        if (!self.isCompatibleCast(tag)) {
+            std.debug.panic(
+                \\Can't cast Variant from {s} to {s}.
+            , .{ @tagName(tag), @tagName(self.tag) });
         }
 
         const variantToType = getVariantToTypeConstructor(tag);
