@@ -1,3 +1,5 @@
+const logger = std.log.scoped(.variant);
+
 pub const ObjectId = enum(u64) { _ };
 
 pub const Variant = extern struct {
@@ -49,9 +51,10 @@ pub const Variant = extern struct {
         const tag = comptime Tag.forType(T);
 
         if (!self.isCompatibleCast(tag)) {
-            std.debug.panic(
+            logger.warn(
                 \\Can't cast Variant from {s} to {s}.
             , .{ @tagName(tag), @tagName(self.tag) });
+            return null;
         }
 
         const variantToType = getVariantToTypeConstructor(tag);
