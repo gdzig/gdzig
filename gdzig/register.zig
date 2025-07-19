@@ -274,16 +274,16 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
 
     const signal_name = comptime meta.signalName(S);
 
+    var arena = ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     var arguments: [std.meta.fields(S).len]object.PropertyInfo = undefined;
     inline for (std.meta.fields(S), 0..) |field, i| {
-        arguments[i] = object.PropertyInfo.fromField(godot.heap.general_allocator, S, field.name, .{}) catch unreachable;
+        arguments[i] = object.PropertyInfo.fromField(allocator, S, field.name, .{}) catch unreachable;
     }
 
-    var properties: [32]c.GDExtensionPropertyInfo = undefined;
-    if (comptime arguments.len > 32) {
-        @compileError("why you need so many arguments for a single signal? whatever, you can increase the upper limit as you want");
-    }
-
+    var properties: [arguments.len]c.GDExtensionPropertyInfo = undefined;
     inline for (arguments, 0..) |a, i| {
         properties[i].type = @intFromEnum(a.type);
         properties[i].hint = @intCast(@intFromEnum(a.hint));
@@ -309,6 +309,7 @@ pub fn deinit() void {
 }
 
 const std = @import("std");
+const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.StringHashMapUnmanaged;
 
 const godot = @import("gdzig.zig");
