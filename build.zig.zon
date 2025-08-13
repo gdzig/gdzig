@@ -41,10 +41,11 @@
     .paths = .{
         "LICENSE",
         "README.md",
-        "bindgen",
-        "src",
+        "gdzig",
+        "gdzig_bindgen",
         "build.zig",
         "build.zig.zon",
         "vendor",
+
     },
 }
