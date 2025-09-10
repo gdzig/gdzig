@@ -66,10 +66,6 @@ pub fn main() !void {
     }
 }
 
-comptime {
-    _ = @import("writer.zig");
-}
-
 test {
-    _ = @import("Context/docs.zig");
+    std.testing.refAllDecls(@This());
 }

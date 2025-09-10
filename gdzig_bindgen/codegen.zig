@@ -12,8 +12,8 @@ fn writeBuiltins(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile("builtin.zig", .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var w = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var w = CodeWriter.init(buf.interface);
 
         // Variant is a special case, since it is not a generated file.
         try w.writeLine(
@@ -36,8 +36,8 @@ fn writeBuiltins(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var writer = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var writer = CodeWriter.init(buf.interface);
 
         try writeBuiltin(&writer, builtin, ctx);
 
@@ -45,7 +45,7 @@ fn writeBuiltins(ctx: *const Context) !void {
     }
 }
 
-fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context) !void {
+fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Context) !void {
     try writeDocBlock(w, builtin.doc);
 
     // Declaration start
@@ -155,7 +155,7 @@ fn writeBuiltin(w: *Writer, builtin: *const Context.Builtin, ctx: *const Context
     try writeImports(w, "..", &builtin.imports, ctx);
 }
 
-fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *const Context.Function) !void {
+fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor: *const Context.Function) !void {
     try writeFunctionHeader(w, constructor);
     if (constructor.can_init_directly) {
         for (constructor.parameters.values()) |param| {
@@ -189,7 +189,7 @@ fn writeBuiltinConstructor(w: *Writer, builtin_name: []const u8, constructor: *c
     }
 }
 
-fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
+fn writeBuiltinDestructor(w: *CodeWriter, builtin: *const Context.Builtin) !void {
     try w.printLine(
         \\pub fn deinit(self: *{0s}) void {{
         \\    if (deinit_ptr == null) {{
@@ -204,7 +204,7 @@ fn writeBuiltinDestructor(w: *Writer, builtin: *const Context.Builtin) !void {
     });
 }
 
-fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Context.Function) !void {
+fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function) !void {
     try writeFunctionHeader(w, method);
     try w.printLine(
         \\if ({0s}_ptr == null) {{
@@ -230,7 +230,7 @@ fn writeBuiltinMethod(w: *Writer, builtin_name: []const u8, method: *const Conte
     , .{method.name});
 }
 
-fn writeBuiltinOperator(w: *Writer, builtin_name: []const u8, operator: *const Context.Function) !void {
+fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *const Context.Function) !void {
     try writeFunctionHeader(w, operator);
 
     // Lookup the method
@@ -277,8 +277,8 @@ fn writeClasses(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile("class.zig", .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var w = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var w = CodeWriter.init(buf.interface);
 
         for (ctx.classes.values()) |class| {
             try w.printLine(
@@ -298,8 +298,8 @@ fn writeClasses(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var writer = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var writer = CodeWriter.init(buf.interface);
 
         try writeClass(&writer, class, ctx);
 
@@ -307,7 +307,7 @@ fn writeClasses(ctx: *const Context) !void {
     }
 }
 
-fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
+fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
     try writeDocBlock(w, class.doc);
 
     // Declaration start
@@ -470,7 +470,7 @@ fn writeClass(w: *Writer, class: *const Context.Class, ctx: *const Context) !voi
     try writeImports(w, "..", &class.imports, ctx);
 }
 
-fn writeSignal(w: *Writer, signal: *const Context.Signal) !void {
+fn writeSignal(w: *CodeWriter, signal: *const Context.Signal) !void {
     try writeDocBlock(w, signal.doc);
     try w.print("pub const {s} = struct {{", .{signal.struct_name});
 
@@ -491,7 +491,7 @@ fn writeSignal(w: *Writer, signal: *const Context.Signal) !void {
     try w.writeLine("};");
 }
 
-fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
     try writeFunctionHeader(w, function);
 
     if (class.is_singleton) {
@@ -543,7 +543,7 @@ fn writeClassFunction(w: *Writer, class: *const Context.Class, function: *const 
     , .{function.name});
 }
 
-fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+fn writeClassFunctionObjectPtr(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
     if (function.self == .static) {
         try w.writeAll("null");
     } else if (class.getNearestSingleton(ctx)) |singleton| {
@@ -559,7 +559,7 @@ fn writeClassFunctionObjectPtr(w: *Writer, class: *const Context.Class, function
     }
 }
 
-fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *const Context) !void {
+fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
     try w.writeLine(
         \\pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) c.GDExtensionClassCallVirtual {
     );
@@ -623,14 +623,14 @@ fn writeClassVirtualDispatch(w: *Writer, class: *const Context.Class, ctx: *cons
     );
 }
 
-fn writeConstant(w: *Writer, constant: *const Context.Constant) !void {
+fn writeConstant(w: *CodeWriter, constant: *const Context.Constant) !void {
     try writeDocBlock(w, constant.doc);
     try w.print("pub const {s}: ", .{constant.name});
     try writeTypeAtField(w, &constant.type);
     try w.printLine(" = {s};", .{constant.value});
 }
 
-fn writeDocBlock(w: *Writer, docs: ?[]const u8) !void {
+fn writeDocBlock(w: *CodeWriter, docs: ?[]const u8) !void {
     if (docs) |d| {
         w.comment = .doc;
         try w.writeLine(d);
@@ -644,8 +644,8 @@ fn writeGlobals(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile("global.zig", .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var w = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var w = CodeWriter.init(buf.interface);
 
         for (ctx.enums.values()) |@"enum"| {
             try w.printLine(
@@ -673,8 +673,8 @@ fn writeGlobals(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var writer = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var writer = CodeWriter.init(buf.interface);
 
         try writeEnum(&writer, @"enum", ctx);
 
@@ -688,8 +688,8 @@ fn writeGlobals(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var writer = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var writer = CodeWriter.init(buf.interface);
 
         try writeFlag(&writer, flag, ctx);
 
@@ -697,7 +697,7 @@ fn writeGlobals(ctx: *const Context) !void {
     }
 }
 
-fn writeEnum(w: *Writer, @"enum": *const Context.Enum, ctx: *const Context) !void {
+fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) !void {
     try writeDocBlock(w, @"enum".doc);
     try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
@@ -711,7 +711,7 @@ fn writeEnum(w: *Writer, @"enum": *const Context.Enum, ctx: *const Context) !voi
     try w.writeLine("};");
 }
 
-fn writeField(w: *Writer, field: *const Context.Field) !void {
+fn writeField(w: *CodeWriter, field: *const Context.Field) !void {
     try writeDocBlock(w, field.doc);
     try w.print("{s}: ", .{field.name});
     try writeTypeAtField(w, &field.type);
@@ -721,7 +721,7 @@ fn writeField(w: *Writer, field: *const Context.Field) !void {
     );
 }
 
-fn writeFlag(w: *Writer, flag: *const Context.Flag, ctx: *const Context) !void {
+fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !void {
     try writeDocBlock(w, flag.doc);
     try w.printLine("pub const {s} = packed struct({s}) {{", .{
         flag.name, switch (flag.representation) {
@@ -749,7 +749,7 @@ fn writeFlag(w: *Writer, flag: *const Context.Flag, ctx: *const Context) !void {
     try w.writeLine("};");
 }
 
-fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
+fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function) !void {
     try writeDocBlock(w, function.doc);
 
     // Declaration
@@ -884,7 +884,7 @@ fn writeFunctionHeader(w: *Writer, function: *const Context.Function) !void {
     }
 }
 
-fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
+fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function) !void {
     switch (function.return_type) {
         // Class functions need to cast an object pointer
         .class => {
@@ -920,7 +920,7 @@ fn writeFunctionFooter(w: *Writer, function: *const Context.Function) !void {
     try w.writeLine("}");
 }
 
-fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, ctx: *const Context) !void {
+fn writeImports(w: *CodeWriter, root: []const u8, imports: *const Context.Imports, ctx: *const Context) !void {
     try w.printLine(
         \\const std = @import("std");
         \\
@@ -950,7 +950,7 @@ fn writeImports(w: *Writer, root: []const u8, imports: *const Context.Imports, c
     }
 }
 
-fn writeMixin(w: *Writer, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {
+fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {
     const filename = try std.fmt.allocPrint(ctx.arena.allocator(), fmt, args);
     const file: ?std.fs.File = ctx.config.input.openFile(filename, .{}) catch null;
     if (file) |f| {
@@ -972,8 +972,8 @@ fn writeInterface(ctx: *Context) !void {
     const file = try ctx.config.output.createFile("Interface.zig", .{});
     defer file.close();
 
-    var buf = bufferedWriter(file.writer());
-    var w = codeWriter(buf.writer().any());
+    var buf = file.writer();
+    var w = CodeWriter.init(buf.interface);
 
     try w.writeLine(
         \\const Interface = @This();
@@ -1066,8 +1066,8 @@ fn writeModules(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = bufferedWriter(file.writer());
-        var writer = codeWriter(buf.writer().any());
+        var buf = file.writer();
+        var writer = CodeWriter.init(buf.interface);
 
         try writeModule(&writer, module, ctx);
 
@@ -1075,14 +1075,14 @@ fn writeModules(ctx: *const Context) !void {
     }
 }
 
-fn writeModule(w: *Writer, module: *const Context.Module, ctx: *const Context) !void {
+fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Context) !void {
     for (module.functions) |*function| {
         try writeModuleFunction(w, function);
     }
     try writeImports(w, ".", &module.imports, ctx);
 }
 
-fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
+fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function) !void {
     try writeFunctionHeader(w, function);
 
     try w.printLine(
@@ -1103,7 +1103,7 @@ fn writeModuleFunction(w: *Writer, function: *const Context.Function) !void {
     , .{function.name});
 }
 
-fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtField(w: *CodeWriter, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |name| try w.print("*{0s}", .{name}),
@@ -1121,7 +1121,7 @@ fn writeTypeAtField(w: *Writer, @"type": *const Context.Type) !void {
     }
 }
 
-fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |name| try w.print("?*{0s}", .{name}),
@@ -1141,7 +1141,7 @@ fn writeTypeAtReturn(w: *Writer, @"type": *const Context.Type) !void {
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |name| try w.print("*{0s}", .{name}),
@@ -1161,7 +1161,7 @@ fn writeTypeAtParameter(w: *Writer, @"type": *const Context.Type) !void {
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !void {
+fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Type) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |name| try w.print("*{0s}", .{name}),
@@ -1180,9 +1180,7 @@ fn writeTypeAtOptionalParameterField(w: *Writer, @"type": *const Context.Type) !
 }
 
 const std = @import("std");
-const bufferedWriter = std.io.bufferedWriter;
 
-const codeWriter = @import("writer.zig").codeWriter;
+const CodeWriter = @import("CodeWriter.zig");
 const Context = @import("Context.zig");
 const util = @import("util.zig");
-const Writer = @import("writer.zig").AnyWriter;
