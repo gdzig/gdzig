@@ -307,14 +307,14 @@ pub fn findParent(self: @This(), class: Class) ?Class {
     return self.findClass(class.inherits);
 }
 
-pub fn parseFromReader(arena: *ArenaAllocator, reader: AnyReader) !Parsed(GodotApi) {
+pub fn parseFromReader(arena: *ArenaAllocator, reader: *Reader) !Parsed(GodotApi) {
     var parser: Parser = .init;
     var document = try parser.parseFromReader(arena.allocator(), reader);
     return try document.as(GodotApi, arena.allocator(), .{});
 }
 
 const Parsed = std.json.Parsed;
-const AnyReader = std.io.AnyReader;
+const Reader = std.io.Reader;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Parser = zimdjson.ondemand.FullParser(.default);
 

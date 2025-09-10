@@ -4,32 +4,24 @@
     .version = "0.0.0-dev",
     .dependencies = .{
         .case = .{
-            .url = "git+https://github.com/travisstaloch/case.git#57aa52a376cee0e826526972c9becc63d0d48093",
-            .hash = "case-0.0.1-chGYq3zEAACCYSlQhW6K9Gd8g93Wv8gQOIrNY7xTt8Up",
+            .url = "https://github.com/travisstaloch/case/archive/refs/tags/0.15.1.tar.gz",
+            .hash = "case-0.0.1-chGYqx_EAADaGJjmoln5M1iMBDTrMdd8to5wdEVpfXm4",
         },
         .godot_cpp = .{
             .url = "https://github.com/godotengine/godot-cpp/archive/refs/tags/godot-4.4.1-stable.tar.gz",
             .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
         },
-        .mvzr = .{
-            .url = "https://github.com/mnemnion/mvzr/archive/refs/tags/v0.3.4.tar.gz",
-            .hash = "mvzr-0.3.4-ZSOky2RnAQDtFSuVhbh2fP1s4PwRvTQ-DDw2lixvvA7T",
-        },
         .zimdjson = .{
-            .url = "git+https://github.com/ezequielramis/zimdjson#aa22af403d769fb8c70c6c529389b1977f5cd558",
-            .hash = "zimdjson-0.1.1-89pgxaJFBgDKSY1ppWxDVyPOBsGtYPBTdEs0p1XQkjFR",
-        },
-        .simdjzon = .{
-            .url = "git+https://github.com/travisstaloch/simdjzon#62ca9484520a088315f3b123605d2cf108b6abf1",
-            .hash = "simdjzon-0.0.1-7uNSgGddBQBshResiWQfzBc8Mt2w6WUDlsrF3HDJpWwL",
+            .url = "https://github.com/EzequielRamis/zimdjson/archive/409c569f7867ac323005de81acebb710338b4a67.tar.gz",
+            .hash = "zimdjson-0.2.0-89pgxYQsBgAdkYbZS5mcwkP_LfXRQ8ync3komv9QVoOc",
         },
         .bbcodez = .{
-            .url = "git+https://github.com/doubleword-labs/bbcodez.git#b97d06175fba4aa026f565bcb18ab26591a76dcd",
-            .hash = "bbcodez-0.0.0-YlrOBngLAQA4vhWWFt84aOiLcKve-LUkEnEq4t8qWDtS",
+            .url = "git+https://github.com/doubleword-labs/bbcodez#04d561b4b3a316e9a0990d4b09b127d0c5c974b6",
+            .hash = "bbcodez-0.0.1-dev-YlrOBoSYAQCGsq47bpWy5bXI6WX-80M4QO0NG3-5-Fkj",
         },
         .temp = .{
-            .url = "git+https://github.com/abhinav/temp.zig#382a711f253d54a88f222650e6c03b62411373c6",
-            .hash = "temp-0.3.0-Ogl1FSSBAAB2WXv3QbTYO3NYfVFoYTBkZsVK3MYvbxFE",
+            .url = "git+https://github.com/deevus/temp.zig#20e6796ae1a1849a94b8b098e7ab68dbcfe75af2",
+            .hash = "temp-0.3.0-Ogl1FZaCAADMr0vYiNDpfAHkVDLW1NmXrHxR-ZGMsOzI",
         },
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#a02a3eb8d0914437ecf317d36fca426fee300e72",
@@ -46,6 +38,5 @@
         "build.zig",
         "build.zig.zon",
         "vendor",
-
     },
 }

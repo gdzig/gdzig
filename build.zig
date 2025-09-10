@@ -26,7 +26,6 @@ pub fn build(b: *Build) !void {
     // Targets
     const bbcodez = buildBbcodez(b);
     const case = buildCase(b);
-    const mvzr = buildMvzr(b);
     const oopz = buildOopz(b);
     const temp = buildTemp(b);
     const zimdjson = buildZimdjson(b);
@@ -45,7 +44,6 @@ pub fn build(b: *Build) !void {
     gdzig_bindgen.mod.addImport("bbcodez", bbcodez.mod);
     gdzig_bindgen.mod.addImport("case", case.mod);
     gdzig_bindgen.mod.addImport("gdextension", gdextension.mod);
-    gdzig_bindgen.mod.addImport("mvzr", mvzr.mod);
     gdzig_bindgen.mod.addImport("temp", temp.mod);
     gdzig_bindgen.mod.addImport("zimdjson", zimdjson.mod);
 
@@ -104,16 +102,6 @@ fn buildCase(
 ) GdzDependency {
     const dep = b.dependency("case", .{});
     const mod = dep.module("case");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: mvzr
-fn buildMvzr(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("mvzr", .{});
-    const mod = dep.module("mvzr");
 
     return .{ .dep = dep, .mod = mod };
 }

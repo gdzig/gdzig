@@ -23,9 +23,12 @@ pub fn main() !void {
     var config = try Config.loadFromArgs(args);
     defer config.deinit();
 
+    var buf: [4096]u8 = undefined;
+    var reader = config.extension_api.reader(&buf);
+
     // Parse the extension_api.json
     const parser_start = std.time.nanoTimestamp();
-    const godot_api = try GodotApi.parseFromReader(&arena, config.extension_api.reader().any());
+    const godot_api = try GodotApi.parseFromReader(&arena, &reader.interface);
     defer godot_api.deinit();
     const parser_time = std.time.nanoTimestamp() - parser_start;
 
