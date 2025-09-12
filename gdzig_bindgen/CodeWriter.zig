@@ -55,6 +55,24 @@ fn drain(w: *Writer, data: []const []const u8, splat: usize) Error!usize {
     return written;
 }
 
+pub fn writeLine(this: *CodeWriter, line: []const u8) !void {
+    try this.writer.writeAll(line);
+    try this.writer.writeByte('\n');
+}
+
+pub fn writeAll(this: *CodeWriter, bytes: []const u8) !void {
+    try this.writer.writeAll(bytes);
+}
+
+pub fn print(this: *CodeWriter, comptime fmt: []const u8, args: anytype) !void {
+    try this.writer.print(fmt, args);
+}
+
+pub fn printLine(this: *CodeWriter, comptime fmt: []const u8, args: anytype) !void {
+    try this.print(fmt, args);
+    try this.writer.writeByte('\n');
+}
+
 test "indents" {
     var out = std.Io.Writer.Allocating.init(testing.allocator);
     defer out.deinit();

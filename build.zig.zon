@@ -11,10 +11,6 @@
             .url = "https://github.com/godotengine/godot-cpp/archive/refs/tags/godot-4.4.1-stable.tar.gz",
             .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
         },
-        .zimdjson = .{
-            .url = "https://github.com/EzequielRamis/zimdjson/archive/409c569f7867ac323005de81acebb710338b4a67.tar.gz",
-            .hash = "zimdjson-0.2.0-89pgxYQsBgAdkYbZS5mcwkP_LfXRQ8ync3komv9QVoOc",
-        },
         .bbcodez = .{
             .url = "git+https://github.com/doubleword-labs/bbcodez#04d561b4b3a316e9a0990d4b09b127d0c5c974b6",
             .hash = "bbcodez-0.0.1-dev-YlrOBoSYAQCGsq47bpWy5bXI6WX-80M4QO0NG3-5-Fkj",

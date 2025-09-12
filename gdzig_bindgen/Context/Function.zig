@@ -102,13 +102,8 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
     self.name = blk: {
         var buf: ArrayList(u8) = .empty;
         errdefer buf.deinit(allocator);
-        try buf.appendSlice(allocator, operator_fn_names.get(api.name).?);
 
-        var stream = std.io.fixedBufferStream(api.right_type);
-        var reader = stream.reader();
-        var writer = buf.writer(allocator);
-
-        try case.to(.pascal, &reader, &writer);
+        try buf.print(allocator, "{s}{f}", .{ operator_fn_names.get(api.name).?, case_utils.fmtSliceCasePascal(api.right_type) });
 
         if (std.mem.endsWith(u8, buf.items, builtin_name)) {
             buf.shrinkAndFree(allocator, buf.items.len - builtin_name.len);
@@ -155,21 +150,14 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
             try buf.appendSlice(allocator, "copy");
             break :blk try buf.toOwnedSlice(allocator);
         } else if (args.len > 0 and std.mem.eql(u8, "from", args[0].name)) {
-            try buf.appendSlice(allocator, "from");
-            var stream = std.io.fixedBufferStream(args[0].type);
-            var reader = stream.reader();
-            var writer = buf.writer(allocator);
-            try case.to(.pascal, &reader, &writer);
+            try buf.print(allocator, "from{f}", .{case_utils.fmtSliceCasePascal(args[0].type)});
             args = args[1..];
         } else {
             try buf.appendSlice(allocator, "init");
         }
 
         for (args) |arg| {
-            var stream = std.io.fixedBufferStream(arg.name);
-            var reader = stream.reader();
-            var writer = buf.writer(allocator);
-            try case.to(.pascal, &reader, &writer);
+            try buf.print(allocator, "{f}", .{case_utils.fmtSliceCasePascal(arg.name)});
         }
 
         break :blk try buf.toOwnedSlice(allocator);
@@ -233,13 +221,8 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
         // Strip the underscore prefix, camelize the rest, then reapply the underscore prefix
         var buf: ArrayList(u8) = try .initCapacity(allocator, api.name.len);
         errdefer buf.deinit(allocator);
-        buf.appendAssumeCapacity('_');
 
-        var stream = std.io.fixedBufferStream(api.name[1..]);
-        var reader = stream.reader();
-        var writer = buf.writer(allocator);
-
-        try case.to(.camel, &reader, &writer);
+        try buf.print(allocator, "_{f}", .{case_utils.fmtSliceCaseCamel(api.name[1..])});
 
         break :blk try buf.toOwnedSlice(allocator);
     };
@@ -391,8 +374,8 @@ pub const Parameter = struct {
 
     pub fn fromNameType(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, ctx: *const Context, opt: Options) !Parameter {
         const name = switch (opt.name_style) {
-            .none => try std.fmt.allocPrint(allocator, "{s}", .{case_utils.fmtSliceCaseSnake(api_name)}),
-            .prefixed => try std.fmt.allocPrint(allocator, "p_{s}", .{case_utils.fmtSliceCaseSnake(api_name)}),
+            .none => try std.fmt.allocPrint(allocator, "{f}", .{case_utils.fmtSliceCaseSnake(api_name)}),
+            .prefixed => try std.fmt.allocPrint(allocator, "p_{f}", .{case_utils.fmtSliceCaseSnake(api_name)}),
         };
         errdefer allocator.free(name);
 

@@ -28,7 +28,6 @@ pub fn build(b: *Build) !void {
     const case = buildCase(b);
     const oopz = buildOopz(b);
     const temp = buildTemp(b);
-    const zimdjson = buildZimdjson(b);
 
     const headers = installHeaders(b, opt);
 
@@ -45,7 +44,6 @@ pub fn build(b: *Build) !void {
     gdzig_bindgen.mod.addImport("case", case.mod);
     gdzig_bindgen.mod.addImport("gdextension", gdextension.mod);
     gdzig_bindgen.mod.addImport("temp", temp.mod);
-    gdzig_bindgen.mod.addImport("zimdjson", zimdjson.mod);
 
     gdzig.mod.addImport("gdextension", gdextension.mod);
     gdzig.mod.addImport("oopz", oopz.mod);
@@ -122,16 +120,6 @@ fn buildTemp(
 ) GdzDependency {
     const dep = b.dependency("temp", .{});
     const mod = dep.module("temp");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: zimdjson
-fn buildZimdjson(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("zimdjson", .{});
-    const mod = dep.module("zimdjson");
 
     return .{ .dep = dep, .mod = mod };
 }

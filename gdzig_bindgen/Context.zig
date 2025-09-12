@@ -221,12 +221,12 @@ fn parseSingletons(self: *Context) !void {
 }
 
 fn parseGdExtensionHeaders(self: *Context) !void {
-    var buffered_reader = std.io.bufferedReader(self.config.gdextension_interface.reader());
-    const reader = buffered_reader.reader();
+    var buf: [1024]u8 = undefined;
+    var gdextension_reader = self.config.gdextension_interface.reader(&buf);
+    var reader = &gdextension_reader.interface;
 
     const name_doc = "@name";
 
-    var buf: [1024]u8 = undefined;
     var fn_name: ?[]const u8 = null;
     var fp_type: ?[]const u8 = null;
     const safe_ident_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
@@ -240,7 +240,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     var doc_line_temp: [1024]u8 = undefined;
 
     while (true) {
-        const line: []const u8 = reader.readUntilDelimiterOrEof(&buf, '\n') catch break orelse break;
+        const line: []const u8 = reader.takeDelimiterExclusive('\n') catch break;
 
         const contains_name_doc = std.mem.indexOf(u8, line, name_doc) != null;
 
@@ -543,7 +543,7 @@ fn symbolTableClasses(self: *Context, classes: anytype, module: []const u8) !voi
     for (classes) |class| {
         if (util.shouldSkipClass(class.name)) continue;
 
-        const class_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}.{s}", .{
+        const class_path = try std.fmt.allocPrint(self.allocator(), "{s}.{f}.{s}", .{
             module,
             case_utils.fmtSliceCaseSnake(class.name),
             class.name,
@@ -564,12 +564,12 @@ fn symbolTableClasses(self: *Context, classes: anytype, module: []const u8) !voi
 
         for (class.methods orelse &.{}) |method| {
             const method_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, method.name });
-            const method_path = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{
+            const method_path = try std.fmt.allocPrint(self.allocator(), "{s}.{f}", .{
                 class_path,
                 case_utils.fmtSliceCaseCamel(method.name),
             });
 
-            const method_label = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{
+            const method_label = try std.fmt.allocPrint(self.allocator(), "{s}.{f}", .{
                 class.name,
                 case_utils.fmtSliceCaseCamel(method.name),
             });
@@ -595,7 +595,7 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
         try self.symbolTableClasses(self.api.builtin_classes, "builtin");
 
         for (self.api.global_enums) |@"enum"| {
-            const enum_path = try std.fmt.allocPrint(self.allocator(), "global.{s}.{s}", .{
+            const enum_path = try std.fmt.allocPrint(self.allocator(), "global.{f}.{s}", .{
                 case_utils.fmtSliceCaseSnake(@"enum".name),
                 @"enum".name,
             });
@@ -606,7 +606,7 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
         }
 
         for (self.api.utility_functions) |function| {
-            const function_name = try std.fmt.allocPrint(self.allocator(), "{s}", .{
+            const function_name = try std.fmt.allocPrint(self.allocator(), "{f}", .{
                 case_utils.fmtSliceCaseCamel(function.name),
             });
             const function_path = try std.fmt.allocPrint(self.allocator(), "general.{s}", .{

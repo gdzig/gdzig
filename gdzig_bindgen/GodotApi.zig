@@ -308,15 +308,12 @@ pub fn findParent(self: @This(), class: Class) ?Class {
 }
 
 pub fn parseFromReader(arena: *ArenaAllocator, reader: *Reader) !Parsed(GodotApi) {
-    var parser: Parser = .init;
-    var document = try parser.parseFromReader(arena.allocator(), reader);
-    return try document.as(GodotApi, arena.allocator(), .{});
+    var json_reader: JsonReader = .init(arena.allocator(), reader);
+    return try std.json.parseFromTokenSource(GodotApi, arena.allocator(), &json_reader, .{});
 }
 
+const std = @import("std");
+const ArenaAllocator = std.heap.ArenaAllocator;
 const Parsed = std.json.Parsed;
 const Reader = std.io.Reader;
-const ArenaAllocator = std.heap.ArenaAllocator;
-const Parser = zimdjson.ondemand.FullParser(.default);
-
-const std = @import("std");
-const zimdjson = @import("zimdjson");
+const JsonReader = std.json.Reader;

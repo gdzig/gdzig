@@ -2,19 +2,17 @@ fn SliceCase(comptime c: Case) type {
     return struct {
         pub fn format(
             str: []const u8,
-            comptime _: []const u8,
-            _: FormatOptions,
-            writer: anytype,
-        ) !void {
+            writer: *Writer,
+        ) Writer.Error!void {
             var buf: [128]u8 = undefined;
 
-            const result: []const u8 = blk: {
+            const result = blk: {
                 if (c == .camel and case.isSnake(str) and str[0] == '_') {
-                    break :blk try godotMethodCamel(&buf, str);
+                    break :blk godotMethodCamel(&buf, str);
                 }
 
-                break :blk try case.bufTo(&buf, c, str);
-            };
+                break :blk case.bufTo(&buf, c, str);
+            } catch return error.WriteFailed;
 
             try writer.writeAll(result);
         }
@@ -26,19 +24,19 @@ const formatSliceCamel = SliceCase(.camel).format;
 const formatSliceSnake = SliceCase(.snake).format;
 const formatSliceKebab = SliceCase(.kebab).format;
 
-pub fn fmtSliceCasePascal(str: []const u8) Formatter(formatSlicePascal) {
+pub fn fmtSliceCasePascal(str: []const u8) Alt([]const u8, formatSlicePascal) {
     return .{ .data = str };
 }
 
-pub fn fmtSliceCaseCamel(str: []const u8) Formatter(formatSliceCamel) {
+pub fn fmtSliceCaseCamel(str: []const u8) Alt([]const u8, formatSliceCamel) {
     return .{ .data = str };
 }
 
-pub fn fmtSliceCaseSnake(str: []const u8) Formatter(formatSliceSnake) {
+pub fn fmtSliceCaseSnake(str: []const u8) Alt([]const u8, formatSliceSnake) {
     return .{ .data = str };
 }
 
-pub fn fmtSliceCaseKebab(str: []const u8) Formatter(formatSliceKebab) {
+pub fn fmtSliceCaseKebab(str: []const u8) Alt([]const u8, formatSliceKebab) {
     return .{ .data = str };
 }
 
@@ -56,9 +54,9 @@ pub fn godotMethodCamel(buf: []u8, input: []const u8) ![]const u8 {
     return try case.bufTo(buf, .camel, input);
 }
 
-const Case = case.Case;
-const Formatter = std.fmt.Formatter;
-const FormatOptions = std.fmt.FormatOptions;
-
 const std = @import("std");
+const Alt = std.fmt.Alt;
+const Writer = std.io.Writer;
+
 const case = @import("case");
+const Case = case.Case;

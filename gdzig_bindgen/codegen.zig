@@ -7,13 +7,16 @@ pub fn generate(ctx: *Context) !void {
 }
 
 fn writeBuiltins(ctx: *const Context) !void {
+    var buf: [1024]u8 = undefined;
+
     // builtin.zig
     {
         const file = try ctx.config.output.createFile("builtin.zig", .{});
         defer file.close();
 
-        var buf = file.writer();
-        var w = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w: CodeWriter = .init(writer);
 
         // Variant is a special case, since it is not a generated file.
         try w.writeLine(
@@ -26,7 +29,7 @@ fn writeBuiltins(ctx: *const Context) !void {
             , .{ builtin.module, builtin.name });
         }
 
-        try buf.flush();
+        try writer.flush();
     }
 
     // builtin/[name].zig
@@ -36,12 +39,13 @@ fn writeBuiltins(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = file.writer();
-        var writer = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var cw = CodeWriter.init(writer);
 
-        try writeBuiltin(&writer, builtin, ctx);
+        try writeBuiltin(&cw, builtin, ctx);
 
-        try buf.flush();
+        try writer.flush();
     }
 }
 
@@ -272,13 +276,16 @@ fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *con
 }
 
 fn writeClasses(ctx: *const Context) !void {
+    var buf: [1024]u8 = undefined;
+
     // class.zig
     {
         const file = try ctx.config.output.createFile("class.zig", .{});
         defer file.close();
 
-        var buf = file.writer();
-        var w = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w = CodeWriter.init(writer);
 
         for (ctx.classes.values()) |class| {
             try w.printLine(
@@ -286,7 +293,7 @@ fn writeClasses(ctx: *const Context) !void {
             , .{ class.module, class.name });
         }
 
-        try buf.flush();
+        try writer.flush();
     }
 
     // class/[name].zig
@@ -298,12 +305,13 @@ fn writeClasses(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = file.writer();
-        var writer = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w = CodeWriter.init(writer);
 
-        try writeClass(&writer, class, ctx);
+        try writeClass(&w, class, ctx);
 
-        try buf.flush();
+        try writer.flush();
     }
 }
 
@@ -639,13 +647,16 @@ fn writeDocBlock(w: *CodeWriter, docs: ?[]const u8) !void {
 }
 
 fn writeGlobals(ctx: *const Context) !void {
+    var buf: [1024]u8 = undefined;
+
     // global.zig
     {
         const file = try ctx.config.output.createFile("global.zig", .{});
         defer file.close();
 
-        var buf = file.writer();
-        var w = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w = CodeWriter.init(writer);
 
         for (ctx.enums.values()) |@"enum"| {
             try w.printLine(
@@ -661,7 +672,7 @@ fn writeGlobals(ctx: *const Context) !void {
             , .{ flag.module, flag.name });
         }
 
-        try buf.flush();
+        try writer.flush();
     }
 
     // global/[name].zig
@@ -673,12 +684,13 @@ fn writeGlobals(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = file.writer();
-        var writer = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w = CodeWriter.init(writer);
 
-        try writeEnum(&writer, @"enum", ctx);
+        try writeEnum(&w, @"enum", ctx);
 
-        try buf.flush();
+        try writer.flush();
     }
 
     for (ctx.flags.values()) |*flag| {
@@ -688,12 +700,13 @@ fn writeGlobals(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = file.writer();
-        var writer = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w = CodeWriter.init(writer);
 
-        try writeFlag(&writer, flag, ctx);
+        try writeFlag(&w, flag, ctx);
 
-        try buf.flush();
+        try writer.flush();
     }
 }
 
@@ -955,10 +968,17 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
     const file: ?std.fs.File = ctx.config.input.openFile(filename, .{}) catch null;
     if (file) |f| {
         defer f.close();
-        const reader = f.reader();
 
         var buf: [1024]u8 = undefined;
-        while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        var file_reader = f.reader(&buf);
+        var reader = &file_reader.interface;
+
+        while (true) {
+            const line = reader.takeDelimiterExclusive('\n') catch |err| switch (err) {
+                error.EndOfStream => break,
+                else => return err,
+            };
+
             if (std.mem.startsWith(u8, line, "// @mixin stop")) {
                 break;
             }
@@ -969,11 +989,14 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
 }
 
 fn writeInterface(ctx: *Context) !void {
+    var buf: [1024]u8 = undefined;
+
     const file = try ctx.config.output.createFile("Interface.zig", .{});
     defer file.close();
 
-    var buf = file.writer();
-    var w = CodeWriter.init(buf.interface);
+    var file_writer = file.writer(&buf);
+    var writer = &file_writer.interface;
+    var w = CodeWriter.init(writer);
 
     try w.writeLine(
         \\const Interface = @This();
@@ -1054,11 +1077,13 @@ fn writeInterface(ctx: *Context) !void {
         \\const typeName = @import("gdzig.zig").typeName;
     );
 
-    try buf.flush();
+    try writer.flush();
     try file.sync();
 }
 
 fn writeModules(ctx: *const Context) !void {
+    var buf: [1024]u8 = undefined;
+
     for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
         defer ctx.rawAllocator().free(filename);
@@ -1066,12 +1091,13 @@ fn writeModules(ctx: *const Context) !void {
         const file = try ctx.config.output.createFile(filename, .{});
         defer file.close();
 
-        var buf = file.writer();
-        var writer = CodeWriter.init(buf.interface);
+        var file_writer = file.writer(&buf);
+        var writer = &file_writer.interface;
+        var w = CodeWriter.init(writer);
 
-        try writeModule(&writer, module, ctx);
+        try writeModule(&w, module, ctx);
 
-        try buf.flush();
+        try writer.flush();
     }
 }
 

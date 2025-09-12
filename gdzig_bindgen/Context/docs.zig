@@ -46,7 +46,7 @@ pub const DocumentContext = struct {
     current_class: ?[]const u8 = null,
     write_ctx: ?*const WriteContext = null,
     // SAFETY: will be initialized in fromWriteContext
-    writer: *std.io.AnyWriter = undefined,
+    writer: *std.io.Writer = undefined,
 
     pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
         return DocumentContext{
@@ -58,14 +58,14 @@ pub const DocumentContext = struct {
     }
 
     pub fn fromOpaque(ptr: ?*anyopaque) *DocumentContext {
-        return @constCast(@alignCast(@ptrCast(ptr)));
+        return @ptrCast(@alignCast(@constCast(ptr)));
     }
 
     pub fn fromWriteContext(write_ctx: *const WriteContext) *DocumentContext {
         var doc_ctx: *DocumentContext = .fromOpaque(write_ctx.user_data);
         if (doc_ctx.write_ctx == null) {
             doc_ctx.write_ctx = write_ctx;
-            doc_ctx.writer = @constCast(&write_ctx.writer);
+            doc_ctx.writer = @constCast(write_ctx.writer);
         }
         return doc_ctx;
     }
@@ -235,22 +235,23 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *cons
         },
         .parser_options = ParserOptions{
             .is_self_closing_fn = isSelfClosing,
-            .user_data = @constCast(@ptrCast(&doc_ctx)),
+            .user_data = @ptrCast(@constCast(&doc_ctx)),
         },
     });
     defer doc.deinit();
 
-    var output = ArrayList(u8){};
-    try bbcodez.fmt.md.renderDocument(allocator, doc, output.writer(allocator).any(), .{
+    var output: std.io.Writer.Allocating = .init(allocator);
+
+    try bbcodez.fmt.md.renderDocument(allocator, doc, &output.writer, .{
         .write_element_fn = writeElement,
-        .user_data = @constCast(@ptrCast(&doc_ctx)),
+        .user_data = @ptrCast(@constCast(&doc_ctx)),
     });
 
-    return output.toOwnedSlice(allocator);
+    return output.toOwnedSlice();
 }
 
 fn getWriteContext(ptr: ?*const anyopaque) *const WriteContext {
-    return @alignCast(@ptrCast(ptr));
+    return @ptrCast(@alignCast(ptr));
 }
 
 fn writeElement(node: Node, ctx_ptr: ?*const anyopaque) anyerror!bool {
@@ -350,7 +351,6 @@ const Document = bbcodez.Document;
 const Allocator = std.mem.Allocator;
 const Symbol = CodegenContext.Symbol;
 const Config = @import("../Config.zig");
-const ArrayList = std.ArrayListUnmanaged;
 const GodotApi = @import("../GodotApi.zig");
 const WriteContext = bbcodez.fmt.md.WriteContext;
 const ParserOptions = bbcodez.parser.Options;

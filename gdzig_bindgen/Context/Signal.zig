@@ -15,7 +15,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
     };
     self.name_api = api.name;
 
-    self.struct_name = try std.fmt.allocPrint(allocator, "{s}Signal", .{
+    self.struct_name = try std.fmt.allocPrint(allocator, "{f}Signal", .{
         case_utils.fmtSliceCasePascal(api.name),
     });
 
