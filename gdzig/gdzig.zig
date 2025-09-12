@@ -73,7 +73,7 @@ pub fn entrypointWithUserdata(
             return 1;
         }
 
-        fn init(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.C) void {
+        fn init(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
             if (opt.init) |init_cb| {
                 // TODO: remove
                 register.init();
@@ -85,7 +85,7 @@ pub fn entrypointWithUserdata(
             }
         }
 
-        fn deinit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.C) void {
+        fn deinit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
             if (opt.deinit) |deinit_cb| {
                 if (Userdata == void) {
                     deinit_cb(@enumFromInt(p_level));

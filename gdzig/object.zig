@@ -219,13 +219,13 @@ pub var dummy_callbacks = struct {
         .reference_callback = instanceBindingReferenceCallback,
     };
 
-    fn instanceBindingCreateCallback(_: ?*anyopaque, _: ?*anyopaque) callconv(.C) ?*anyopaque {
+    fn instanceBindingCreateCallback(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
         return null;
     }
 
-    fn instanceBindingFreeCallback(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.C) void {}
+    fn instanceBindingFreeCallback(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {}
 
-    fn instanceBindingReferenceCallback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExtensionBool) callconv(.C) c.GDExtensionBool {
+    fn instanceBindingReferenceCallback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExtensionBool) callconv(.c) c.GDExtensionBool {
         return 1;
     }
 }.dummy_callbacks;

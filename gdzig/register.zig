@@ -40,7 +40,7 @@ pub fn registerClass(comptime T: type) void {
                 .get_virtual_call_data_func = null,
                 .call_virtual_with_data_func = null,
                 .get_rid_func = null,
-                .class_userdata = @constCast(@ptrCast(&ClassUserData{
+                .class_userdata = @ptrCast(@constCast(&ClassUserData{
                     .class_name = @typeName(T),
                 })), // Per-class user data, later accessible in instance bindings.
             };
@@ -61,7 +61,7 @@ pub fn registerClass(comptime T: type) void {
             break :init_blk info;
         };
 
-        pub fn setBind(p_instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, value: c.GDExtensionConstVariantPtr) callconv(.C) c.GDExtensionBool {
+        pub fn setBind(p_instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, value: c.GDExtensionConstVariantPtr) callconv(.c) c.GDExtensionBool {
             if (p_instance) |p| {
                 return if (T._set(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(name))).*, @as(*Variant, @ptrCast(@alignCast(@constCast(value)))).*)) 1 else 0; //fn _set(_: *Self, name: Godot.StringName, _: Godot.Variant) bool
             } else {
@@ -69,7 +69,7 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn getBind(p_instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, value: c.GDExtensionVariantPtr) callconv(.C) c.GDExtensionBool {
+        pub fn getBind(p_instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, value: c.GDExtensionVariantPtr) callconv(.c) c.GDExtensionBool {
             if (p_instance) |p| {
                 return if (T._get(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(name))).*, @as(*Variant, @ptrCast(@alignCast(value))))) 1 else 0; //fn _get(self:*Self, name: StringName, value:*Variant) bool
             } else {
@@ -77,7 +77,7 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn getPropertyListBind(p_instance: c.GDExtensionClassInstancePtr, r_count: [*c]u32) callconv(.C) [*c]const c.GDExtensionPropertyInfo {
+        pub fn getPropertyListBind(p_instance: c.GDExtensionClassInstancePtr, r_count: [*c]u32) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
             if (p_instance) |p| {
                 const ptr: *T = @ptrCast(@alignCast(p));
 
@@ -96,7 +96,7 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn freePropertyListBind(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo, p_count: u32) callconv(.C) void {
+        pub fn freePropertyListBind(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo, p_count: u32) callconv(.c) void {
             if (@hasDecl(T, "_freePropertyList")) {
                 if (p_instance) |p| {
                     T._freePropertyList(@ptrCast(@alignCast(p)), p_list[0..p_count]); //fn _freePropertyList(self:*Self, p_list:[]const c.GDExtensionPropertyInfo) void {}
@@ -107,7 +107,7 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn propertyCanRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr) callconv(.C) c.GDExtensionBool {
+        pub fn propertyCanRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionBool {
             if (p_instance) |p| {
                 return if (T._propertyCanRevert(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(p_name))).*)) 1 else 0; //fn _property_can_revert(self:*Self, name: StringName) bool
             } else {
@@ -115,7 +115,7 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn propertyGetRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr, r_ret: c.GDExtensionVariantPtr) callconv(.C) c.GDExtensionBool {
+        pub fn propertyGetRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr, r_ret: c.GDExtensionVariantPtr) callconv(.c) c.GDExtensionBool {
             if (p_instance) |p| {
                 return if (T._propertyGetRevert(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(p_name))).*, @as(*Variant, @ptrCast(@alignCast(r_ret))))) 1 else 0; //fn _property_get_revert(self:*Self, name: StringName, ret:*Variant) bool
             } else {
@@ -123,7 +123,7 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn validatePropertyBind(p_instance: c.GDExtensionClassInstancePtr, p_property: [*c]c.GDExtensionPropertyInfo) callconv(.C) c.GDExtensionBool {
+        pub fn validatePropertyBind(p_instance: c.GDExtensionClassInstancePtr, p_property: [*c]c.GDExtensionPropertyInfo) callconv(.c) c.GDExtensionBool {
             if (p_instance) |p| {
                 return if (T._validateProperty(@ptrCast(@alignCast(p)), p_property)) 1 else 0; //fn _validate_property(self:*Self, p_property: [*c]c.GDExtensionPropertyInfo) bool
             } else {
@@ -131,13 +131,13 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn notificationBind(p_instance: c.GDExtensionClassInstancePtr, p_what: i32, _: c.GDExtensionBool) callconv(.C) void {
+        pub fn notificationBind(p_instance: c.GDExtensionClassInstancePtr, p_what: i32, _: c.GDExtensionBool) callconv(.c) void {
             if (p_instance) |p| {
                 T._notification(@ptrCast(@alignCast(p)), p_what); //fn _notification(self:*Self, what:i32) void
             }
         }
 
-        pub fn toStringBind(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: [*c]c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.C) void {
+        pub fn toStringBind(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: [*c]c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.c) void {
             if (p_instance) |p| {
                 const ret: ?String = T._toString(@ptrCast(@alignCast(p))); //fn _to_string(self:*Self) ?Godot.builtin.String {}
                 if (ret) |r| {
@@ -147,27 +147,27 @@ pub fn registerClass(comptime T: type) void {
             }
         }
 
-        pub fn referenceBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.C) void {
+        pub fn referenceBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
             T._reference(@ptrCast(@alignCast(p_instance)));
         }
 
-        pub fn unreferenceBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.C) void {
+        pub fn unreferenceBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
             T._unreference(@ptrCast(@alignCast(p_instance)));
         }
 
-        pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.C) c.GDExtensionObjectPtr {
+        pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.c) c.GDExtensionObjectPtr {
             _ = p_userdata;
             const ret = object.create(T) catch unreachable;
             return @ptrCast(object.asObject(ret));
         }
 
-        pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.C) c.GDExtensionClassInstancePtr {
+        pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.c) c.GDExtensionClassInstancePtr {
             _ = p_class_userdata;
             const ret = object.recreate(T, p_object) catch unreachable;
             return @ptrCast(ret);
         }
 
-        pub fn freeInstanceBind(p_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr) callconv(.C) void {
+        pub fn freeInstanceBind(p_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
             if (@hasDecl(T, "deinit")) {
                 @as(*T, @ptrCast(@alignCast(p_instance))).deinit();
             }
@@ -176,15 +176,15 @@ pub fn registerClass(comptime T: type) void {
         }
 
         fn getClassDataFromOpaque(p_class_userdata: ?*anyopaque) *const ClassUserData {
-            return @alignCast(@ptrCast(p_class_userdata));
+            return @ptrCast(@alignCast(p_class_userdata));
         }
 
-        pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.C) c.GDExtensionClassCallVirtual {
+        pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionClassCallVirtual {
             const virtual_bind = @field(object.BaseOf(T), "getVirtualDispatch");
             return virtual_bind(T, p_class_userdata, p_name);
         }
 
-        pub fn getRidBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.C) u64 {
+        pub fn getRidBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) u64 {
             return T._getRid(@ptrCast(@alignCast(p_instance)));
         }
     };

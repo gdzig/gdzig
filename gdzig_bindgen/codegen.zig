@@ -581,7 +581,7 @@ fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *
             try w.printLine(
                 \\if (@hasDecl(T, "{0s}") and @import("std").meta.eql(@as(*StringName, @ptrCast(@constCast(p_name))).*, StringName.fromComptimeLatin1("{1s}"))) {{
                 \\    return &struct {{
-                \\        fn call(p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.C) void {{
+                \\        fn call(p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.c) void {{
                 \\            const Fn = @TypeOf(T.{0s});
                 \\            const info = @typeInfo(Fn).@"fn";
                 \\            const method: *Fn = @ptrCast(@constCast(&T.{0s}));

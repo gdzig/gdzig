@@ -112,7 +112,7 @@ pub fn MethodBinderT(comptime MethodType: type) type {
         pub var method_name: StringName = undefined;
         pub var method_info: c.GDExtensionClassMethodInfo = undefined;
 
-        pub fn bindCall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstVariantPtr, p_argument_count: c.GDExtensionInt, p_return: c.GDExtensionVariantPtr, p_error: [*c]c.GDExtensionCallError) callconv(.C) void {
+        pub fn bindCall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstVariantPtr, p_argument_count: c.GDExtensionInt, p_return: c.GDExtensionVariantPtr, p_error: [*c]c.GDExtensionCallError) callconv(.c) void {
             _ = p_error;
             const method: *MethodType = @ptrCast(@alignCast(p_method_userdata));
             if (ArgCount == 0) {
@@ -148,11 +148,11 @@ pub fn MethodBinderT(comptime MethodType: type) type {
             } else if (comptime object.isOpaqueClassPtr(T)) {
                 return @ptrCast(@constCast(p_arg.?));
             } else {
-                return @as(*T, @ptrCast(@constCast(@alignCast(p_arg)))).*;
+                return @as(*T, @ptrCast(@alignCast(@constCast(p_arg)))).*;
             }
         }
 
-        pub fn bindPtrcall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.C) void {
+        pub fn bindPtrcall(p_method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.c) void {
             const method: *MethodType = @ptrCast(@alignCast(p_method_userdata));
             if (ArgCount == 0) {
                 if (ReturnType == void or ReturnType == null) {
@@ -181,16 +181,12 @@ const ClassMethod = Child(c.GDExtensionMethodBindPtr);
 const Constructor = Child(c.GDExtensionPtrConstructor);
 const Destructor = Child(c.GDExtensionPtrDestructor);
 const Function = Child(c.GDExtensionPtrUtilityFunction);
-const VariantFrom = Child(c.GDExtensionVariantFromTypeConstructorFunc);
-const VariantTo = Child(c.GDExtensionTypeFromVariantConstructorFunc);
 const VariantOperatorEvaluator = Child(c.GDExtensionPtrOperatorEvaluator);
 
 const std = @import("std");
 const Child = std.meta.Child;
 
 const godot = @import("gdzig.zig");
-const meta = godot.meta;
-const Object = godot.class.Object;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const c = godot.c;

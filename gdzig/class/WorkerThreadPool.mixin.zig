@@ -103,11 +103,11 @@ pub fn GroupTask(comptime Userdata: type) type {
         fn (index: u32) void;
 }
 
-fn wrapGroupTask(comptime Userdata: type, comptime original: *const GroupTask(Userdata)) fn (userdata: ?*anyopaque, index: u32) callconv(.C) void {
+fn wrapGroupTask(comptime Userdata: type, comptime original: *const GroupTask(Userdata)) fn (userdata: ?*anyopaque, index: u32) callconv(.c) void {
     return struct {
-        fn wrapped(userdata: ?*anyopaque, index: u32) callconv(.C) void {
+        fn wrapped(userdata: ?*anyopaque, index: u32) callconv(.c) void {
             if (Userdata != void) {
-                const data = @as(*Userdata, @ptrCast(@alignCast(userdata)));
+                const data: *Userdata = @ptrCast(@alignCast(userdata));
                 original(data, index);
             } else {
                 original(index);
@@ -123,11 +123,11 @@ pub fn Task(comptime Userdata: type) type {
         fn () void;
 }
 
-fn wrapTask(comptime Userdata: type, comptime original: *const Task(Userdata)) fn (userdata: ?*anyopaque) callconv(.C) void {
+fn wrapTask(comptime Userdata: type, comptime original: *const Task(Userdata)) fn (userdata: ?*anyopaque) callconv(.c) void {
     return struct {
-        fn wrapped(userdata: ?*anyopaque) callconv(.C) void {
+        fn wrapped(userdata: ?*anyopaque) callconv(.c) void {
             if (Userdata != void) {
-                const data = @as(*Userdata, @ptrCast(@alignCast(userdata)));
+                const data: *Userdata = @ptrCast(@alignCast(userdata));
                 original(data);
             } else {
                 original();
@@ -139,8 +139,6 @@ fn wrapTask(comptime Userdata: type, comptime original: *const Task(Userdata)) f
 // @mixin stop
 
 const raw: *Interface = &@import("../gdzig.zig").raw;
-
-const std = @import("std");
 
 const builtin = @import("../builtin.zig");
 const String = builtin.String;
