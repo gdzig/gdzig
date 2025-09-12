@@ -85,7 +85,7 @@ pub fn _enterTree(self: *ExampleNode) void {
     const obj: *ExampleNode = godot.object.create(ExampleNode) catch unreachable;
     const variant: Variant = Variant.init(obj);
     const result = variant.as(*ExampleNode).?;
-    std.debug.print("Result: {?}\n", .{result.fps_counter.getPosition()});
+    std.debug.print("Result: {}\n", .{result.fps_counter.getPosition()});
 
     //initialize fields
     self.example_node = null;

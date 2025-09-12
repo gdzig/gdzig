@@ -13,13 +13,18 @@ pub fn build(b: *std.Build) !void {
         .precision = @as([]const u8, "float"),
     });
 
-    const lib = b.addSharedLibrary(.{
-        .name = "example",
+    const mod = b.createModule(.{
         .root_source_file = b.path("src/example.zig"),
         .target = target,
         .optimize = optimize,
     });
-    lib.root_module.addImport("gdzig", gdzig_dep.module("gdzig"));
+    mod.addImport("gdzig", gdzig_dep.module("gdzig"));
+
+    const lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "example",
+        .root_module = mod,
+    });
 
     b.lib_dir = "./project/lib";
     b.installArtifact(lib);

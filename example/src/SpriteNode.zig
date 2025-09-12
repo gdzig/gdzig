@@ -2,7 +2,7 @@ const Self = @This();
 
 base: *Control,
 rng: std.Random = undefined,
-sprites: std.ArrayList(Sprite) = undefined,
+sprites: ArrayList(Sprite) = .empty,
 
 const Sprite = struct {
     pos: Vector2,
@@ -26,7 +26,6 @@ pub fn _ready(self: *Self) void {
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
     self.rng = prng.random();
-    self.sprites = std.ArrayList(Sprite).init(godot.heap.general_allocator);
 
     var logo_path: String = .fromLatin1("res://textures/logo.png");
     defer logo_path.deinit();
@@ -48,12 +47,14 @@ pub fn _ready(self: *Self) void {
         spr.gd_sprite.setRotation(self.randfRange(f32, 0, std.math.pi));
         spr.gd_sprite.setScale(spr.scale);
         self.base.addChild(.upcast(spr.gd_sprite), .{});
-        self.sprites.append(spr) catch unreachable;
+        self.sprites.append(godot.heap.general_allocator, spr) catch |err| {
+            std.log.err("Failed to append sprite: {}", .{err});
+        };
     }
 }
 
 pub fn _exitTree(self: *Self) void {
-    self.sprites.deinit();
+    self.sprites.deinit(godot.heap.general_allocator);
 }
 
 pub fn _physicsProcess(self: *Self, delta: f64) void {
@@ -79,6 +80,7 @@ pub fn _physicsProcess(self: *Self, delta: f64) void {
 }
 
 const std = @import("std");
+const ArrayList = std.ArrayList;
 
 const godot = @import("gdzig");
 const Control = godot.class.Control;
