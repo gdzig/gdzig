@@ -12,3 +12,11 @@ run = "zig build"
 [tasks."example:run"]
 dir = "example"
 run = "zig build run"
+
+[tasks."docs:build"]
+run = "zig build docs"
+
+[tasks."docs:serve"]
+dir = "zig-out/docs"
+depends = ["docs:build"]
+run = "mise exec bun -- bunx -y node-static ."
