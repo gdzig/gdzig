@@ -48,9 +48,6 @@
                 pkgs.lldb
                 zigPinned
                 zlsPinned
-              ]
-              ++ lib.optionals stdenv.isLinux [
-                pkgs.godot
               ];
           };
         }
