@@ -24,6 +24,7 @@ pub fn build(b: *std.Build) !void {
         .linkage = .dynamic,
         .name = "example",
         .root_module = mod,
+        .use_llvm = true,
     });
 
     b.lib_dir = "./project/lib";

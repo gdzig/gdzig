@@ -280,6 +280,7 @@ fn buildGdzig(
         .name = "gdzig",
         .root_module = mod,
         .linkage = .static,
+        .use_llvm = true,
     });
 
     const options = b.addOptions();
