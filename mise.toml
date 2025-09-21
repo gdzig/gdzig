@@ -11,8 +11,8 @@ dir = "example"
 run = "zig build"
 
 [tasks."example:run"]
-dir = "example"
-run = "zig build run"
+dir = "example/project"
+run = "godot"
 
 [tasks."docs:build"]
 run = "zig build docs"
