@@ -1,4 +1,5 @@
 [tools]
+"aqua:godotengine/godot" = "latest"
 pre-commit = "latest"
 "ubi:DonIsaac/zlint" = "latest"
 usage = "latest"
