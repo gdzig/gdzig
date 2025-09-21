@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) !void {
     mod.addImport("gdzig", gdzig_dep.module("gdzig"));
 
     const lib = b.addLibrary(.{
-        .linkage = .static,
+        .linkage = .dynamic,
         .name = "example",
         .root_module = mod,
     });
