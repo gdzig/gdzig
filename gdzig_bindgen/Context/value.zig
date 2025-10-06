@@ -81,20 +81,19 @@ test Value {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
 
-    var file = try std.fs.cwd().openFile("vendor/extension_api.json", .{});
-    defer file.close();
-
-    var buf: [4096]u8 = undefined;
-    var file_reader = file.reader(&buf);
-
     var td: TempDir = try .create(arena.allocator(), .{});
     defer td.deinit();
 
     var bindings_output = try td.open(.{});
     defer bindings_output.close();
 
-    const parsed_api = try GodotApi.parseFromReader(&arena, &file_reader.interface);
-    const ctx: Context = try .build(&arena, parsed_api.value, try Config.testConfig(bindings_output));
+    var config = try Config.testConfig(bindings_output);
+
+    var buf: [4096]u8 = undefined;
+    var extension_api_reader = config.extension_api.reader(&buf);
+
+    const parsed_api = try GodotApi.parseFromReader(&arena, &extension_api_reader.interface);
+    const ctx: Context = try .build(&arena, parsed_api.value, config);
 
     const null_value: Value = try .parse(arena.allocator(), "null", &ctx);
     try testing.expectEqual(.null, null_value);
