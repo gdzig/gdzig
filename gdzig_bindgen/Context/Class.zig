@@ -47,10 +47,12 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
     self.doc = if (api.description) |desc|
         try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
             .current_class = api.name,
+            .verbosity = ctx.config.verbosity,
         })
     else if (api.brief_description) |desc|
         try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
             .current_class = api.name,
+            .verbosity = ctx.config.verbosity,
         })
     else
         null;

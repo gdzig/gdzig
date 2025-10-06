@@ -32,7 +32,9 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     self.module = try case.allocTo(allocator, .snake, self.name);
     self.name_api = api.name;
     self.size = size_config.size;
-    self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
+    self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+        .verbosity = ctx.config.verbosity,
+    }) else null;
     self.has_destructor = api.has_destructor;
 
     for (api.constructors) |constructor| {

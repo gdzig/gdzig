@@ -98,6 +98,7 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
 
     self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = builtin_name,
+        .verbosity = ctx.config.verbosity,
     }) else null;
     self.name = blk: {
         var buf: ArrayList(u8) = .empty;
@@ -138,6 +139,7 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
 
     self.doc = if (constructor.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = builtin_name,
+        .verbosity = ctx.config.verbosity,
     }) else null;
 
     self.name = blk: {
@@ -181,6 +183,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
 
     self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = builtin_name,
+        .verbosity = ctx.config.verbosity,
     }) else null;
     self.name = try case.allocTo(allocator, .camel, api.name);
     self.name_api = api.name;
@@ -212,6 +215,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
 
     self.doc = if (api.description) |doc| try docs.convertDocsToMarkdown(allocator, doc, ctx, .{
         .current_class = class_name,
+        .verbosity = ctx.config.verbosity,
     }) else null;
     self.name = blk: {
         if (!api.is_virtual) {
@@ -317,7 +321,9 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
-    self.doc = if (function.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{}) else null;
+    self.doc = if (function.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
+        .verbosity = ctx.config.verbosity,
+    }) else null;
     self.name = try case.allocTo(allocator, .camel, function.name);
     self.name_api = function.name;
     self.hash = function.hash;
@@ -476,6 +482,8 @@ fn getReturnTypeInitializer(return_type: Type) ?[]const u8 {
     return null;
 }
 
+const testing = std.testing;
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
@@ -485,6 +493,8 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const case = @import("case");
 const case_utils = @import("../case_utils.zig");
 
+const TempDir = @import("temp").TempDir;
+const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;
 const GodotApi = @import("../GodotApi.zig");

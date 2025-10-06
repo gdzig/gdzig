@@ -151,7 +151,6 @@ pub const random = @import("random.zig");
 pub const register = @import("register.zig");
 pub const registerClass = register.registerClass;
 pub const registerMethod = register.registerMethod;
-pub const registerPlugin = register.registerPlugin;
 pub const registerSignal = register.registerSignal;
 pub const string = @import("string.zig");
 pub const support = @import("support.zig");

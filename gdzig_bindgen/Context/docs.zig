@@ -35,6 +35,7 @@ const self_closing_tags: std.StaticStringMap(void) = .initComptime(.{
 
 pub const DocumentConfig = struct {
     base_url: []const u8,
+    verbosity: Config.Verbosity = .verbose,
 };
 
 pub const DocumentContext = struct {
@@ -47,6 +48,7 @@ pub const DocumentContext = struct {
     write_ctx: ?*const WriteContext = null,
     // SAFETY: will be initialized in fromWriteContext
     writer: *std.io.Writer = undefined,
+    verbosity: Config.Verbosity = .verbose,
 
     pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
         return DocumentContext{
@@ -54,6 +56,7 @@ pub const DocumentContext = struct {
             .codegen_ctx = codegen_ctx,
             .current_class = current_class,
             .symbol_lookup = symbol_lookup,
+            .verbosity = config.verbosity,
         };
     }
 
@@ -137,7 +140,9 @@ pub const DocumentContext = struct {
             }
         }
 
-        logger.err("Enum symbol lookup failed: {s}, current class: {s}", .{ enum_name, self.current_class orelse "unknown" });
+        if (self.verbosity == .verbose) {
+            logger.err("Enum symbol lookup failed: {s}, current class: {s}", .{ enum_name, self.current_class orelse "unknown" });
+        }
         try self.writer.print("`{s}`", .{enum_name});
         return true;
     }
@@ -164,7 +169,10 @@ pub const DocumentContext = struct {
             }
         }
 
-        logger.err("Method symbol lookup failed: {s}, current class: {s}", .{ method_name, self.current_class orelse "unknown" });
+        if (self.verbosity == .verbose) {
+            logger.err("Method symbol lookup failed: {s}, current class: {s}", .{ method_name, self.current_class orelse "unknown" });
+        }
+
         try self.writer.print("`{s}`", .{method_name});
         return true;
     }
@@ -221,11 +229,13 @@ fn isSelfClosing(user_data: ?*anyopaque, token: Token) bool {
 
 pub const Options = struct {
     current_class: ?[]const u8 = null,
+    verbosity: Config.Verbosity = .verbose,
 };
 
 pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext, options: Options) ![]const u8 {
     var doc_ctx = DocumentContext.init(ctx, options.current_class, ctx.symbol_lookup, .{
         .base_url = "https://gdzig.github.io/gdzig/",
+        .verbosity = options.verbosity,
     });
 
     var doc = try Document.loadFromBuffer(allocator, input, .{
@@ -300,12 +310,18 @@ test "convertDocsToMarkdown" {
 
     const bindings_output = try td.open(.{});
     var config: Config = try .testConfig(bindings_output);
-    defer config.deinit();
 
-    const godot_api = try GodotApi.parseFromReader(&arena, config.extension_api.reader().any());
+    var buf: [4096]u8 = undefined;
+    var extension_api_reader = config.extension_api.reader(&buf);
+
+    const godot_api = try GodotApi.parseFromReader(&arena, &extension_api_reader.interface);
     defer godot_api.deinit();
 
     const ctx: CodegenContext = try .build(&arena, godot_api.value, config);
+
+    const docs_config: Options = .{
+        .verbosity = .quiet,
+    };
 
     {
         const bbcode =
@@ -326,7 +342,7 @@ test "convertDocsToMarkdown" {
             \\[b]Note:[/b] Output displayed in the editor supports clickable [code skip-lint][url=address]text[/url][/code] tags. The [code skip-lint][url][/code] tag's [code]address[/code] value is handled by [method OS.shell_open] when clicked.
         ;
 
-        const output = try convertDocsToMarkdown(testing.allocator, bbcode, &ctx, .{});
+        const output = try convertDocsToMarkdown(testing.allocator, bbcode, &ctx, docs_config);
         defer testing.allocator.free(output);
 
         // std.debug.print("{s}\n", .{output});
@@ -338,6 +354,7 @@ test "convertDocsToMarkdown" {
 
         const output = try convertDocsToMarkdown(testing.allocator, bbcode, &ctx, .{
             .current_class = "Node3D",
+            .verbosity = docs_config.verbosity,
         });
         defer testing.allocator.free(output);
 

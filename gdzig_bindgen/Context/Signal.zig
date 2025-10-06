@@ -21,6 +21,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
 
     self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
         .current_class = class_name,
+        .verbosity = ctx.config.verbosity,
     }) else null;
 
     for (api.arguments orelse &.{}) |arg| {

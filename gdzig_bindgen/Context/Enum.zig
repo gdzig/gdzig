@@ -32,6 +32,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
     for (api.values) |value| {
         const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
             .current_class = class_name,
+            .verbosity = ctx.config.verbosity,
         }) else null;
         try self.values.put(allocator, value.name, try .init(allocator, desc, value.name, value.value));
     }
@@ -50,6 +51,7 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     for (api.values) |value| {
         const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
             .current_class = class_name,
+            .verbosity = ctx.config.verbosity,
         }) else null;
         try self.values.put(allocator, value.name, try .init(allocator, desc, value.name, value.value));
     }

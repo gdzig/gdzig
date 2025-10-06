@@ -15,7 +15,9 @@ pub fn init(allocator: Allocator, doc: ?[]const u8, name: []const u8, @"type": [
         field_type = "f32";
     }
 
-    self.doc = if (doc) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{}) else null;
+    self.doc = if (doc) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
+        .verbosity = ctx.config.verbosity,
+    }) else null;
     self.name = try allocator.dupe(u8, name);
     self.name_api = try allocator.dupe(u8, name);
     self.type = try Type.from(allocator, field_type, meta != null, ctx);

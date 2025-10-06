@@ -87,6 +87,7 @@ pub const Field = struct {
     pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum.Value, ctx: *const Context, default: i64) !Field {
         const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
             .current_class = class_name,
+            .verbosity = ctx.config.verbosity,
         }) else null;
         errdefer allocator.free(doc orelse "");
 
@@ -116,6 +117,7 @@ pub const Const = struct {
     pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum.Value, ctx: *const Context) !Const {
         const doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
             .current_class = class_name,
+            .verbosity = ctx.config.verbosity,
         }) else null;
         errdefer allocator.free(doc orelse "");
 
