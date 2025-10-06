@@ -828,12 +828,22 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
                 try w.writeAll(", ");
             }
             try w.print("{s}: ", .{param.name});
-            if (param.default.?.isNullable()) {
+
+            // Check if parameter needs runtime initialization
+            if (param.needsRuntimeInit(ctx)) {
+                // Use nullable type with null default for runtime-init params
                 try w.writeAll("?");
+                try writeTypeAtOptionalParameterField(w, &param.type);
+                try w.writeAll(" = null");
+            } else {
+                // Keep existing behavior for comptime-safe defaults
+                if (param.default.?.isNullable()) {
+                    try w.writeAll("?");
+                }
+                try writeTypeAtOptionalParameterField(w, &param.type);
+                try w.writeAll(" = ");
+                try writeValue(w, param.default.?, ctx);
             }
-            try writeTypeAtOptionalParameterField(w, &param.type);
-            try w.writeAll(" = ");
-            try writeValue(w, param.default.?, ctx);
             is_first = false;
         }
         try w.writeAll(" }");
@@ -851,6 +861,17 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
         // try generateFunctionParameterTypeCheck(w, param);
     }
 
+    // Initialize runtime default values
+    if (opt < function.parameters.count()) {
+        for (function.parameters.values()[opt..]) |param| {
+            if (param.needsRuntimeInit(ctx)) {
+                try w.print("const actual_{s} = opt.{s} orelse ", .{ param.name, param.name });
+                try writeValue(w, param.default.?, ctx);
+                try w.writeLine(";");
+            }
+        }
+    }
+
     // Fixed argument slice variable
     if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
         try w.printLine("var args: [{d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
@@ -858,7 +879,11 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
-            try w.printLine("args[{d}] = @ptrCast(&opt.{s});", .{ i, param.name });
+            if (param.needsRuntimeInit(ctx)) {
+                try w.printLine("args[{d}] = @ptrCast(&actual_{s});", .{ i, param.name });
+            } else {
+                try w.printLine("args[{d}] = @ptrCast(&opt.{s});", .{ i, param.name });
+            }
         }
     }
 
@@ -869,7 +894,11 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             try w.printLine("args[{d}] = &Variant.init(&{s});", .{ i, param.name });
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
-            try w.printLine("args[{d}] = &Variant.init(&opt.{s});", .{ i, param.name });
+            if (param.needsRuntimeInit(ctx)) {
+                try w.printLine("args[{d}] = &Variant.init(&actual_{s});", .{ i, param.name });
+            } else {
+                try w.printLine("args[{d}] = &Variant.init(&opt.{s});", .{ i, param.name });
+            }
         }
         try w.printLine(
             \\inline for (0..@"...".len) |i| {{
