@@ -102,7 +102,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
     // Constructors
     for (builtin.constructors.items) |*constructor| {
-        try writeBuiltinConstructor(w, builtin.name, constructor);
+        try writeBuiltinConstructor(w, builtin.name, constructor, ctx);
         try w.writeLine("");
     }
 
@@ -114,13 +114,13 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
     // Methods
     for (builtin.methods.values()) |*method| {
-        try writeBuiltinMethod(w, builtin.name, method);
+        try writeBuiltinMethod(w, builtin.name, method, ctx);
         try w.writeLine("");
     }
 
     // Operators
     for (builtin.operators.items) |*operator| {
-        try writeBuiltinOperator(w, builtin.name, operator);
+        try writeBuiltinOperator(w, builtin.name, operator, ctx);
         try w.writeLine("");
     }
 
@@ -159,8 +159,8 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     try writeImports(w, "..", &builtin.imports, ctx);
 }
 
-fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor: *const Context.Function) !void {
-    try writeFunctionHeader(w, constructor);
+fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionHeader(w, constructor, ctx);
     if (constructor.can_init_directly) {
         for (constructor.parameters.values()) |param| {
             try w.printLine(
@@ -208,8 +208,8 @@ fn writeBuiltinDestructor(w: *CodeWriter, builtin: *const Context.Builtin) !void
     });
 }
 
-fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function) !void {
-    try writeFunctionHeader(w, method);
+fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionHeader(w, method, ctx);
     try w.printLine(
         \\if ({0s}_ptr == null) {{
         \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
@@ -234,8 +234,8 @@ fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const C
     , .{method.name});
 }
 
-fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *const Context.Function) !void {
-    try writeFunctionHeader(w, operator);
+fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionHeader(w, operator, ctx);
 
     // Lookup the method
     try w.print(
@@ -500,7 +500,7 @@ fn writeSignal(w: *CodeWriter, signal: *const Context.Signal) !void {
 }
 
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, function);
+    try writeFunctionHeader(w, function, ctx);
 
     if (class.is_singleton) {
         try w.printLine(
@@ -762,7 +762,7 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
     try w.writeLine("};");
 }
 
-fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function) !void {
+fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
     try writeDocBlock(w, function.doc);
 
     // Declaration
@@ -828,11 +828,12 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function) !void 
                 try w.writeAll(", ");
             }
             try w.print("{s}: ", .{param.name});
-            if (std.mem.eql(u8, "null", param.default.?)) {
+            if (param.default.?.isNullable()) {
                 try w.writeAll("?");
             }
             try writeTypeAtOptionalParameterField(w, &param.type);
-            try w.print(" = {s}", .{param.default.?});
+            try w.writeAll(" = ");
+            try writeValue(w, param.default.?, ctx);
             is_first = false;
         }
         try w.writeAll(" }");
@@ -898,6 +899,36 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function) !void 
                 }
             }
         }
+    }
+}
+
+fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
+    switch (value) {
+        inline .null, .string => try w.writeAll("null"),
+        .boolean => |b| try w.print("{}", .{b}),
+        .primitive => |p| try w.writeAll(p),
+        .constructor => |c| {
+            const type_name = c.type.getName().?;
+            const builtin = ctx.builtins.get(type_name) orelse std.debug.panic("Unsupported constructor: {s}", .{type_name});
+            if (builtin.findConstructorByArgumentCount(c.args.len)) |function| {
+                if (!function.can_init_directly) {
+                    std.debug.print("Constructor {s}.{s} cannot be initialized directly\n", .{ builtin.name, function.name });
+                }
+
+                try w.print("{s}.{s}(", .{ builtin.name, function.name });
+                for (c.args, 0..) |arg, i| {
+                    const pval = Context.Constant.replacements.get(arg) orelse arg;
+                    try w.writeAll(pval);
+
+                    if (i != c.args.len - 1) {
+                        try w.writeAll(", ");
+                    }
+                }
+                try w.writeAll(")");
+            } else {
+                std.debug.panic("Could not find constructor for {s} with {d} args", .{ type_name, c.args.len });
+            }
+        },
     }
 }
 
@@ -1107,13 +1138,13 @@ fn writeModules(ctx: *const Context) !void {
 
 fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Context) !void {
     for (module.functions) |*function| {
-        try writeModuleFunction(w, function);
+        try writeModuleFunction(w, function, ctx);
     }
     try writeImports(w, ".", &module.imports, ctx);
 }
 
-fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function) !void {
-    try writeFunctionHeader(w, function);
+fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionHeader(w, function, ctx);
 
     try w.printLine(
         \\if ({0s}_ptr == null) {{

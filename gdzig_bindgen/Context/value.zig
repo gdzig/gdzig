@@ -16,7 +16,11 @@ pub const Value = union(ValueType) {
         args: []const []const u8,
     },
 
-    pub fn parse(allocator: Allocator, value: []const u8, ctx: *const Context) !Value {
+    pub fn isNullable(self: Value) bool {
+        return self == .null or self == .string;
+    }
+
+    pub fn parse(arena: Allocator, value: []const u8, ctx: *const Context) !Value {
         // null
         if (value.len == 0) {
             return .null;
@@ -33,7 +37,7 @@ pub const Value = union(ValueType) {
             }
 
             if (std.mem.lastIndexOf(u8, value, "\"")) |index| {
-                return .{ .string = try allocator.dupe(u8, value[1..index]) };
+                return .{ .string = try arena.dupe(u8, value[1..index]) };
             }
 
             unreachable;
@@ -50,21 +54,81 @@ pub const Value = union(ValueType) {
         // constructor
         if (value[value.len - 1] == ')') {
             if (std.mem.indexOf(u8, value, "(")) |index| {
-                const c_type = try Type.from(allocator, value[0..index], false, ctx);
+                const c_name = value[0..index];
+                const c_type = try Type.from(arena, c_name, false, ctx);
                 const args_slice = value[index + 1 .. value.len - 1];
                 const args_count = std.mem.count(u8, args_slice, ",") + 1;
 
-                var out_args = try allocator.alloc([]const u8, args_count);
-                var args_reader = std.Io.Reader.fixed(args_slice);
-                for (0..args_count) |i| {
-                    const arg = try args_reader.takeDelimiterExclusive(',');
-                    out_args[i] = std.mem.trim(u8, arg, &std.ascii.whitespace);
+                var out_args: ?[]const []const u8 = null;
+                if (args_slice.len > 0) {
+                    var temp = try arena.alloc([]const u8, args_count);
+
+                    if (args_count == 1) {
+                        temp[0] = std.mem.trim(u8, args_slice, &std.ascii.whitespace);
+                    } else {
+                        var args_reader = std.Io.Reader.fixed(args_slice);
+                        for (0..args_count) |i| {
+                            const arg = try args_reader.takeDelimiterExclusive(',');
+                            temp[i] = std.mem.trim(u8, arg, &std.ascii.whitespace);
+                        }
+                        out_args = temp;
+                    }
+                }
+
+                if (std.mem.eql(u8, c_name, "Transform2D") and args_count == 6) {
+                    const in_args = out_args.?;
+                    var temp = try arena.alloc([]u8, 3);
+                    const fmt = ".initXY({s}, {s})";
+
+                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1] });
+                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[2], in_args[3] });
+                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[4], in_args[5] });
+
+                    return .{ .constructor = .{ .type = c_type, .args = temp } };
+                }
+
+                if (std.mem.eql(u8, c_name, "Transform3D") and args_count == 12) {
+                    const in_args = out_args.?;
+                    var temp = try arena.alloc([]u8, 4);
+                    const fmt = ".initXYZ({s}, {s}, {s})";
+
+                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1], in_args[2] });
+                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[3], in_args[4], in_args[5] });
+                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[6], in_args[7], in_args[8] });
+                    temp[3] = try std.fmt.allocPrint(arena, fmt, .{ in_args[9], in_args[10], in_args[11] });
+
+                    return .{ .constructor = .{ .type = c_type, .args = temp } };
+                }
+
+                if (std.mem.eql(u8, c_name, "Basis") and args_count == 9) {
+                    const in_args = out_args.?;
+                    var temp = try arena.alloc([]u8, 3);
+                    const fmt = ".initXYZ({s}, {s}, {s})";
+
+                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1], in_args[2] });
+                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[3], in_args[4], in_args[5] });
+                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[6], in_args[7], in_args[8] });
+
+                    return .{ .constructor = .{ .type = c_type, .args = temp } };
+                }
+
+                if (std.mem.eql(u8, c_name, "Projection") and args_count == 16) {
+                    const in_args = out_args.?;
+                    var temp = try arena.alloc([]u8, 4);
+                    const fmt = ".initXYZW({s}, {s}, {s}, {s})";
+
+                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1], in_args[2], in_args[3] });
+                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[4], in_args[5], in_args[6], in_args[7] });
+                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[8], in_args[9], in_args[10], in_args[11] });
+                    temp[3] = try std.fmt.allocPrint(arena, fmt, .{ in_args[12], in_args[13], in_args[14], in_args[15] });
+
+                    return .{ .constructor = .{ .type = c_type, .args = temp } };
                 }
 
                 return .{
                     .constructor = .{
                         .type = c_type,
-                        .args = out_args,
+                        .args = out_args orelse &.{},
                     },
                 };
             }

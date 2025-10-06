@@ -10,9 +10,9 @@ const MissingConstructors = enum {
 doc: ?[]const u8 = null,
 name: []const u8 = "_",
 type: Type = .void,
-value: []const u8 = "{}",
+value: []const u8 = "comptime unreachable",
 
-const replacements: std.StaticStringMap([]const u8) = .initComptime(.{
+pub const replacements: std.StaticStringMap([]const u8) = .initComptime(.{
     .{ "inf", "std.math.inf(" ++ (if (std.mem.eql(u8, build_options.precision, "double")) "f64" else "f32") ++ ")" },
 });
 
@@ -41,30 +41,27 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                 const args = c.args;
                 const arg_count = args.len;
 
-                // find constructor with same arg count
-                for (builtin.constructors.items) |function| {
-                    if (function.parameters.count() == arg_count) {
-                        var output = std.Io.Writer.Allocating.init(allocator);
-                        var writer = &output.writer;
-                        try writer.writeAll(function.name);
+                if (builtin.findConstructorByArgumentCount(arg_count)) |function| {
+                    var output = std.Io.Writer.Allocating.init(allocator);
+                    var writer = &output.writer;
+                    try writer.writeAll(function.name);
 
-                        try writer.writeAll("(");
-                        for (args, 0..) |arg, i| {
-                            const pval = replacements.get(arg) orelse arg;
-                            try writer.writeAll(pval);
+                    try writer.writeAll("(");
+                    for (args, 0..) |arg, i| {
+                        const pval = replacements.get(arg) orelse arg;
+                        try writer.writeAll(pval);
 
-                            if (i != arg_count - 1) {
-                                try writer.writeAll(", ");
-                            }
+                        if (i != arg_count - 1) {
+                            try writer.writeAll(", ");
                         }
-                        try writer.writeAll(")");
-
-                        break :blk output.written();
                     }
+                    try writer.writeAll(")");
+
+                    break :blk output.written();
                 }
 
                 // fallback for missing constructors
-                if (std.meta.stringToEnum(MissingConstructors, api.type)) |value| switch (value) {
+                if (std.meta.stringToEnum(Builtin.MissingConstructors, api.type)) |value| switch (value) {
                     .Transform2D => {
                         if (arg_count == 6) {
                             const fmt =

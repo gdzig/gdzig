@@ -125,6 +125,16 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     return self;
 }
 
+pub fn findConstructorByArgumentCount(self: Builtin, arg_len: usize) ?Function {
+    for (self.constructors.items) |constructor| {
+        if (constructor.parameters.count() == arg_len) {
+            return constructor;
+        }
+    }
+
+    return null;
+}
+
 pub fn deinit(self: *Builtin, allocator: Allocator) void {
     if (self.doc) |d| allocator.free(d);
     allocator.free(self.module);

@@ -366,7 +366,7 @@ pub const Parameter = struct {
     name: []const u8 = "_",
     name_api: []const u8 = "_",
     type: Type = .void,
-    default: ?[]const u8 = null,
+    default: ?Value = null,
     field_name: ?[]const u8 = null,
 
     pub const NameStyle = enum {
@@ -401,17 +401,21 @@ pub const Parameter = struct {
         });
 
         if (self.type == .array and std.mem.indexOf(u8, default, "[]") != null) {
-            self.default = "null";
+            self.default = .null;
         } else if (self.type == .string and std.mem.eql(u8, default, "\"\"")) {
-            self.default = "null";
+            self.default = .null;
         } else if (self.type == .string_name and std.mem.eql(u8, default, "&\"\"")) {
-            self.default = "null";
+            self.default = .null;
         } else if (self.type == .@"enum") {
-            self.default = try std.fmt.allocPrint(allocator, "@enumFromInt({s})", .{default});
+            self.default = .{
+                .primitive = try std.fmt.allocPrint(allocator, "@enumFromInt({s})", .{default}),
+            };
         } else if (self.type == .flag) {
-            self.default = try std.fmt.allocPrint(allocator, "@bitCast({s})", .{default});
+            self.default = .{
+                .primitive = try std.fmt.allocPrint(allocator, "@bitCast({s})", .{default}),
+            };
         } else {
-            self.default = try allocator.dupe(u8, default);
+            self.default = try .parse(allocator, default, ctx);
         }
         return self;
     }
@@ -419,7 +423,6 @@ pub const Parameter = struct {
     pub fn deinit(self: *Parameter, allocator: Allocator) void {
         allocator.free(self.name);
         self.type.deinit(allocator);
-        if (self.default) |default| allocator.free(default);
 
         self.* = .{};
     }
@@ -482,20 +485,20 @@ fn getReturnTypeInitializer(return_type: Type) ?[]const u8 {
     return null;
 }
 
-const testing = std.testing;
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const StaticStringMap = std.StaticStringMap;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
+const testing = std.testing;
 
 const case = @import("case");
-const case_utils = @import("../case_utils.zig");
-
 const TempDir = @import("temp").TempDir;
+
+const case_utils = @import("../case_utils.zig");
 const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;
 const GodotApi = @import("../GodotApi.zig");
 const docs = @import("docs.zig");
+const Value = @import("value.zig").Value;
