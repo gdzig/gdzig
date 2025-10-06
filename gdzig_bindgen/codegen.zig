@@ -940,10 +940,6 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
             const type_name = c.type.getName().?;
             const builtin = ctx.builtins.get(type_name) orelse std.debug.panic("Unsupported constructor: {s}", .{type_name});
             if (builtin.findConstructorByArgumentCount(c.args.len)) |function| {
-                if (!function.can_init_directly) {
-                    std.debug.print("Constructor {s}.{s} cannot be initialized directly\n", .{ builtin.name, function.name });
-                }
-
                 try w.print("{s}.{s}(", .{ builtin.name, function.name });
                 for (c.args, 0..) |arg, i| {
                     const pval = Context.Constant.replacements.get(arg) orelse arg;
