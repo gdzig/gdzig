@@ -75,14 +75,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                                 \\)
                             ;
 
-                            break :blk try std.fmt.allocPrint(allocator, fmt, .{
-                                args[0],
-                                args[1],
-                                args[2],
-                                args[3],
-                                args[4],
-                                args[5],
-                            });
+                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 6));
                         }
                     },
                     .Transform3D => {
@@ -96,20 +89,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                                 \\)
                             ;
 
-                            break :blk try std.fmt.allocPrint(allocator, fmt, .{
-                                args[0],
-                                args[1],
-                                args[2],
-                                args[3],
-                                args[4],
-                                args[5],
-                                args[6],
-                                args[7],
-                                args[8],
-                                args[9],
-                                args[10],
-                                args[11],
-                            });
+                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 12));
                         }
                     },
                     .Basis => {
@@ -122,17 +102,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                                 \\)
                             ;
 
-                            break :blk try std.fmt.allocPrint(allocator, fmt, .{
-                                args[0],
-                                args[1],
-                                args[2],
-                                args[3],
-                                args[4],
-                                args[5],
-                                args[6],
-                                args[7],
-                                args[8],
-                            });
+                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 9));
                         }
                     },
                     .Projection => {
@@ -146,24 +116,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                                 \\)
                             ;
 
-                            break :blk try std.fmt.allocPrint(allocator, fmt, .{
-                                args[0],
-                                args[1],
-                                args[2],
-                                args[3],
-                                args[4],
-                                args[5],
-                                args[6],
-                                args[7],
-                                args[8],
-                                args[9],
-                                args[10],
-                                args[11],
-                                args[12],
-                                args[13],
-                                args[14],
-                                args[15],
-                            });
+                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 16));
                         }
                     },
                 };
@@ -196,6 +149,21 @@ pub fn deinit(self: *Constant, allocator: Allocator) void {
     allocator.free(self.value);
 
     self.* = .{};
+}
+
+// https://ziggit.dev/t/comptime-code-to-create-a-tuple-from-an-array/11329/3
+fn BuildTupleFromArray(comptime Array: type, comptime len: usize) type {
+    const Element = std.meta.Elem(Array);
+    const types_array: [len]type = @splat(Element);
+    return std.meta.Tuple(&types_array);
+}
+
+fn buildTupleFromArray(array: anytype, comptime len: usize) BuildTupleFromArray(@TypeOf(array), len) {
+    var a: BuildTupleFromArray(@TypeOf(array), len) = undefined;
+    inline for (array, 0..len) |value, i| {
+        a[i] = value;
+    }
+    return a;
 }
 
 const Type = Context.Type;
