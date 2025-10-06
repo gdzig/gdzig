@@ -85,35 +85,64 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
     // find if there is a constructor
     // where every parameter matches the name
-    // and type of each field
-    const field_count = self.fields.count();
+    // and type of each field (only count fields with offsets - actual struct fields)
+    const field_count = blk: {
+        var count: usize = 0;
+        for (self.fields.values()) |field| {
+            if (field.offset != null) count += 1;
+        }
+        break :blk count;
+    };
     if (field_count > 0) {
         for (self.constructors.items) |*function| {
             if (function.parameters.count() == field_count) {
+                var matched = true;
+                // Fields are sorted by offset, so first field_count entries have offsets
                 for (0..field_count) |i| {
                     const field = self.fields.entries.get(i);
                     const param = function.parameters.entries.get(i);
 
                     if (!std.mem.eql(u8, field.value.name_api, param.value.name_api)) {
-                        continue;
+                        matched = false;
+                        break;
                     }
 
-                    if (!field.value.type.eql(param.value.type)) {
-                        continue;
+                    // Types must match, but allow float conversions (f32 <-> f64)
+                    const types_compatible = blk: {
+                        if (field.value.type.eql(param.value.type)) break :blk true;
+
+                        // Allow float type conversions
+                        const field_is_float = switch (field.value.type) {
+                            .basic => |name| std.mem.eql(u8, name, "f32") or std.mem.eql(u8, name, "f64"),
+                            else => false,
+                        };
+                        const param_is_float = switch (param.value.type) {
+                            .basic => |name| std.mem.eql(u8, name, "f32") or std.mem.eql(u8, name, "f64"),
+                            else => false,
+                        };
+
+                        break :blk field_is_float and param_is_float;
+                    };
+
+                    if (!types_compatible) {
+                        matched = false;
+                        break;
                     }
                 }
 
-                function.can_init_directly = true;
+                if (matched) {
+                    function.can_init_directly = true;
 
-                for (0..field_count) |i| {
-                    const field = self.fields.entries.get(i).value;
-                    var param = function.parameters.entries.get(i);
-                    param.value.field_name = field.name;
+                    for (0..field_count) |i| {
+                        const field = self.fields.entries.get(i).value;
+                        var param = function.parameters.entries.get(i);
+                        param.value.field_name = field.name;
 
-                    function.parameters.entries.set(i, param);
+                        function.parameters.entries.set(i, param);
+                    }
+
+                    break;
                 }
-
-                break;
             }
         }
     }

@@ -198,13 +198,11 @@ test Value {
     try testing.expect(transform == .constructor);
     try testing.expect(transform.constructor.type == .basic);
     try testing.expectEqualStrings("Transform2D", transform.constructor.type.basic);
-    try testing.expectEqual(6, transform.constructor.args.len);
-    try testing.expectEqualStrings("0", transform.constructor.args[0]);
-    try testing.expectEqualStrings("1", transform.constructor.args[1]);
-    try testing.expectEqualStrings("2", transform.constructor.args[2]);
-    try testing.expectEqualStrings("3", transform.constructor.args[3]);
-    try testing.expectEqualStrings("4", transform.constructor.args[4]);
-    try testing.expectEqualStrings("5", transform.constructor.args[5]);
+    // Transform2D(0,1,2,3,4,5) with 6 args gets transformed into 3 Vector2.initXY() calls
+    try testing.expectEqual(3, transform.constructor.args.len);
+    try testing.expectEqualStrings(".initXY(0, 1)", transform.constructor.args[0]);
+    try testing.expectEqualStrings(".initXY(2, 3)", transform.constructor.args[1]);
+    try testing.expectEqualStrings(".initXY(4, 5)", transform.constructor.args[2]);
 
     const primitive: Value = try .parse(arena.allocator(), "123", &ctx);
     try testing.expect(primitive == .primitive);
