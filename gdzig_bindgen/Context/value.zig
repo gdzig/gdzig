@@ -20,6 +20,28 @@ pub const Value = union(ValueType) {
         return self == .null or self == .string;
     }
 
+    pub fn needsRuntimeInit(self: Value, ctx: *const Context) bool {
+        switch (self) {
+            .constructor => |c| {
+                // Extract the type name from the constructor type
+                const type_name = switch (c.type) {
+                    .basic => |name| name,
+                    else => return false, // Only builtin types can have constructors
+                };
+
+                // Look up the builtin type
+                const builtin = ctx.builtins.get(type_name) orelse return false;
+
+                // Find the constructor with matching argument count
+                const constructor = builtin.findConstructorByArgumentCount(c.args.len) orelse return false;
+
+                // Return true if the constructor cannot be initialized directly (needs runtime init)
+                return !constructor.can_init_directly;
+            },
+            else => return false,
+        }
+    }
+
     pub fn parse(arena: Allocator, value: []const u8, ctx: *const Context) !Value {
         // null
         if (value.len == 0) {

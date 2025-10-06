@@ -369,6 +369,13 @@ pub const Parameter = struct {
     default: ?Value = null,
     field_name: ?[]const u8 = null,
 
+    pub fn needsRuntimeInit(self: Parameter, ctx: *const Context) bool {
+        if (self.default) |default_value| {
+            return default_value.needsRuntimeInit(ctx);
+        }
+        return false;
+    }
+
     pub const NameStyle = enum {
         none,
         prefixed,
