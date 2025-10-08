@@ -950,8 +950,6 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
                     }
                 }
                 try w.writeAll(")");
-            } else {
-                std.debug.panic("Could not find constructor for {s} with {d} args", .{ type_name, c.args.len });
             }
         },
     }

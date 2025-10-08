@@ -1,7 +1,6 @@
 const Constant = @This();
 
 const MissingConstructors = enum {
-    Transform2D,
     Transform3D,
     Basis,
     Projection,
@@ -62,19 +61,6 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
 
                 // fallback for missing constructors
                 if (std.meta.stringToEnum(MissingConstructors, api.type)) |value| switch (value) {
-                    .Transform2D => {
-                        if (arg_count == 6) {
-                            const fmt =
-                                \\initXAxisYAxisOrigin(
-                                \\    .initXY({s}, {s}),
-                                \\    .initXY({s}, {s}),
-                                \\    .initXY({s}, {s})
-                                \\)
-                            ;
-
-                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 6));
-                        }
-                    },
                     .Transform3D => {
                         if (arg_count == 12) {
                             const fmt =

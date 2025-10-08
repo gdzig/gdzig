@@ -23,6 +23,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     errdefer self.deinit(allocator);
 
     const size_config = ctx.builtin_sizes.get(api.name).?;
+    const overrides_config: BuiltinOverrides = overrides.builtins.get(api.name) orelse .empty;
 
     self.name = blk: {
         // TODO: case conversion
@@ -80,6 +81,10 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     }
 
     for (api.constants orelse &.{}) |constant| {
+        if (overrides_config.constants_blacklist.has(constant.name)) {
+            continue;
+        }
+
         try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, &self, constant, ctx));
     }
 
@@ -214,3 +219,6 @@ const Function = Context.Function;
 const Imports = Context.Imports;
 const GodotApi = @import("../GodotApi.zig");
 const docs = @import("docs.zig");
+
+const overrides = @import("../overrides.zig");
+const BuiltinOverrides = overrides.BuiltinOverrides;

@@ -1,0 +1,20 @@
+pub const BuiltinOverrides = struct {
+    pub const empty: @This() = .{};
+
+    constants_blacklist: StaticStringMap(void) = .initComptime(.{}),
+};
+
+pub const builtins: StaticStringMap(BuiltinOverrides) = .initComptime(.{
+    .{
+        "Transform2D", BuiltinOverrides{
+            .constants_blacklist = .initComptime(.{
+                .{"IDENTITY"},
+                .{"FLIP_X"},
+                .{"FLIP_Y"},
+            }),
+        },
+    },
+});
+
+const std = @import("std");
+const StaticStringMap = std.StaticStringMap;

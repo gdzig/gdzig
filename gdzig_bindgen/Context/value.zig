@@ -97,18 +97,6 @@ pub const Value = union(ValueType) {
                     }
                 }
 
-                if (std.mem.eql(u8, c_name, "Transform2D") and args_count == 6) {
-                    const in_args = out_args.?;
-                    var temp = try arena.alloc([]u8, 3);
-                    const fmt = ".initXY({s}, {s})";
-
-                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1] });
-                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[2], in_args[3] });
-                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[4], in_args[5] });
-
-                    return .{ .constructor = .{ .type = c_type, .args = temp } };
-                }
-
                 if (std.mem.eql(u8, c_name, "Transform3D") and args_count == 12) {
                     const in_args = out_args.?;
                     var temp = try arena.alloc([]u8, 4);
