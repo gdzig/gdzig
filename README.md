@@ -22,4 +22,4 @@ https://github.com/gdzig/gdzig/blob/84b0828f491d6e9e330b1c1e6a9b84d28dcdacbf/exa
 
 # Community
 
-Find us in the #gdzig channel on [Libera Chat](https://libera.chat/) using your IRC client of choice or via [web chat](https://web.libera.chat/#gdzig).
+Find us in the [gdzig Discord server](https://discord.gg/GEUZGRGeDj).
