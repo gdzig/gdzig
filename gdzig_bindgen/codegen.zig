@@ -950,6 +950,8 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
                     }
                 }
                 try w.writeAll(")");
+            } else {
+                std.debug.panic("Unsupported constructor: {s}", .{type_name});
             }
         },
     }
