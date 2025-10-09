@@ -97,44 +97,6 @@ pub const Value = union(ValueType) {
                     }
                 }
 
-                if (std.mem.eql(u8, c_name, "Transform3D") and args_count == 12) {
-                    const in_args = out_args.?;
-                    var temp = try arena.alloc([]u8, 4);
-                    const fmt = ".initXYZ({s}, {s}, {s})";
-
-                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1], in_args[2] });
-                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[3], in_args[4], in_args[5] });
-                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[6], in_args[7], in_args[8] });
-                    temp[3] = try std.fmt.allocPrint(arena, fmt, .{ in_args[9], in_args[10], in_args[11] });
-
-                    return .{ .constructor = .{ .type = c_type, .args = temp } };
-                }
-
-                if (std.mem.eql(u8, c_name, "Basis") and args_count == 9) {
-                    const in_args = out_args.?;
-                    var temp = try arena.alloc([]u8, 3);
-                    const fmt = ".initXYZ({s}, {s}, {s})";
-
-                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1], in_args[2] });
-                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[3], in_args[4], in_args[5] });
-                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[6], in_args[7], in_args[8] });
-
-                    return .{ .constructor = .{ .type = c_type, .args = temp } };
-                }
-
-                if (std.mem.eql(u8, c_name, "Projection") and args_count == 16) {
-                    const in_args = out_args.?;
-                    var temp = try arena.alloc([]u8, 4);
-                    const fmt = ".initXYZW({s}, {s}, {s}, {s})";
-
-                    temp[0] = try std.fmt.allocPrint(arena, fmt, .{ in_args[0], in_args[1], in_args[2], in_args[3] });
-                    temp[1] = try std.fmt.allocPrint(arena, fmt, .{ in_args[4], in_args[5], in_args[6], in_args[7] });
-                    temp[2] = try std.fmt.allocPrint(arena, fmt, .{ in_args[8], in_args[9], in_args[10], in_args[11] });
-                    temp[3] = try std.fmt.allocPrint(arena, fmt, .{ in_args[12], in_args[13], in_args[14], in_args[15] });
-
-                    return .{ .constructor = .{ .type = c_type, .args = temp } };
-                }
-
                 return .{
                     .constructor = .{
                         .type = c_type,

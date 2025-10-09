@@ -1,11 +1,5 @@
 const Constant = @This();
 
-const MissingConstructors = enum {
-    Transform3D,
-    Basis,
-    Projection,
-};
-
 doc: ?[]const u8 = null,
 name: []const u8 = "_",
 type: Type = .void,
@@ -58,51 +52,6 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
 
                     break :blk output.written();
                 }
-
-                // fallback for missing constructors
-                if (std.meta.stringToEnum(MissingConstructors, api.type)) |value| switch (value) {
-                    .Transform3D => {
-                        if (arg_count == 12) {
-                            const fmt =
-                                \\initXAxisYAxisZAxisOrigin(
-                                \\    .initXYZ({s}, {s}, {s}),
-                                \\    .initXYZ({s}, {s}, {s}),
-                                \\    .initXYZ({s}, {s}, {s}),
-                                \\    .initXYZ({s}, {s}, {s})
-                                \\)
-                            ;
-
-                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 12));
-                        }
-                    },
-                    .Basis => {
-                        if (arg_count == 9) {
-                            const fmt =
-                                \\initXAxisYAxisZAxis(
-                                \\    .initXYZ({s}, {s}, {s}),
-                                \\    .initXYZ({s}, {s}, {s}),
-                                \\    .initXYZ({s}, {s}, {s})
-                                \\)
-                            ;
-
-                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 9));
-                        }
-                    },
-                    .Projection => {
-                        if (arg_count == 16) {
-                            const fmt =
-                                \\initXAxisYAxisZAxisWAxis(
-                                \\    .initXYZW({s}, {s}, {s}, {s}),
-                                \\    .initXYZW({s}, {s}, {s}, {s}),
-                                \\    .initXYZW({s}, {s}, {s}, {s}),
-                                \\    .initXYZW({s}, {s}, {s}, {s})
-                                \\)
-                            ;
-
-                            break :blk try std.fmt.allocPrint(allocator, fmt, buildTupleFromArray(args, 16));
-                        }
-                    },
-                };
             },
             else => {},
         }
