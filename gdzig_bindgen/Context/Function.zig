@@ -37,6 +37,8 @@ is_vararg: bool = false,
 /// instead of calling the GDExtension API, which enables comptime initialization.
 can_init_directly: bool = false,
 
+skip: bool = false,
+
 /// This maps the API's operator name to a function name
 const operator_fn_names: StaticStringMap([]const u8) = .initComptime(.{
     .{ "+", "add" },
@@ -208,6 +210,61 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
     self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     return self;
+}
+
+const MixinType = enum {
+    constructor,
+    method,
+};
+
+pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { MixinType, Function } {
+    var buffer: [1]NodeIndex = undefined;
+    const proto = ast.fullFnProto(&buffer, index) orelse return null;
+    const node = ast.nodes.get(@intFromEnum(index));
+
+    const name_token = proto.name_token orelse return null;
+    const fn_name = ast.tokenSlice(name_token);
+
+    const is_pub = blk: {
+        const main_token = node.main_token;
+        var token_index: usize = 0;
+        while (token_index < main_token) : (token_index += 1) {
+            const maybe_pub = ast.tokens.get(token_index);
+            if (maybe_pub.tag == .keyword_pub) {
+                break :blk true;
+            }
+        }
+        break :blk false;
+    };
+
+    if (!is_pub) {
+        return null;
+    }
+
+    const fn_type: MixinType = blk: {
+        if (proto.ast.params.len > 0) {
+            const first_param_node = proto.ast.params[0];
+            const param_node = ast.nodes.get(@intFromEnum(first_param_node));
+            const param_name = ast.tokenSlice(param_node.main_token);
+
+            if (std.mem.eql(u8, param_name, "self")) {
+                break :blk .method;
+            }
+        }
+        break :blk .constructor;
+    };
+
+    var function: Function = .{ .skip = true };
+    function.name = try allocator.dupe(u8, fn_name);
+    function.name_api = try case.allocTo(allocator, .snake, fn_name);
+
+    for (proto.ast.params) |param_index| {
+        const param_node = ast.nodes.get(@intFromEnum(param_index));
+        const param_name = try allocator.dupe(u8, ast.tokenSlice(param_node.main_token - 2));
+        try function.parameters.put(allocator, param_name, .{});
+    }
+
+    return .{ fn_type, function };
 }
 
 pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bool, api: GodotApi.Class.Method, ctx: *const Context) !Function {
@@ -498,6 +555,10 @@ const ArrayList = std.ArrayListUnmanaged;
 const StaticStringMap = std.StaticStringMap;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const testing = std.testing;
+
+const Ast = std.zig.Ast;
+const Node = Ast.Node;
+const NodeIndex = Node.Index;
 
 const case = @import("case");
 const TempDir = @import("temp").TempDir;

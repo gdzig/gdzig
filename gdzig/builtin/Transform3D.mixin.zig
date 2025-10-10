@@ -54,6 +54,15 @@ pub const flip_z: Transform3D = .initXAxisYAxisZAxisOrigin(
     .initXYZ(0, 0, 0),
 );
 
+pub fn initXAxisYAxisZAxisOriginComponents(xx: f32, xy: f32, xz: f32, yx: f32, yy: f32, yz: f32, zx: f32, zy: f32, zz: f32, ox: f32, oy: f32, oz: f32) Transform3D {
+    return .initXAxisYAxisZAxisOrigin(
+        .initXYZ(xx, xy, xz),
+        .initXYZ(yx, yy, yz),
+        .initXYZ(zx, zy, zz),
+        .initXYZ(ox, oy, oz),
+    );
+}
+
 // @mixin stop
 
 const Transform3D = @import("./transform3_d.zig").Transform3D;

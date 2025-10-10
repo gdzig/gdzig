@@ -42,6 +42,14 @@ pub const flip_y: Transform2D = .initXAxisYAxisOrigin(
     .initXY(0, 0),
 );
 
+pub fn initXAxisYAxisOriginComponents(xx: f32, xy: f32, yx: f32, yy: f32, ox: f32, oy: f32) Transform2D {
+    return .initXAxisYAxisOrigin(
+        .initXY(xx, xy),
+        .initXY(yx, yy),
+        .initXY(ox, oy),
+    );
+}
+
 // @mixin stop
 
 const Transform2D = @import("./transform2_d.zig").Transform2D;

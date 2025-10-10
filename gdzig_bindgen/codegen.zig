@@ -102,6 +102,8 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
     // Constructors
     for (builtin.constructors.items) |*constructor| {
+        if (constructor.skip) continue;
+
         try writeBuiltinConstructor(w, builtin.name, constructor, ctx);
         try w.writeLine("");
     }
@@ -114,6 +116,8 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
     // Methods
     for (builtin.methods.values()) |*method| {
+        if (method.skip) continue;
+
         try writeBuiltinMethod(w, builtin.name, method, ctx);
         try w.writeLine("");
     }
@@ -381,6 +385,8 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Functions
     for (class.functions.values()) |*function| {
+        if (function.skip) continue;
+
         if (function.mode != .final) continue;
         try writeClassFunction(w, class, function, ctx);
         try w.writeLine("");
@@ -1163,6 +1169,8 @@ fn writeModules(ctx: *const Context) !void {
 
 fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Context) !void {
     for (module.functions) |*function| {
+        if (function.skip) continue;
+
         try writeModuleFunction(w, function, ctx);
     }
     try writeImports(w, ".", &module.imports, ctx);

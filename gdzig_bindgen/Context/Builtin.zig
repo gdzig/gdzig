@@ -159,6 +159,43 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     return self;
 }
 
+pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator) !void {
+    const mixin_file_path = try std.fmt.allocPrint(allocator, "gdzig/builtin/{s}.mixin.zig", .{self.name});
+    const file = std.fs.cwd().openFile(mixin_file_path, .{}) catch return;
+
+    var buf: [4096]u8 = undefined;
+    var file_reader = file.reader(&buf);
+
+    const contents = try allocator.allocSentinel(u8, @intCast(try file.getEndPos()), 0);
+    try file_reader.interface.readSliceAll(contents);
+
+    var ast = try Ast.parse(allocator, contents, .zig);
+    defer ast.deinit(allocator);
+
+    if (ast.errors.len > 0) {
+        std.log.err("Failed to parse {s} mixin.", .{self.name});
+        return error.ParseError;
+    }
+
+    const root_decls = ast.rootDecls();
+    for (root_decls) |index| {
+        const node = ast.nodes.get(@intFromEnum(index));
+
+        switch (node.tag) {
+            .fn_decl => if (try Function.fromMixin(allocator, ast, index)) |result| {
+                const fn_type, const function = result;
+                switch (fn_type) {
+                    .constructor => {
+                        try self.constructors.append(allocator, function);
+                    },
+                    .method => try self.methods.put(allocator, function.name, function),
+                }
+            },
+            else => {},
+        }
+    }
+}
+
 pub fn findConstructorByArgumentCount(self: Builtin, arg_len: usize) ?Function {
     for (self.constructors.items) |constructor| {
         if (constructor.parameters.count() == arg_len) {
@@ -208,6 +245,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
+
+const Ast = std.zig.Ast;
+const Node = Ast.Node;
 
 const case = @import("case");
 

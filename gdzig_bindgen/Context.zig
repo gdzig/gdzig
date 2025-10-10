@@ -360,9 +360,13 @@ fn collectSizes(self: *Context) !void {
 }
 
 fn castBuiltins(self: *Context) !void {
-    for (self.api.builtin_classes) |builtin| {
-        if (util.shouldSkipClass(builtin.name)) continue;
-        try self.builtins.put(self.allocator(), builtin.name, try .fromApi(self.allocator(), builtin, self));
+    for (self.api.builtin_classes) |api| {
+        if (util.shouldSkipClass(api.name)) continue;
+
+        var builtin: Builtin = try .fromApi(self.allocator(), api, self);
+        try builtin.loadMixinIfExists(self.allocator());
+
+        try self.builtins.put(self.allocator(), builtin.name_api, builtin);
     }
 }
 
