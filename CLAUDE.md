@@ -23,6 +23,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `zig build run` - Build example and run with Godot
 - `zig build load` - Load the example project in Godot editor
 
+### Documentation Commands
+- `zigdoc <symbol>` - Show documentation for Zig standard library symbols and imported modules
+  - Examples:
+    - `zigdoc std.ArrayList` - Show ArrayList documentation
+    - `zigdoc std.zig.Ast` - Show AST documentation
+    - `zigdoc std.zig.Ast.parse` - Show documentation for specific function
+  - Can access any module imported in build.zig, including third-party dependencies
+  - Use `zigdoc --dump-imports` to see available modules
+
 ## Architecture
 
 ### Core Components
