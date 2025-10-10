@@ -846,7 +846,6 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
                 try writeTypeAtOptionalParameterField(w, &param.type);
                 try w.writeAll(" = null");
             } else {
-                // Keep existing behavior for comptime-safe defaults
                 if (param.default.?.isNullable()) {
                     try w.writeAll("?");
                 }
