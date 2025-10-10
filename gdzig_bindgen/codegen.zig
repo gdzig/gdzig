@@ -94,6 +94,8 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
     // Constants
     for (builtin.constants.values()) |*constant| {
+        if (constant.skip) continue;
+
         try writeConstant(w, constant);
     }
     if (builtin.constants.count() > 0) {
@@ -350,6 +352,8 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Constants
     for (class.constants.values()) |*constant| {
+        if (constant.skip) continue;
+
         try writeConstant(w, constant);
     }
     if (class.constants.count() > 0) {

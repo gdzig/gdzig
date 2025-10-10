@@ -23,7 +23,6 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     errdefer self.deinit(allocator);
 
     const size_config = ctx.builtin_sizes.get(api.name).?;
-    const overrides_config: BuiltinOverrides = overrides.builtins.get(api.name) orelse .empty;
 
     self.name = blk: {
         // TODO: case conversion
@@ -81,10 +80,6 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     }
 
     for (api.constants orelse &.{}) |constant| {
-        if (overrides_config.constants_blacklist.has(constant.name)) {
-            continue;
-        }
-
         try self.constants.put(allocator, constant.name, try Constant.fromBuiltin(allocator, &self, constant, ctx));
     }
 
@@ -169,7 +164,16 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator) !void {
     const contents = try allocator.allocSentinel(u8, @intCast(try file.getEndPos()), 0);
     try file_reader.interface.readSliceAll(contents);
 
-    var ast = try Ast.parse(allocator, contents, .zig);
+    // find the @mixin stop marker and only parse up to that point
+    const parse_contents: [:0]const u8 = blk: {
+        if (std.mem.indexOf(u8, contents, "// @mixin stop")) |stop_idx| {
+            contents[stop_idx] = 0;
+            break :blk contents[0..stop_idx :0];
+        }
+        break :blk contents;
+    };
+
+    var ast = try Ast.parse(allocator, parse_contents, .zig);
     defer ast.deinit(allocator);
 
     if (ast.errors.len > 0) {
@@ -190,6 +194,9 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator) !void {
                     },
                     .method => try self.methods.put(allocator, function.name, function),
                 }
+            },
+            .simple_var_decl, .aligned_var_decl, .global_var_decl => if (try Constant.fromMixin(allocator, ast, index)) |constant| {
+                try self.constants.put(allocator, constant.name_api, constant);
             },
             else => {},
         }
@@ -259,6 +266,3 @@ const Function = Context.Function;
 const Imports = Context.Imports;
 const GodotApi = @import("../GodotApi.zig");
 const docs = @import("docs.zig");
-
-const overrides = @import("../overrides.zig");
-const BuiltinOverrides = overrides.BuiltinOverrides;
