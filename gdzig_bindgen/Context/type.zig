@@ -1,6 +1,10 @@
 pub const Type = union(enum) {
     void: void,
 
+    /// Integer types (i8, i16, i32, i64, u8, u16, u32, u64)
+    int: []const u8,
+    /// Floating point types (f32, f64)
+    float: []const u8,
     /// Basic types with no special handling
     basic: []const u8,
     /// Godot Strings, used for string coercion
@@ -26,56 +30,33 @@ pub const Type = union(enum) {
         .{ "StringName", .string_name },
         .{ "NodePath", .node_path },
         .{ "Variant", .variant },
-        .{ "char32", Type{ .basic = "u32" } },
-        .{ "float", Type{ .basic = "f64" } },
-        .{ "double", Type{ .basic = "f64" } },
-        .{ "int", Type{ .basic = "i64" } },
-        .{ "int8", Type{ .basic = "i8" } },
-        .{ "int16", Type{ .basic = "i16" } },
-        .{ "int32", Type{ .basic = "i32" } },
-        .{ "int64", Type{ .basic = "i64" } },
-        .{ "uint8_t", Type{ .basic = "u8" } },
-        .{ "uint8", Type{ .basic = "u8" } },
-        .{ "uint16", Type{ .basic = "u16" } },
-        .{ "uint32", Type{ .basic = "u32" } },
-        .{ "uint64", Type{ .basic = "u64" } },
+        .{ "char32", Type{ .int = "u32" } },
+        .{ "f32", Type{ .float = "f32" } },
+        .{ "f64", Type{ .float = "f64" } },
+        .{ "float", Type{ .float = "f64" } },
+        .{ "double", Type{ .float = "f64" } },
+        .{ "i8", Type{ .int = "i8" } },
+        .{ "i16", Type{ .int = "i16" } },
+        .{ "i32", Type{ .int = "i32" } },
+        .{ "i64", Type{ .int = "i64" } },
+        .{ "u8", Type{ .int = "u8" } },
+        .{ "u16", Type{ .int = "u16" } },
+        .{ "u32", Type{ .int = "u32" } },
+        .{ "u64", Type{ .int = "u64" } },
+        .{ "int", Type{ .int = "i64" } },
+        .{ "int8", Type{ .int = "i8" } },
+        .{ "int16", Type{ .int = "i16" } },
+        .{ "int32", Type{ .int = "i32" } },
+        .{ "int64", Type{ .int = "i64" } },
+        .{ "uint8_t", Type{ .int = "u8" } },
+        .{ "uint8", Type{ .int = "u8" } },
+        .{ "uint16", Type{ .int = "u16" } },
+        .{ "uint32", Type{ .int = "u32" } },
+        .{ "uint64", Type{ .int = "u64" } },
     });
 
     // TODO: may no longer be needed
     const meta_overrides: std.StaticStringMap(Type) = .initComptime(.{});
-
-    /// Categorizes numeric types for approximate equality checks.
-    /// Allows int-to-int and float-to-float conversions for comptime initialization.
-    pub const TypeCategory = enum {
-        int,
-        float,
-        other,
-
-        /// Returns true if both categories are the same numeric type (int or float).
-        /// Returns false for .other, even if both are .other, since non-numeric types
-        /// cannot be approximately equal.
-        pub fn eql(self: TypeCategory, other: TypeCategory) bool {
-            return self == other and self != .other;
-        }
-    };
-
-    pub const type_category_map: std.StaticStringMap(TypeCategory) = .initComptime(.{
-        // Float types
-        .{ "f32", .float },
-        .{ "f64", .float },
-
-        // Signed integer types
-        .{ "i8", .int },
-        .{ "i16", .int },
-        .{ "i32", .int },
-        .{ "i64", .int },
-
-        // Unsigned integer types
-        .{ "u8", .int },
-        .{ "u16", .int },
-        .{ "u32", .int },
-        .{ "u64", .int },
-    });
 
     pub fn from(allocator: Allocator, name: []const u8, is_meta: bool, ctx: *const Context) !Type {
         var normalized = name;
@@ -149,11 +130,14 @@ pub const Type = union(enum) {
     pub fn deinit(self: *Type, allocator: Allocator) void {
         switch (self.*) {
             .array => |elem| if (elem) |t| t.deinit(allocator),
-            .basic => |name| allocator.free(name),
-            .class => |name| allocator.free(name),
-            .@"enum" => |name| allocator.free(name),
-            .flag => |name| allocator.free(name),
-            .@"union" => |types| allocator.free(types),
+            inline .int,
+            .float,
+            .basic,
+            .class,
+            .@"enum",
+            .flag,
+            .@"union",
+            => |name| allocator.free(name),
             else => {},
         }
 
@@ -167,10 +151,13 @@ pub const Type = union(enum) {
                 try t.format(fmt, options, writer);
                 try writer.writeAll("]");
             },
-            .basic => |name| try writer.writeAll(name),
-            .class => |name| try writer.writeAll(name),
-            .@"enum" => |name| try writer.writeAll(name),
-            .flag => |name| try writer.writeAll(name),
+            inline .int,
+            .float,
+            .basic,
+            .class,
+            .@"enum",
+            .flag,
+            => |name| try writer.writeAll(name),
             .@"union" => |types| {
                 try writer.writeAll("union(");
                 for (types, 0..) |t, i| {
@@ -194,9 +181,11 @@ pub const Type = union(enum) {
 
     pub fn eql(self: Type, other: Type) bool {
         return switch (self) {
-            .@"enum", .flag, .basic, .class => |name| switch (other) {
+            .@"enum", .flag, .int, .float, .basic, .class => |name| switch (other) {
                 .@"enum" => |other_name| std.mem.eql(u8, name, other_name),
                 .flag => |other_name| std.mem.eql(u8, name, other_name),
+                .int => |other_name| std.mem.eql(u8, name, other_name),
+                .float => |other_name| std.mem.eql(u8, name, other_name),
                 .basic => |other_name| std.mem.eql(u8, name, other_name),
                 .class => |other_name| std.mem.eql(u8, name, other_name),
                 else => false,
@@ -249,42 +238,29 @@ pub const Type = union(enum) {
         // First check exact equality
         if (self.eql(other)) return true;
 
-        // Only allow approximate equality for basic types
-        const self_name = switch (self) {
-            .basic => |name| name,
-            else => return false,
-        };
-        const other_name = switch (other) {
-            .basic => |name| name,
-            else => return false,
-        };
+        // Allow conversions between any integer types
+        if (self == .int and other == .int) return true;
 
-        const self_cat = type_category_map.get(self_name) orelse .other;
-        const other_cat = type_category_map.get(other_name) orelse .other;
+        // Allow conversions between any float types
+        if (self == .float and other == .float) return true;
 
-        return self_cat.eql(other_cat);
+        return false;
     }
 
     /// Returns the name of the Zig cast operator (@intCast or @floatCast) for this type,
     /// or null if no cast is needed. Used in code generation to emit type casts for
     /// constructor parameter initialization.
     pub fn castFunction(self: Type) ?[]const u8 {
-        const type_name = switch (self) {
-            .basic => |name| name,
-            else => return null,
-        };
-
-        const category = type_category_map.get(type_name) orelse .other;
-        return switch (category) {
+        return switch (self) {
             .int => "@intCast",
             .float => "@floatCast",
-            .other => null,
+            else => null,
         };
     }
 
     pub fn getName(self: Type) ?[]const u8 {
         return switch (self) {
-            inline .basic, .class, .@"enum", .flag => |name| name,
+            inline .int, .float, .basic, .class, .@"enum", .flag => |name| name,
             .@"union" => std.debug.panic("Can't get name for union type", .{}),
             .array => |array| {
                 if (array) |arr| {

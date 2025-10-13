@@ -173,6 +173,7 @@ fn collectClassImports(self: *Context, class: *Class) !void {
 fn typeImport(self: *Context, imports: *Imports, @"type": *const Type) !void {
     switch (@"type".*) {
         .array => try imports.put(self.allocator(), "Array"),
+        .int, .float => {}, // Basic Zig types, no import needed
         .basic => |name| try imports.put(self.allocator(), name),
         .class => |name| try imports.put(self.allocator(), name),
         .@"enum" => |name| try imports.put(self.allocator(), name),
