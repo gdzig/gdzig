@@ -169,15 +169,15 @@ fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor
     try writeFunctionHeader(w, constructor, ctx);
     if (constructor.can_init_directly) {
         for (constructor.parameters.values()) |param| {
-            try w.printLine(
-                \\result.{0s} = blk: {{
-                \\    switch (@typeInfo(@TypeOf({1s}))) {{
-                \\        .int => break :blk @intCast({1s}),
-                \\        .float => break :blk @floatCast({1s}),
-                \\        else => break :blk {1s},
-                \\    }}
-                \\}};
-            , .{ param.field_name.?, param.name });
+            if (param.type.castFunction()) |cast_fn| {
+                try w.printLine(
+                    \\result.{0s} = {2s}({1s});
+                , .{ param.field_name.?, param.name, cast_fn });
+            } else {
+                try w.printLine(
+                    \\result.{0s} = {1s};
+                , .{ param.field_name.?, param.name });
+            }
         }
     } else {
         try w.printLine(

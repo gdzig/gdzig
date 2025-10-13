@@ -107,24 +107,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
                         break;
                     }
 
-                    // Types must match, but allow float conversions (f32 <-> f64)
-                    const types_compatible = blk: {
-                        if (field.value.type.eql(param.value.type)) break :blk true;
-
-                        // Allow float type conversions
-                        const field_is_float = switch (field.value.type) {
-                            .basic => |name| std.mem.eql(u8, name, "f32") or std.mem.eql(u8, name, "f64"),
-                            else => false,
-                        };
-                        const param_is_float = switch (param.value.type) {
-                            .basic => |name| std.mem.eql(u8, name, "f32") or std.mem.eql(u8, name, "f64"),
-                            else => false,
-                        };
-
-                        break :blk field_is_float and param_is_float;
-                    };
-
-                    if (!types_compatible) {
+                    if (!field.value.type.approxEql(param.value.type)) {
                         matched = false;
                         break;
                     }
@@ -137,6 +120,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
                         const field = self.fields.entries.get(i).value;
                         var param = function.parameters.entries.get(i);
                         param.value.field_name = field.name;
+                        param.value.field_type = field.type;
 
                         function.parameters.entries.set(i, param);
                     }
@@ -156,7 +140,13 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
 pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs.Dir) !void {
     const mixin_file_path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name});
-    const file = input_dir.openFile(mixin_file_path, .{}) catch return;
+    defer allocator.free(mixin_file_path);
+
+    const file = input_dir.openFile(mixin_file_path, .{}) catch |err| {
+        if (err == error.FileNotFound) return;
+        std.log.err("Failed to open mixin file '{s}': {}", .{ mixin_file_path, err });
+        return err;
+    };
 
     var buf: [4096]u8 = undefined;
     var file_reader = file.reader(&buf);

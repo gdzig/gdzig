@@ -44,6 +44,39 @@ pub const Type = union(enum) {
     // TODO: may no longer be needed
     const meta_overrides: std.StaticStringMap(Type) = .initComptime(.{});
 
+    /// Categorizes numeric types for approximate equality checks.
+    /// Allows int-to-int and float-to-float conversions for comptime initialization.
+    pub const TypeCategory = enum {
+        int,
+        float,
+        other,
+
+        /// Returns true if both categories are the same numeric type (int or float).
+        /// Returns false for .other, even if both are .other, since non-numeric types
+        /// cannot be approximately equal.
+        pub fn eql(self: TypeCategory, other: TypeCategory) bool {
+            return self == other and self != .other;
+        }
+    };
+
+    pub const type_category_map: std.StaticStringMap(TypeCategory) = .initComptime(.{
+        // Float types
+        .{ "f32", .float },
+        .{ "f64", .float },
+
+        // Signed integer types
+        .{ "i8", .int },
+        .{ "i16", .int },
+        .{ "i32", .int },
+        .{ "i64", .int },
+
+        // Unsigned integer types
+        .{ "u8", .int },
+        .{ "u16", .int },
+        .{ "u32", .int },
+        .{ "u64", .int },
+    });
+
     pub fn from(allocator: Allocator, name: []const u8, is_meta: bool, ctx: *const Context) !Type {
         var normalized = name;
 
@@ -205,6 +238,47 @@ pub const Type = union(enum) {
                 .pointer => |other_t| t.eql(other_t.*),
                 else => false,
             },
+        };
+    }
+
+    /// Checks if two types are approximately equal, allowing numeric conversions
+    /// within the same category (int-to-int or float-to-float).
+    /// This enables comptime initialization for constructors like Vector2i.initXY(i64, i64)
+    /// where the struct has i32 fields.
+    pub fn approxEql(self: Type, other: Type) bool {
+        // First check exact equality
+        if (self.eql(other)) return true;
+
+        // Only allow approximate equality for basic types
+        const self_name = switch (self) {
+            .basic => |name| name,
+            else => return false,
+        };
+        const other_name = switch (other) {
+            .basic => |name| name,
+            else => return false,
+        };
+
+        const self_cat = type_category_map.get(self_name) orelse .other;
+        const other_cat = type_category_map.get(other_name) orelse .other;
+
+        return self_cat.eql(other_cat);
+    }
+
+    /// Returns the name of the Zig cast operator (@intCast or @floatCast) for this type,
+    /// or null if no cast is needed. Used in code generation to emit type casts for
+    /// constructor parameter initialization.
+    pub fn castFunction(self: Type) ?[]const u8 {
+        const type_name = switch (self) {
+            .basic => |name| name,
+            else => return null,
+        };
+
+        const category = type_category_map.get(type_name) orelse .other;
+        return switch (category) {
+            .int => "@intCast",
+            .float => "@floatCast",
+            .other => null,
         };
     }
 

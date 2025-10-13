@@ -425,6 +425,7 @@ pub const Parameter = struct {
     type: Type = .void,
     default: ?Value = null,
     field_name: ?[]const u8 = null,
+    field_type: ?Type = null,
 
     pub fn needsRuntimeInit(self: Parameter, ctx: *const Context) bool {
         if (self.default) |default_value| {
