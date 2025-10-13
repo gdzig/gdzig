@@ -364,7 +364,7 @@ fn castBuiltins(self: *Context) !void {
         if (util.shouldSkipClass(api.name)) continue;
 
         var builtin: Builtin = try .fromApi(self.allocator(), api, self);
-        try builtin.loadMixinIfExists(self.allocator());
+        try builtin.loadMixinIfExists(self.allocator(), self.config.input);
 
         try self.builtins.put(self.allocator(), builtin.name_api, builtin);
     }
