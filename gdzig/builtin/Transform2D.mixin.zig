@@ -42,6 +42,7 @@ pub const flip_y: Transform2D = .initXAxisYAxisOrigin(
     .initXY(0, 0),
 );
 
+/// @comptime
 pub fn initXAxisYAxisOriginComponents(xx: f32, xy: f32, yx: f32, yy: f32, ox: f32, oy: f32) Transform2D {
     return .initXAxisYAxisOrigin(
         .initXY(xx, xy),
@@ -53,6 +54,8 @@ pub fn initXAxisYAxisOriginComponents(xx: f32, xy: f32, yx: f32, yy: f32, ox: f3
 /// Constructs a [Transform2D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform2_d.Transform2D) identical to `IDENTITY`.
 ///
 /// **Note:** In C#, this constructs a [Transform2D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform2_d.Transform2D) with all of its components set to `Vector2.ZERO`.
+///
+/// @comptime
 pub fn init() Transform2D {
     return .identity;
 }

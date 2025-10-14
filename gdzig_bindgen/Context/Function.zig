@@ -264,6 +264,28 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { Mi
         try function.parameters.put(allocator, param_name, .{});
     }
 
+    // Check for @comptime marker in doc comments
+    if (fn_type == .constructor) {
+        const first_token = ast.firstToken(index);
+        var token_idx = first_token;
+
+        // Look backwards from the function declaration to find doc comments
+        while (token_idx > 0) {
+            token_idx -= 1;
+            const token = ast.tokens.get(token_idx);
+
+            if (token.tag == .doc_comment) {
+                const comment_text = ast.tokenSlice(token_idx);
+                if (std.mem.indexOf(u8, comment_text, "@comptime") != null) {
+                    function.can_init_directly = true;
+                }
+            } else if (token.tag != .doc_comment) {
+                // Stop at the first non-doc-comment token
+                break;
+            }
+        }
+    }
+
     return .{ fn_type, function };
 }
 
