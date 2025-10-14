@@ -16,11 +16,7 @@ pub const zero: Projection = .initXAxisYAxisZAxisWAxis(
 /// Constructs a default-initialized [Projection](https://gdzig.github.io/gdzig/#gdzig.builtin.projection.Projection) identical to `IDENTITY`.
 ///
 /// **Note:** In C#, this constructs a [Projection](https://gdzig.github.io/gdzig/#gdzig.builtin.projection.Projection) identical to `ZERO`.
-///
-/// @comptime
-pub fn init() Projection {
-    return .identity;
-}
+pub const init: Projection = .identity;
 
 // @mixin stop
 

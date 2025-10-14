@@ -325,6 +325,48 @@ const Interface = @import("../Interface.zig");
 const Image = @import("./image.zig").Image;
 ```
 
+## Overriding Generated Code
+
+### Constants Override Constructors
+
+Mixin constants can override generated constructors with the same name. When a mixin constant shares a name with a constructor, the constructor is automatically marked as `skip=true` and excluded from codegen.
+
+**Example** (from `Transform2D.mixin.zig`):
+
+```zig
+/// The identity Transform2D. This is a transform with no translation,
+/// no rotation, and a scale of Vector2.ONE.
+pub const identity: Transform2D = .initXAxisYAxisOrigin(
+    .initXY(1, 0),
+    .initXY(0, 1),
+    .initXY(0, 0),
+);
+```
+
+This constant overrides any `identity()` constructor from the API, allowing:
+```zig
+const t = Transform2D.identity; // ✓ Comptime-friendly constant
+// vs
+const t = Transform2D.identity(); // ✗ Constructor (skipped in codegen)
+```
+
+**Benefits:**
+- **Comptime compatibility**: Constants can be used at compile time, unlike function calls
+- **Zero-cost abstractions**: No runtime overhead from function calls
+- **Cleaner syntax**: More idiomatic Zig code
+
+**Implementation** (gdzig_bindgen/Context/Builtin.zig:187-194):
+```zig
+.simple_var_decl, .aligned_var_decl, .global_var_decl => if (try Constant.fromMixin(allocator, ast, index)) |constant| {
+    try self.constants.put(allocator, constant.name_api, constant);
+
+    // If a constructor has the same name, mark it to be skipped during codegen
+    if (self.constructors.getPtr(constant.name)) |constructor| {
+        constructor.skip = true;
+    }
+},
+```
+
 ## Design Principles
 
 1. **Separation of Concerns** - Mixins are separate from generated code
@@ -332,6 +374,7 @@ const Image = @import("./image.zig").Image;
 3. **Documentation** - All public mixin items should have doc comments
 4. **Type Safety** - Use Zig's type system to provide safety guarantees
 5. **Convenience** - Make common operations easier and more ergonomic
+6. **Override Capability** - Mixins can override generated code when appropriate
 
 ## Statistics
 

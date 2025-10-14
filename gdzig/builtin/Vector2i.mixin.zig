@@ -1,9 +1,5 @@
 /// Constructs a default-initialized [Vector2i](https://gdzig.github.io/gdzig/#gdzig.builtin.vector2i.Vector2i) with all components set to `0`.
-///
-/// @comptime
-pub fn init() Vector2i {
-    return .zero;
-}
+pub const init: Vector2i = .zero;
 
 // @mixin stop
 

@@ -186,6 +186,11 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs
             },
             .simple_var_decl, .aligned_var_decl, .global_var_decl => if (try Constant.fromMixin(allocator, ast, index)) |constant| {
                 try self.constants.put(allocator, constant.name_api, constant);
+
+                // If a constructor has the same name, mark it to be skipped during codegen
+                if (self.constructors.getPtr(constant.name)) |constructor| {
+                    constructor.skip = true;
+                }
             },
             else => {},
         }

@@ -15,7 +15,6 @@ operator_name: ?[]const u8 = null,
 
 parameters: StringArrayHashMap(Parameter) = .empty,
 return_type: Type = .void,
-return_type_initializer: ?[]const u8 = null,
 
 /// The override behavior of the function, in object-oriented terms.
 mode: Mode = .final,
@@ -130,7 +129,6 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
     self.mode = .final;
     self.self = .{ .constant = builtin_name };
     self.is_vararg = false;
-    self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     return self;
 }
@@ -207,7 +205,6 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         try self.parameters.put(allocator, arg.name, parameter);
     }
     self.return_type = try .from(allocator, api.return_type, false, ctx);
-    self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     return self;
 }
@@ -354,8 +351,6 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
         )
     else
         .void;
-
-    self.return_type_initializer = getReturnTypeInitializer(self.return_type);
 
     // TODO: default return values? rv.default_value
 
@@ -514,63 +509,6 @@ pub const Parameter = struct {
         self.* = .{};
     }
 };
-
-const return_type_init_map: StaticStringMap([]const u8) = .initComptime(.{
-    // builtins
-    .{ "Vector2", ".zero" },
-    .{ "Vector3", ".zero" },
-    .{ "Vector4", ".zero" },
-    .{ "Vector2i", ".zero" },
-    .{ "Vector3i", ".zero" },
-    .{ "Vector4i", ".zero" },
-    .{ "Basis", ".identity" },
-    .{ "Transform2D", ".identity" },
-    .{ "Transform3D", ".identity" },
-    .{ "Projection", ".identity" },
-
-    // primitives
-    .{ "bool", "false" },
-
-    .{ "u8", "0" },
-    .{ "u16", "0" },
-    .{ "u32", "0" },
-    .{ "u64", "0" },
-
-    .{ "i8", "0" },
-    .{ "i16", "0" },
-    .{ "i32", "0" },
-    .{ "i64", "0" },
-
-    .{ "f32", "0.0" },
-    .{ "f64", "0.0" },
-
-    .{ "void", "undefined" },
-    .{ "Variant", ".nil" },
-});
-
-/// Returns the initializer for a given return type.
-///
-/// Note: Do not use for constructors.
-fn getReturnTypeInitializer(return_type: Type) ?[]const u8 {
-    switch (return_type) {
-        inline .string_name, .string => return ".init()",
-        inline .class, .basic => |type_name| {
-            if (return_type_init_map.get(type_name)) |initializer| {
-                return initializer;
-            }
-
-            if (std.zig.isPrimitive(type_name)) {
-                std.debug.panic("No initializer defined for primitive type '{s}'", .{type_name});
-            }
-
-            // this should exist for all basic and class types
-            return ".init()";
-        },
-        else => {},
-    }
-
-    return null;
-}
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

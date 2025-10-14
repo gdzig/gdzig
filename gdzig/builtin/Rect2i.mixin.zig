@@ -1,12 +1,8 @@
 /// Constructs a [Rect2i](https://gdzig.github.io/gdzig/#gdzig.builtin.rect2i.Rect2i) with its `position` and `size` set to `Vector2i.ZERO`.
-///
-/// @comptime
-pub fn init() Rect2i {
-    return .initPositionSize(
-        .initXY(0, 0),
-        .initXY(0, 0),
-    );
-}
+pub const init: Rect2i = .initPositionSize(
+    .initXY(0, 0),
+    .initXY(0, 0),
+);
 
 /// Constructs a [Rect2i](https://gdzig.github.io/gdzig/#gdzig.builtin.rect2i.Rect2i) by setting its `position` to (`x`, `y`), and its `size` to (`width`, `height`).
 ///

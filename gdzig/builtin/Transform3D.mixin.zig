@@ -67,11 +67,7 @@ pub fn initXAxisYAxisZAxisOriginComponents(xx: f32, xy: f32, xz: f32, yx: f32, y
 /// Constructs a [Transform3D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform3_d.Transform3D) identical to `IDENTITY`.
 ///
 /// **Note:** In C#, this constructs a [Transform3D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform3_d.Transform3D) with its `origin` and the components of its `basis` set to `Vector3.ZERO`.
-///
-/// @comptime
-pub fn init() Transform3D {
-    return .identity;
-}
+pub const init: Transform3D = .identity;
 
 // @mixin stop
 

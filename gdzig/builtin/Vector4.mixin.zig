@@ -1,9 +1,5 @@
 /// Constructs a default-initialized [Vector4](https://gdzig.github.io/gdzig/#gdzig.builtin.vector4.Vector4) with all components set to `0`.
-///
-/// @comptime
-pub fn init() Vector4 {
-    return .zero;
-}
+pub const init: Vector4 = .zero;
 
 // @mixin stop
 
