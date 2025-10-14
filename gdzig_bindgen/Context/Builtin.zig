@@ -10,7 +10,7 @@ size: usize = 0,
 has_destructor: bool = false,
 
 constants: StringArrayHashMap(Constant) = .empty,
-constructors: ArrayList(Function) = .empty,
+constructors: StringArrayHashMap(Function) = .empty,
 enums: StringArrayHashMap(Enum) = .empty,
 fields: StringArrayHashMap(Field) = .empty,
 methods: StringArrayHashMap(Function) = .empty,
@@ -38,7 +38,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     self.has_destructor = api.has_destructor;
 
     for (api.constructors) |constructor| {
-        try self.constructors.append(allocator, try Function.fromBuiltinConstructor(allocator, self.name, constructor, ctx));
+        const function = try Function.fromBuiltinConstructor(allocator, self.name, constructor, ctx);
+        try self.constructors.put(allocator, function.name, function);
     }
 
     for (api.enums orelse &.{}) |@"enum"| {
@@ -94,7 +95,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
         break :blk count;
     };
     if (field_count > 0) {
-        for (self.constructors.items) |*function| {
+        for (self.constructors.values()) |*function| {
             if (function.parameters.count() == field_count) {
                 var matched = true;
                 // Fields are sorted by offset, so first field_count entries have offsets
@@ -179,9 +180,7 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs
             .fn_decl => if (try Function.fromMixin(allocator, ast, index)) |result| {
                 const fn_type, const function = result;
                 switch (fn_type) {
-                    .constructor => {
-                        try self.constructors.append(allocator, function);
-                    },
+                    .constructor => try self.constructors.put(allocator, function.name, function),
                     .method => try self.methods.put(allocator, function.name, function),
                 }
             },
@@ -194,7 +193,7 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs
 }
 
 pub fn findConstructorByArgumentCount(self: Builtin, arg_len: usize) ?Function {
-    for (self.constructors.items) |constructor| {
+    for (self.constructors.values()) |constructor| {
         if (constructor.parameters.count() == arg_len) {
             return constructor;
         }
@@ -213,7 +212,7 @@ pub fn deinit(self: *Builtin, allocator: Allocator) void {
     }
     self.constants.deinit(allocator);
 
-    for (self.constructors.items) |*constructor| {
+    for (self.constructors.values()) |*constructor| {
         constructor.deinit(allocator);
     }
     self.constructors.deinit(allocator);

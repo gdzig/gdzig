@@ -103,7 +103,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     }
 
     // Constructors
-    for (builtin.constructors.items) |*constructor| {
+    for (builtin.constructors.values()) |*constructor| {
         if (constructor.skip) continue;
 
         try writeBuiltinConstructor(w, builtin.name, constructor, ctx);
