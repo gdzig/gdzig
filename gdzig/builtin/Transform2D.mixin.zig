@@ -50,6 +50,13 @@ pub fn initXAxisYAxisOriginComponents(xx: f32, xy: f32, yx: f32, yy: f32, ox: f3
     );
 }
 
+/// Constructs a [Transform2D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform2_d.Transform2D) identical to `IDENTITY`.
+///
+/// **Note:** In C#, this constructs a [Transform2D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform2_d.Transform2D) with all of its components set to `Vector2.ZERO`.
+pub fn init() Transform2D {
+    return .identity;
+}
+
 // @mixin stop
 
 const Transform2D = @import("./transform2_d.zig").Transform2D;

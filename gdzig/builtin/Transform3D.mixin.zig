@@ -54,6 +54,7 @@ pub const flip_z: Transform3D = .initXAxisYAxisZAxisOrigin(
     .initXYZ(0, 0, 0),
 );
 
+/// @comptime
 pub fn initXAxisYAxisZAxisOriginComponents(xx: f32, xy: f32, xz: f32, yx: f32, yy: f32, yz: f32, zx: f32, zy: f32, zz: f32, ox: f32, oy: f32, oz: f32) Transform3D {
     return .initXAxisYAxisZAxisOrigin(
         .initXYZ(xx, xy, xz),
@@ -61,6 +62,15 @@ pub fn initXAxisYAxisZAxisOriginComponents(xx: f32, xy: f32, xz: f32, yx: f32, y
         .initXYZ(zx, zy, zz),
         .initXYZ(ox, oy, oz),
     );
+}
+
+/// Constructs a [Transform3D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform3_d.Transform3D) identical to `IDENTITY`.
+///
+/// **Note:** In C#, this constructs a [Transform3D](https://gdzig.github.io/gdzig/#gdzig.builtin.transform3_d.Transform3D) with its `origin` and the components of its `basis` set to `Vector3.ZERO`.
+///
+/// @comptime
+pub fn init() Transform3D {
+    return .identity;
 }
 
 // @mixin stop

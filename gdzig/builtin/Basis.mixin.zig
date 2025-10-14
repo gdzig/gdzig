@@ -55,6 +55,15 @@ pub const flip_z: Basis = .initXAxisYAxisZAxis(
     .initXYZ(0, 0, -1),
 );
 
+/// Constructs a [Basis](https://gdzig.github.io/gdzig/#gdzig.builtin.basis.Basis) identical to `IDENTITY`.
+///
+/// **Note:** In C#, this constructs a [Basis](https://gdzig.github.io/gdzig/#gdzig.builtin.basis.Basis) with all of its components set to `Vector3.ZERO`.
+///
+/// @comptime
+pub fn init() Basis {
+    return .identity;
+}
+
 // @mixin stop
 
 const Basis = @import("./basis.zig").Basis;
