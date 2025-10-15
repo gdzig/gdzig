@@ -926,10 +926,12 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
                 try w.writeLine("?*anyopaque = null;");
             } else {
                 try writeTypeAtReturn(w, &function.return_type);
+                const return_type_initializer = function.return_type.getDefaultInitializer(ctx);
+
                 if (function.can_init_directly) {
                     try w.writeLine(" = undefined;");
-                } else if (function.return_type.getDefaultInitializer(ctx)) |initializer| {
-                    try w.printLine(" = {s};", .{initializer});
+                } else if (function.self != .static and return_type_initializer != null) {
+                    try w.printLine(" = {s};", .{return_type_initializer.?});
                 } else {
                     try w.writeAll(" = std.mem.zeroes(");
                     try writeTypeAtReturn(w, &function.return_type);
