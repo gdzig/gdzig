@@ -276,6 +276,80 @@ pub const Type = union(enum) {
             .pointer => |t| t.getName(),
         };
     }
+
+    /// Returns the default initializer expression for this type when used as a return value.
+    /// Returns null if no default initializer is defined.
+    ///
+    /// Note: Do not use for constructors.
+    pub fn getDefaultInitializer(self: Type, ctx: *const Context) ?[]const u8 {
+        return switch (self) {
+            // String and StringName always use .init() since they require runtime initialization
+            .string, .string_name => ".init()",
+
+            .int => |type_name| {
+                // Map for integer types
+                const int_init_map = std.StaticStringMap([]const u8).initComptime(.{
+                    .{ "i8", "0" },
+                    .{ "i16", "0" },
+                    .{ "i32", "0" },
+                    .{ "i64", "0" },
+                    .{ "u8", "0" },
+                    .{ "u16", "0" },
+                    .{ "u32", "0" },
+                    .{ "u64", "0" },
+                });
+                return int_init_map.get(type_name);
+            },
+
+            .float => |type_name| {
+                // Map for float types
+                const float_init_map = std.StaticStringMap([]const u8).initComptime(.{
+                    .{ "f32", "0.0" },
+                    .{ "f64", "0.0" },
+                });
+                return float_init_map.get(type_name);
+            },
+
+            .basic => |type_name| {
+                // Static map for well-known builtin types with specific initializers
+                const builtin_init_map = std.StaticStringMap([]const u8).initComptime(.{
+                    .{ "Vector2", ".zero" },
+                    .{ "Vector3", ".zero" },
+                    .{ "Vector4", ".zero" },
+                    .{ "Vector2i", ".zero" },
+                    .{ "Vector3i", ".zero" },
+                    .{ "Vector4i", ".zero" },
+                    .{ "Basis", ".identity" },
+                    .{ "Transform2D", ".identity" },
+                    .{ "Transform3D", ".identity" },
+                    .{ "Projection", ".identity" },
+                    .{ "bool", "false" },
+                });
+
+                // Check static map first
+                if (builtin_init_map.get(type_name)) |initializer| {
+                    return initializer;
+                }
+
+                // Check if this builtin type has an 'init' constant in its mixin
+                // Note: constants are stored with name_api keys (e.g., "INIT" not "init")
+                if (ctx.builtins.get(type_name)) |builtin| {
+                    if (builtin.constants.contains("INIT")) {
+                        return ".init"; // Use constant reference
+                    }
+                }
+
+                // Default: assume it's a function call
+                return ".init()";
+            },
+
+            .variant => ".nil",
+            .void => "undefined",
+
+            // Other types don't have default initializers
+            else => null,
+        };
+    }
 };
 
 const std = @import("std");

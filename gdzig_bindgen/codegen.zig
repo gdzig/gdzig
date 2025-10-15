@@ -6,72 +6,6 @@ pub fn generate(ctx: *Context) !void {
     try writeModules(ctx);
 }
 
-/// Returns the initializer for a given return type.
-///
-/// Note: Do not use for constructors.
-fn getReturnTypeInitializer(return_type: Context.Type, ctx: *const Context) ?[]const u8 {
-    switch (return_type) {
-        // String and StringName always use .init() since they can't be comptime
-        inline .string_name, .string => return ".init()",
-        inline .class, .basic => |type_name| {
-            if (return_type_init_map.get(type_name)) |initializer| {
-                return initializer;
-            }
-
-            if (std.zig.isPrimitive(type_name)) {
-                std.debug.panic("No initializer defined for primitive type '{s}'", .{type_name});
-            }
-
-            // Check if builtin type has init constant in its mixin
-            // Note: constants are stored with name_api keys (e.g., "INIT" not "init")
-            if (ctx.builtins.get(type_name)) |builtin| {
-                if (builtin.constants.contains("INIT")) {
-                    return ".init";
-                }
-            }
-
-            // Default: assume it's a function call
-            return ".init()";
-        },
-        else => {},
-    }
-
-    return null;
-}
-
-const return_type_init_map = std.StaticStringMap([]const u8).initComptime(.{
-    // builtins
-    .{ "Vector2", ".zero" },
-    .{ "Vector3", ".zero" },
-    .{ "Vector4", ".zero" },
-    .{ "Vector2i", ".zero" },
-    .{ "Vector3i", ".zero" },
-    .{ "Vector4i", ".zero" },
-    .{ "Basis", ".identity" },
-    .{ "Transform2D", ".identity" },
-    .{ "Transform3D", ".identity" },
-    .{ "Projection", ".identity" },
-
-    // primitives
-    .{ "bool", "false" },
-
-    .{ "u8", "0" },
-    .{ "u16", "0" },
-    .{ "u32", "0" },
-    .{ "u64", "0" },
-
-    .{ "i8", "0" },
-    .{ "i16", "0" },
-    .{ "i32", "0" },
-    .{ "i64", "0" },
-
-    .{ "f32", "0.0" },
-    .{ "f64", "0.0" },
-
-    .{ "void", "undefined" },
-    .{ "Variant", ".nil" },
-});
-
 fn writeBuiltins(ctx: *const Context) !void {
     var buf: [1024]u8 = undefined;
 
@@ -994,7 +928,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
                 try writeTypeAtReturn(w, &function.return_type);
                 if (function.can_init_directly) {
                     try w.writeLine(" = undefined;");
-                } else if (getReturnTypeInitializer(function.return_type, ctx)) |initializer| {
+                } else if (function.return_type.getDefaultInitializer(ctx)) |initializer| {
                     try w.printLine(" = {s};", .{initializer});
                 } else {
                     try w.writeAll(" = std.mem.zeroes(");
