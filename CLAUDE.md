@@ -101,3 +101,4 @@ Extensions define an entry point using `gdzig.entrypoint()` or `gdzig.entrypoint
 - Migrating to Zig 0.15.1 with updated Reader/Writer interfaces
 - Active development on branch `zig-0.15.1`
 - Main branch for PRs: `master`
+- To see the generated code: run `zig build generated`. The generated code will be in the `gdzig/` folder.
