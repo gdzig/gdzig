@@ -103,11 +103,6 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
                     const field = self.fields.entries.get(i);
                     const param = function.parameters.entries.get(i);
 
-                    if (!std.mem.eql(u8, field.value.name_api, param.value.name_api)) {
-                        matched = false;
-                        break;
-                    }
-
                     if (!field.value.type.approxEql(param.value.type)) {
                         matched = false;
                         break;
