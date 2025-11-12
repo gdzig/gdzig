@@ -34,6 +34,7 @@ fn writeBuiltins(ctx: *const Context) !void {
 
     // builtin/[name].zig
     try ctx.config.output.makePath("builtin");
+
     for (ctx.builtins.values()) |*builtin| {
         const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "builtin/{s}.zig", .{builtin.module});
         const file = try ctx.config.output.createFile(filename, .{});
@@ -98,6 +99,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
         try writeConstant(w, constant);
     }
+
     if (builtin.constants.count() > 0) {
         try w.writeLine("");
     }
@@ -952,8 +954,10 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
             const builtin = ctx.builtins.get(type_name) orelse std.debug.panic("Unsupported constructor: {s}", .{type_name});
             if (builtin.findConstructorByArgumentCount(c.args.len)) |function| {
                 try w.print("{s}.{s}(", .{ builtin.name, function.name });
+
                 for (c.args, 0..) |arg, i| {
                     const pval = Context.Constant.replacements.get(arg) orelse arg;
+
                     try w.writeAll(pval);
 
                     if (i != c.args.len - 1) {
@@ -1045,7 +1049,7 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
         var reader = &file_reader.interface;
 
         while (true) {
-            const line = reader.takeDelimiterExclusive('\n') catch |err| switch (err) {
+            const line = reader.takeDelimiterInclusive('\n') catch |err| switch (err) {
                 error.EndOfStream => break,
                 else => return err,
             };

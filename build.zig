@@ -239,6 +239,7 @@ fn buildGenerated(
     });
 
     const run = b.addRunArtifact(bindgen);
+    run.stdio = .inherit;
     run.addDirectoryArg(headers);
     run.addDirectoryArg(input);
     const output = run.addOutputDirectoryArg("generated");

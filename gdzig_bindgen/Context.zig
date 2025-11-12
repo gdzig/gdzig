@@ -241,7 +241,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     var doc_line_temp: [1024]u8 = undefined;
 
     while (true) {
-        const line: []const u8 = reader.takeDelimiterExclusive('\n') catch break;
+        const line: []const u8 = std.mem.trimRight(u8, (reader.takeDelimiterInclusive('\n') catch break), "\n");
 
         const contains_name_doc = std.mem.indexOf(u8, line, name_doc) != null;
 

@@ -85,22 +85,20 @@ pub const Value = union(ValueType) {
                 if (args_slice.len > 0) {
                     var temp = try arena.alloc([]const u8, args_count);
 
-                    if (args_count == 1) {
-                        temp[0] = std.mem.trim(u8, args_slice, &std.ascii.whitespace);
-                    } else {
-                        var args_reader = std.Io.Reader.fixed(args_slice);
-                        for (0..args_count) |i| {
-                            const arg = try args_reader.takeDelimiterExclusive(',');
-                            temp[i] = std.mem.trim(u8, arg, &std.ascii.whitespace);
-                        }
-                        out_args = temp;
+                    var it = std.mem.splitScalar(u8, args_slice, ',');
+                    var i: usize = 0;
+                    while (it.next()) |raw_arg| : (i += 1) {
+                        // trim whitespace + comma (the comma matters if you later switch this code)
+                        temp[i] = std.mem.trim(u8, raw_arg, " \t\r\n,");
                     }
+
+                    out_args = temp;
                 }
 
                 return .{
                     .constructor = .{
                         .type = c_type,
-                        .args = out_args orelse &.{},
+                        .args = out_args orelse &.{}, // empty when args_slice == ""
                     },
                 };
             }
