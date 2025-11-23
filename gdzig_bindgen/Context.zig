@@ -286,8 +286,6 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             fn_name = try self.allocator().dupe(u8, line[start..]);
             fp_type = null;
         } else if (std.mem.startsWith(u8, line, "typedef")) {
-            if (fn_name == null) continue; // skip if we don't have a function name yet
-
             var iterator = std.mem.splitSequence(u8, line, " ");
             _ = iterator.next(); // skip "typedef"
             const const_or_return_type = iterator.next().?; // skip the return type
@@ -297,9 +295,10 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             }
 
             const fp_type_slice = iterator.next().?;
-            const start = std.mem.indexOfAny(u8, fp_type_slice, safe_ident_chars).?;
-            const end = std.mem.indexOf(u8, fp_type_slice[start..], ")").?;
+            const start = std.mem.indexOfAny(u8, fp_type_slice, safe_ident_chars) orelse continue;
+            const end = std.mem.indexOf(u8, fp_type_slice[start..], ")") orelse continue;
             fp_type = try self.allocator().dupe(u8, fp_type_slice[start..(end + start)]);
+            try self.interface.typedefs.put(self.allocator(), fp_type.?, {});
         }
 
         if (fn_name) |_| if (fp_type) |_| {

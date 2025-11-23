@@ -1032,6 +1032,8 @@ fn writeImports(w: *CodeWriter, root: []const u8, imports: *const Context.Import
             try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
         } else if (ctx.flags.contains(import.*)) {
             try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
+        } else if (ctx.interface.typedefs.contains(import.*)) {
+            try w.printLine("const {0s} = @import(\"gdextension\").{0s};", .{import.*});
         } else {
             // TODO: native structures?
         }
