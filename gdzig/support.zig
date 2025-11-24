@@ -119,7 +119,7 @@ pub fn MethodBinderT(comptime MethodType: type) type {
                 if (ReturnType == void or ReturnType == null) {
                     @call(.auto, method, .{});
                 } else {
-                    @as(*Variant, @ptrCast(p_return)).* = Variant.init(@call(.auto, method, .{}));
+                    @as(*Variant, @ptrCast(@alignCast(p_return))).* = Variant.init(@call(.auto, method, .{}));
                 }
             } else {
                 var variants: [ArgCount - 1]Variant = undefined;
@@ -135,7 +135,7 @@ pub fn MethodBinderT(comptime MethodType: type) type {
                 if (ReturnType == void or ReturnType == null) {
                     @call(.auto, method, args);
                 } else {
-                    @as(*Variant, @ptrCast(p_return)).* = Variant.init(@call(.auto, method, args));
+                    @as(*Variant, @ptrCast(@alignCast(p_return))).* = Variant.init(@call(.auto, method, args));
                 }
             }
         }
