@@ -602,7 +602,8 @@ fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *
                 \\                args[0] = @ptrCast(@alignCast(p_instance));
                 \\                inline for (1..info.params.len, 0..) |i, j| {{
                 \\                    const Arg = @TypeOf(args[i]);
-                \\                    if (comptime oopz.isA(RefCounted, Arg)) {{
+                \\                    const ArgChild = if (@typeInfo(Arg) == .pointer) @typeInfo(Arg).pointer.child else Arg;
+                \\                    if (comptime oopz.isA(RefCounted, ArgChild)) {{
                 \\                        const obj = raw.refGetObject(p_args[j]);
                 \\                        args[i] = @ptrCast(obj.?);
                 \\                    }} else if (comptime oopz.isOpaqueClassPtr(Arg)) {{
