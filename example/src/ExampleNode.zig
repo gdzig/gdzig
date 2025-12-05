@@ -15,8 +15,10 @@ property2: Vector3 = .zero,
 
 fps_counter: *Label,
 
-const property1_name: [:0]const u8 = "property1";
-const property2_name: [:0]const u8 = "property2";
+pub const __exports = .{
+    .{ .@"export", .property1 },
+    .{ .@"export", .property2, "hint2" },
+};
 
 pub fn init(base: *Node) ExampleNode {
     std.log.info("init {s}", .{@typeName(ExampleNode)});
@@ -140,83 +142,6 @@ pub fn _notification(self: *ExampleNode, what: i32) void {
             self.base.getTree().?.quit(.{});
         }
     }
-}
-
-pub fn _getPropertyList(_: *ExampleNode, p: *godot.object.PropertyBuilder) !void {
-    try p.append(ExampleNode, property1_name, .{});
-    try p.append(ExampleNode, property2_name, .{
-        .hint_string = "hint2",
-    });
-}
-
-pub fn _propertyCanRevert(_: *ExampleNode, name: StringName) bool {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        return true;
-    } else if (name.casecmpTo(prop2) == 0) {
-        return true;
-    }
-
-    return false;
-}
-
-pub fn _propertyGetRevert(_: *ExampleNode, name: StringName, value: *Variant) bool {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        value.* = Variant.init(Vector3.initXYZ(42, 42, 42));
-        return true;
-    } else if (name.casecmpTo(prop2) == 0) {
-        value.* = Variant.init(Vector3.initXYZ(24, 24, 24));
-        return true;
-    }
-
-    return false;
-}
-
-pub fn _set(self: *ExampleNode, name: StringName, value: Variant) bool {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        self.property1 = value.as(Vector3).?;
-        return true;
-    } else if (name.casecmpTo(prop2) == 0) {
-        self.property2 = value.as(Vector3).?;
-        return true;
-    }
-
-    return false;
-}
-
-pub fn _get(self: *ExampleNode, name: StringName, value: *Variant) bool {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        value.* = Variant.init(self.property1);
-        return true;
-    } else if (name.casecmpTo(prop2) == 0) {
-        value.* = Variant.init(self.property2);
-        return true;
-    }
-
-    return false;
 }
 
 pub fn _toString(_: *ExampleNode) ?String {

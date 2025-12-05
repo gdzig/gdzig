@@ -2,6 +2,8 @@ const ClassUserData = struct {
     class_name: []const u8,
 };
 
+const exports = @import("exports.zig");
+
 var registered_classes: StringHashMap(void) = .empty;
 pub fn registerClass(
     comptime T: type,
@@ -30,12 +32,12 @@ pub fn registerClass(
                 .is_virtual = @intFromBool(opt.virtual),
                 .is_abstract = @intFromBool(opt.abstract),
                 .is_exposed = @intFromBool(opt.exposed),
-                .set_func = if (@hasDecl(T, "_set")) setBind else null,
-                .get_func = if (@hasDecl(T, "_get")) getBind else null,
-                .get_property_list_func = if (@hasDecl(T, "_getPropertyList")) getPropertyListBind else null,
+                .set_func = if (@hasDecl(T, "_set")) setBind else if (exports.hasExports(T)) exports.generateSetBind(T) else null,
+                .get_func = if (@hasDecl(T, "_get")) getBind else if (exports.hasExports(T)) exports.generateGetBind(T) else null,
+                .get_property_list_func = if (@hasDecl(T, "_getPropertyList")) getPropertyListBind else if (exports.hasExports(T)) exports.generateGetPropertyListBind(T) else null,
                 .free_property_list_func = freePropertyListBind,
-                .property_can_revert_func = if (@hasDecl(T, "_propertyCanRevert")) propertyCanRevertBind else null,
-                .property_get_revert_func = if (@hasDecl(T, "_propertyGetRevert")) propertyGetRevertBind else null,
+                .property_can_revert_func = if (@hasDecl(T, "_propertyCanRevert")) propertyCanRevertBind else if (exports.hasExports(T)) exports.generatePropertyCanRevertBind(T) else null,
+                .property_get_revert_func = if (@hasDecl(T, "_propertyGetRevert")) propertyGetRevertBind else if (exports.hasExports(T)) exports.generatePropertyGetRevertBind(T) else null,
                 .validate_property_func = if (@hasDecl(T, "_validateProperty")) validatePropertyBind else null,
                 .notification_func = if (@hasDecl(T, "_notification")) notificationBind else null,
                 .to_string_func = if (@hasDecl(T, "_toString")) toStringBind else null,
