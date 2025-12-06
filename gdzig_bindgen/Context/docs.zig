@@ -1,3 +1,5 @@
+const convert_tab_size = 4;
+
 const Element = enum {
     // code blocks
     codeblock,
@@ -255,6 +257,7 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *cons
     try bbcodez.fmt.md.renderDocument(allocator, doc, &output.writer, .{
         .write_element_fn = writeElement,
         .user_data = @ptrCast(@constCast(&doc_ctx)),
+        .convert_tab_size = convert_tab_size,
     });
 
     return output.toOwnedSlice();

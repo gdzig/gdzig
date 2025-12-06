@@ -26,10 +26,17 @@ pub const Variant = extern struct {
         var result: Variant = undefined;
         if (tag == .object) {
             variantFromType(@ptrCast(&result), @ptrCast(@constCast(&oopz.upcast(*Object, value))));
-        } else if (@typeInfo(T) == .pointer) {
-            variantFromType(@ptrCast(&result), @ptrCast(@constCast(value)));
-        } else {
-            variantFromType(@ptrCast(&result), @ptrCast(@constCast(&value)));
+        } else switch (@typeInfo(T)) {
+            .pointer => variantFromType(@ptrCast(&result), @ptrCast(@constCast(value))),
+            .comptime_int => {
+                var i: i64 = value;
+                variantFromType(@ptrCast(&result), @ptrCast(@constCast(&i)));
+            },
+            .comptime_float => {
+                var f: f64 = value;
+                variantFromType(@ptrCast(&result), @ptrCast(@constCast(&f)));
+            },
+            else => variantFromType(@ptrCast(&result), @ptrCast(@constCast(&value))),
         }
 
         return result;
@@ -139,7 +146,9 @@ pub const Variant = extern struct {
                 Color => .color,
                 Dictionary => .dictionary,
                 f64 => .float,
+                comptime_float => .float,
                 i64 => .int,
+                comptime_int => .int,
                 NodePath => .node_path,
                 PackedByteArray => .packed_byte_array,
                 PackedColorArray => .packed_color_array,
@@ -335,6 +344,20 @@ test "forType" {
         try testing.expectEqual(tag, Variant.Tag.forType(*const T));
         try testing.expectEqual(tag, Variant.Tag.forType(?*T));
         try testing.expectEqual(tag, Variant.Tag.forType(?*const T));
+    }
+}
+
+test "forType comptime" {
+    const pairs = .{
+        .{ .int, comptime_int },
+        .{ .float, comptime_float },
+    };
+
+    inline for (pairs) |pair| {
+        const tag = pair[0];
+        const T = pair[1];
+
+        try testing.expectEqual(tag, Variant.Tag.forType(T));
     }
 }
 

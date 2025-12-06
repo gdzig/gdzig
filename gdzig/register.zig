@@ -3,7 +3,15 @@ const ClassUserData = struct {
 };
 
 var registered_classes: StringHashMap(void) = .empty;
-pub fn registerClass(comptime T: type) void {
+pub fn registerClass(
+    comptime T: type,
+    comptime opt: struct {
+        virtual: bool = false,
+        abstract: bool = false,
+        exposed: bool = true,
+        runtime: bool = false,
+    },
+) void {
     const class_name = comptime meta.typeShortName(T);
 
     if (registered_classes.contains(class_name)) return;
@@ -19,9 +27,9 @@ pub fn registerClass(comptime T: type) void {
                 @compileError("Godot 4.2 or higher is required.");
 
             var info: ClassInfo.T = .{
-                .is_virtual = 0,
-                .is_abstract = 0,
-                .is_exposed = 1,
+                .is_virtual = @intFromBool(opt.virtual),
+                .is_abstract = @intFromBool(opt.abstract),
+                .is_exposed = @intFromBool(opt.exposed),
                 .set_func = if (@hasDecl(T, "_set")) setBind else null,
                 .get_func = if (@hasDecl(T, "_get")) getBind else null,
                 .get_property_list_func = if (@hasDecl(T, "_getPropertyList")) getPropertyListBind else null,
@@ -46,7 +54,7 @@ pub fn registerClass(comptime T: type) void {
             };
 
             if (ClassInfo.version >= 3) {
-                info.is_runtime = 0;
+                info.is_runtime = @intFromBool(opt.runtime);
             }
 
             const t = @TypeOf(info.free_property_list_func);

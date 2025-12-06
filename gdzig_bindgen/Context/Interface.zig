@@ -4,6 +4,7 @@ pub const empty: Interface = .{};
 
 functions: ArrayList(Function) = .empty,
 imports: Imports = .empty,
+typedefs: StringHashMap(void) = .empty,
 
 pub const Function = struct {
     docs: ?[]const u8,
@@ -17,3 +18,4 @@ const ArrayList = std.ArrayListUnmanaged;
 
 const Context = @import("../Context.zig");
 const Imports = Context.Imports;
+const StringHashMap = std.StringHashMapUnmanaged;

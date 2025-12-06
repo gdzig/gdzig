@@ -12,8 +12,8 @@
             .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
         },
         .bbcodez = .{
-            .url = "git+https://github.com/doubleword-labs/bbcodez#04d561b4b3a316e9a0990d4b09b127d0c5c974b6",
-            .hash = "bbcodez-0.0.1-dev-YlrOBoSYAQCGsq47bpWy5bXI6WX-80M4QO0NG3-5-Fkj",
+            .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
+            .hash = "bbcodez-0.0.1-dev-YlrOBo-iAQBWdgFSZ5eINgMNAZlmrHLQ35zKSZEEqgS2",
         },
         .temp = .{
             .url = "git+https://github.com/abhinav/temp.zig#7f0a9697d3d46d06c4f84fc3bc5199b7779fab33",

@@ -8,7 +8,7 @@ fn init(level: godot.InitializationLevel) void {
     std.debug.print("[{s}] init\n", .{@tagName(level)});
 
     if (level == .scene) {
-        godot.registerClass(@import("ExampleNode.zig"));
+        godot.registerClass(@import("ExampleNode.zig"), .{});
     }
 }
 

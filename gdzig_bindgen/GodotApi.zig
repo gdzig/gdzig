@@ -81,6 +81,7 @@ pub const Builtin = struct {
         hash: u64,
         arguments: ?[]Argument = null,
         description: ?[]const u8 = null,
+        hash_compatibility: ?[]u64 = null,
 
         pub fn isPrivate(self: Method) bool {
             return std.mem.startsWith(u8, self.name, "_");
