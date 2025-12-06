@@ -1,5 +1,4 @@
 pub fn build(b: *Build) !void {
-    // Options
     const opt: Options = .{
         .target = b.standardTargetOptions(.{}),
         .optimize = b.standardOptimizeOption(.{}),
@@ -239,7 +238,8 @@ fn buildGenerated(
     });
 
     const run = b.addRunArtifact(bindgen);
-    run.stdio = .inherit;
+    run.expectExitCode(0);
+
     run.addDirectoryArg(headers);
     run.addDirectoryArg(input);
     const output = run.addOutputDirectoryArg("generated");
