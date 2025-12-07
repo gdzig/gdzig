@@ -265,7 +265,8 @@ fn buildGenerated(b: *Build, opt: Options, bindgen: *Step.Compile) !struct {
     });
 
     const run = b.addRunArtifact(bindgen);
-    run.stdio = .inherit;
+    run.expectExitCode(0);
+
     run.addDirectoryArg(opt.version_root);
     run.addDirectoryArg(input);
     const output = try opt.version_root.join(b.allocator, "generated");
