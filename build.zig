@@ -1,26 +1,25 @@
+/// build the gdzig Godot-Zig binding library
 pub fn build(b: *Build) !void {
+    const godot_path = b.option([]const u8, "godot", "Path to Godot engine binary [default: `godot`]") orelse "godot";
+    const godot_version = b.option([]const u8, "godot_version", "Version string for target Godot version [defaults to version of godot exe provided]") orelse getGodotVersion(b, godot_path);
+
+    if (godot_version.len <= 0) {
+        std.debug.print("no godot_version provided and unable to execute godot command {s}\n", .{godot_path});
+
+        return;
+    }
+
+    const vendor_path = b.path("vendor");
+
     // Options
     const opt: Options = .{
         .target = b.standardTargetOptions(.{}),
         .optimize = b.standardOptimizeOption(.{}),
-        .godot_path = b.option([]const u8, "godot", "Path to Godot engine binary [default: `godot`]") orelse "godot",
+        .godot_path = godot_path,
+        .godot_version = godot_version,
+        .version_root = vendor_path.path(b, godot_version),
         .precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float",
         .architecture = b.option([]const u8, "arch", "32") orelse "64",
-        .headers = blk: {
-            const input = b.option([]const u8, "headers", "Where to source Godot header files. [options: GENERATED, VENDORED, DEPENDENCY, <dir_path>] [default: GENERATED]") orelse "GENERATED";
-            const normalized = std.ascii.allocLowerString(b.allocator, input) catch unreachable;
-            const tag = std.meta.stringToEnum(Tag(HeadersSource), normalized);
-            break :blk if (tag) |t| switch (t) {
-                .dependency => .dependency,
-                .generated => .generated,
-                .vendored => .vendored,
-                // edge case if the user uses the literal path "custom"
-                .custom => .{ .custom = b.path("custom") },
-            } else if (normalized.len == 0)
-                .generated
-            else
-                .{ .custom = b.path(normalized) };
-        },
     };
 
     // Targets
@@ -29,11 +28,25 @@ pub fn build(b: *Build) !void {
     const oopz = buildOopz(b);
     const temp = buildTemp(b);
 
-    const headers = installHeaders(b, opt);
+    setupVendorFolders(b, opt) catch |err| {
+        std.debug.print("unable to create vendor folder structure: {s}\n", .{opt.version_root.getPath(b)});
 
-    const gdextension = buildGdExtension(b, opt, headers.header);
+        return err;
+    };
+
+    const godot_header = generateHeader(b, opt) catch |err| {
+        std.debug.print("{}: unable to locate/generate godot headers for version {s} in {s}\n", .{ err, opt.godot_version, opt.version_root.getPath(b) });
+
+        return err;
+    };
+
+    const gdextension = buildGdExtension(b, opt, godot_header);
     const gdzig_bindgen = buildBindgen(b, opt);
-    const generated = buildGenerated(b, opt, gdzig_bindgen.exe, headers.root);
+    const generated = buildGenerated(b, opt, gdzig_bindgen.exe) catch |err| {
+        std.debug.print("{}: error running gdzig_bindgen\n", .{err});
+
+        return err;
+    };
 
     const gdzig = buildGdzig(b, opt, generated.output);
     const docs = buildDocs(b, gdzig.lib);
@@ -51,8 +64,10 @@ pub fn build(b: *Build) !void {
 
     // Steps
     b.step("bindgen", "Build the gdzig_bindgen executable").dependOn(&gdzig_bindgen.install.step);
-    b.step("generated", "Run bindgen to generate builtin/class code").dependOn(&generated.install.step);
+    b.step("generated", "Run bindgen to generate builtin/class code").dependOn(&generated.run.step);
     b.step("docs", "Install docs into zig-out/docs").dependOn(docs.step);
+
+    gdzig.lib.step.dependOn(&generated.run.step);
 
     const test_ = b.step("test", "Run tests");
     test_.dependOn(&tests.bindgen.step);
@@ -63,20 +78,14 @@ pub fn build(b: *Build) !void {
     b.installArtifact(gdzig.lib);
 }
 
-const HeadersSource = union(enum) {
-    dependency: void,
-    vendored: void,
-    generated: void,
-    custom: Build.LazyPath,
-};
-
 const Options = struct {
     target: Target,
     optimize: Optimize,
     godot_path: []const u8,
+    godot_version: []const u8,
+    version_root: Build.LazyPath,
     precision: []const u8,
     architecture: []const u8,
-    headers: HeadersSource,
 };
 
 const GdzDependency = struct {
@@ -124,42 +133,65 @@ fn buildTemp(
     return .{ .dep = dep, .mod = mod };
 }
 
-// GDExtension Headers
-fn installHeaders(
+// Get the version string for the current Godot executable.
+fn getGodotVersion(
+    b: *Build,
+    godot_path: []const u8,
+) []const u8 {
+    const argv = [_][]const u8{ godot_path, "--version" };
+    const output = b.run(&argv);
+
+    return std.mem.trim(u8, output, "\r\n");
+}
+
+// Vendor folder structure
+
+fn setupVendorFolders(
     b: *Build,
     opt: Options,
-) struct {
-    root: Build.LazyPath,
-    api: Build.LazyPath,
-    header: Build.LazyPath,
-} {
-    const files = b.addWriteFiles();
-    const out = switch (opt.headers) {
-        .dependency => b.dependency("godot_cpp", .{}).path("gdextension"),
-        .generated => blk: {
-            const tmp = b.addWriteFiles();
-            const out = tmp.getDirectory();
-            const dump = b.addSystemCommand(&.{
-                opt.godot_path,
-                "--dump-extension-api-with-docs",
-                "--dump-gdextension-interface",
-                "--headless",
-            });
-            dump.setCwd(out);
-            _ = dump.captureStdOut();
-            _ = dump.captureStdErr();
-            files.step.dependOn(&dump.step);
-            break :blk out;
-        },
-        .vendored => b.path("vendor"),
-        .custom => |root| root,
+) !void {
+    const bd = b.build_root.handle;
+    const vrd = try bd.makeOpenPath("vendor", .{});
+    const vd = try vrd.makeOpenPath(opt.godot_version, .{});
+    try vd.makePath("generated");
+}
+
+// GDExtension Headers
+fn generateHeader(
+    b: *Build,
+    opt: Options,
+) !Build.LazyPath {
+    const header_path = opt.version_root.path(b, "gdextension_interface.h");
+
+    if (fileExists(&header_path, b)) {
+        return header_path;
+    }
+
+    std.debug.print("re-generating {s}\n", .{header_path.getPath(b)});
+
+    const argv = [_][]const u8{
+        opt.godot_path,
+        "--dump-extension-api-with-docs",
+        "--dump-gdextension-interface",
+        "--headless",
     };
 
-    return .{
-        .root = files.getDirectory(),
-        .api = files.addCopyFile(out.path(b, "extension_api.json"), "extension_api.json"),
-        .header = files.addCopyFile(out.path(b, "gdextension_interface.h"), "gdextension_interface.h"),
-    };
+    var proc = std.process.Child.init(&argv, b.allocator);
+
+    proc.stdin_behavior = .Ignore;
+    proc.stdout_behavior = .Ignore;
+    proc.stderr_behavior = .Ignore;
+    proc.cwd = opt.version_root.getPath(b);
+
+    try proc.spawn();
+
+    const rc = try proc.wait();
+
+    if (rc.Exited != 0) {
+        return error.ExitCode;
+    }
+
+    return header_path;
 }
 
 // GDExtension
@@ -223,14 +255,8 @@ fn buildBindgen(
 }
 
 // Bindgen
-fn buildGenerated(
-    b: *Build,
-    opt: Options,
-    bindgen: *Step.Compile,
-    headers: Build.LazyPath,
-) struct {
+fn buildGenerated(b: *Build, opt: Options, bindgen: *Step.Compile) !struct {
     run: *Step.Run,
-    install: *Step.InstallDir,
     output: Build.LazyPath,
 } {
     const files = b.addWriteFiles();
@@ -240,20 +266,15 @@ fn buildGenerated(
 
     const run = b.addRunArtifact(bindgen);
     run.stdio = .inherit;
-    run.addDirectoryArg(headers);
+    run.addDirectoryArg(opt.version_root);
     run.addDirectoryArg(input);
-    const output = run.addOutputDirectoryArg("generated");
+    const output = try opt.version_root.join(b.allocator, "generated");
+    run.addDirectoryArg(output);
     run.addArg(opt.precision);
     run.addArg(opt.architecture);
     run.addArg(if (b.verbose) "verbose" else "quiet");
 
-    const install = b.addInstallDirectory(.{
-        .source_dir = output,
-        .install_dir = .{ .custom = "../" },
-        .install_subdir = "gdzig",
-    });
-
-    return .{ .install = install, .run = run, .output = output };
+    return .{ .run = run, .output = output };
 }
 
 // gdzig
@@ -335,7 +356,16 @@ fn buildDocs(
     };
 }
 
+fn fileExists(lazy_path: *const Build.LazyPath, b: *Build) bool {
+    fs.accessAbsolute(lazy_path.getPath(b), .{}) catch {
+        return false;
+    };
+
+    return true;
+}
+
 const std = @import("std");
+const fs = std.fs;
 const Build = std.Build;
 const Dependency = std.Build.Dependency;
 const Module = std.Build.Module;

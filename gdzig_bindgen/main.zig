@@ -15,13 +15,17 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 5) {
-        std.debug.print("Usage: bindgen <vendor_path> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
+        std.debug.print("Usage: bindgen <vendor_path> <input_path> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
         return;
     }
 
     // Assemble the bindgen configuration
     var config = try Config.loadFromArgs(args);
     defer config.deinit();
+
+    if (config.verbosity == .verbose) {
+        std.debug.print("bindgen: output sent to {s}\n", .{try config.output.realpathAlloc(allocator, ".")});
+    }
 
     var buf: [4096]u8 = undefined;
     var reader = config.extension_api.reader(&buf);

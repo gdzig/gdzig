@@ -27,3 +27,5 @@ gdzig/Interface.zig
 gdzig/math.zig
 gdzig/random.zig
 .claude/settings.local.json
+
+generated/
