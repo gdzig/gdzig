@@ -15,9 +15,9 @@ property2: Vector3 = .zero,
 
 fps_counter: *Label,
 
-pub const __exports = .{
-    .{ .@"export", .property1 },
-    .{ .@"export", .property2, "hint2" },
+pub const __exports = [_]Export{
+    .{ .property = .{ .field = .property1 } },
+    .{ .property = .{ .field = .property2, .hint = "hint2" } },
 };
 
 pub fn init(base: *Node) ExampleNode {
@@ -157,6 +157,7 @@ pub fn _bindMethods() void {
 const std = @import("std");
 
 const godot = @import("gdzig");
+const Export = godot.Export;
 const Engine = godot.class.Engine;
 const HSplitContainer = godot.class.HSplitContainer;
 const ItemList = godot.class.ItemList;

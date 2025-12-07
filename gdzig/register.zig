@@ -113,7 +113,11 @@ pub fn registerClass(
                 }
             }
             if (p_list) |list| {
-                heap.general_allocator.free(list[0..p_count]);
+                const properties: [*]object.PropertyInfo = @ptrCast(@constCast(list));
+                for (properties[0..p_count]) |*prop| {
+                    prop.deinit(heap.general_allocator);
+                }
+                heap.general_allocator.free(properties[0..p_count]);
             }
         }
 

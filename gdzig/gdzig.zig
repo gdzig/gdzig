@@ -138,6 +138,7 @@ const std = @import("std");
 pub const c = @import("gdextension");
 
 pub const exports = @import("exports.zig");
+pub const Export = exports.Export;
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
 pub const general = @import("general.zig");

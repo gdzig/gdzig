@@ -203,8 +203,13 @@ pub const PropertyInfo = extern struct {
     }
 
     pub fn deinit(self: *PropertyInfo, allocator: Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.hint_string);
+        if (self.name) |name| {
+            allocator.destroy(name);
+        }
+        if (self.hint_string) |hint| {
+            hint.deinit();
+            allocator.destroy(hint);
+        }
     }
 };
 
