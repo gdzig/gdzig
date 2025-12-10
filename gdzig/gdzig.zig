@@ -32,6 +32,71 @@ pub const InitializationLevel = enum(c_int) {
     editor = 3,
 };
 
+pub const GodotVersion = extern struct {
+    major: u32,
+    minor: u32,
+    patch: u32,
+    string: [*:0]const u8 = "",
+
+    pub const @"4.0" = parse("4.0");
+    pub const @"4.1" = parse("4.1");
+    pub const @"4.2" = parse("4.2");
+    pub const @"4.3" = parse("4.3");
+    pub const @"4.4" = parse("4.4");
+    pub const @"4.5" = parse("4.5");
+    pub const @"4.6" = parse("4.6");
+
+    /// Returns the currently running version of Godot
+    pub fn current() GodotVersion {
+        var self: GodotVersion = undefined;
+        raw.getGodotVersion(@ptrCast(&self));
+        return self;
+    }
+
+    pub fn gt(self: GodotVersion, other: GodotVersion) bool {
+        if (self.major != other.major) return self.major > other.major;
+        if (self.minor != other.minor) return self.minor > other.minor;
+        return self.patch > other.patch;
+    }
+
+    pub fn gte(self: GodotVersion, other: GodotVersion) bool {
+        if (self.major != other.major) return self.major > other.major;
+        if (self.minor != other.minor) return self.minor > other.minor;
+        return self.patch >= other.patch;
+    }
+
+    pub fn lt(self: GodotVersion, other: GodotVersion) bool {
+        if (self.major != other.major) return self.major < other.major;
+        if (self.minor != other.minor) return self.minor < other.minor;
+        return self.patch < other.patch;
+    }
+
+    pub fn lte(self: GodotVersion, other: GodotVersion) bool {
+        if (self.major != other.major) return self.major < other.major;
+        if (self.minor != other.minor) return self.minor < other.minor;
+        return self.patch <= other.patch;
+    }
+
+    pub fn range(self: GodotVersion, min_ver: GodotVersion, max_ver: GodotVersion) bool {
+        return self.gte(min_ver) and self.lt(max_ver);
+    }
+
+    pub fn parse(comptime version_string: []const u8) GodotVersion {
+        comptime {
+            var parts: [3]u32 = .{ 0, 0, 0 };
+            var part_idx: usize = 0;
+            for (version_string) |ch| {
+                if (ch == '.') {
+                    part_idx += 1;
+                } else {
+                    parts[part_idx] = parts[part_idx] * 10 + (ch - '0');
+                }
+            }
+            return .{ .major = parts[0], .minor = parts[1], .patch = parts[2] };
+        }
+    }
+};
+
 pub fn entrypoint(
     comptime name: []const u8,
     comptime opt: struct {
