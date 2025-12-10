@@ -160,6 +160,9 @@ fn makeClassCallbacks(comptime T: type) struct {
             .property_get_revert = if (@hasDecl(T, "_propertyGetRevert")) T._propertyGetRevert else null,
             .notification = if (@hasDecl(T, "_notification")) Callbacks.notification1 else null,
             .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+            .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
         },
         .v2 = .{
             .create = Callbacks.create,
@@ -167,6 +170,8 @@ fn makeClassCallbacks(comptime T: type) struct {
             .recreate = Callbacks.recreate,
 
             .get_virtual = Callbacks.getVirtual,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
 
             .set = if (@hasDecl(T, "_set")) T._set else null,
             .get = if (@hasDecl(T, "_get")) T._get else null,
@@ -177,6 +182,9 @@ fn makeClassCallbacks(comptime T: type) struct {
             .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
             .notification = if (@hasDecl(T, "_notification")) T._notification else null,
             .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+            .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
         },
         .v3 = .{
             .create = Callbacks.create,
@@ -184,6 +192,8 @@ fn makeClassCallbacks(comptime T: type) struct {
             .recreate = Callbacks.recreate,
 
             .get_virtual = Callbacks.getVirtual,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
 
             .set = if (@hasDecl(T, "_set")) T._set else null,
             .get = if (@hasDecl(T, "_get")) T._get else null,
@@ -194,6 +204,9 @@ fn makeClassCallbacks(comptime T: type) struct {
             .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
             .notification = if (@hasDecl(T, "_notification")) T._notification else null,
             .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+            .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
         },
         .v4 = .{
             .create = Callbacks.create2,
@@ -201,6 +214,8 @@ fn makeClassCallbacks(comptime T: type) struct {
             .recreate = Callbacks.recreate,
 
             .get_virtual = Callbacks.getVirtual2,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
 
             .set = if (@hasDecl(T, "_set")) T._set else null,
             .get = if (@hasDecl(T, "_get")) T._get else null,
@@ -211,6 +226,8 @@ fn makeClassCallbacks(comptime T: type) struct {
             .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
             .notification = if (@hasDecl(T, "_notification")) T._notification else null,
             .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
         },
     };
 }
