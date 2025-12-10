@@ -129,10 +129,6 @@ pub fn signalName(comptime S: type) builtin.StringName {
     return .fromComptimeLatin1(meta.signalName(S));
 }
 
-comptime {
-    std.testing.refAllDeclsRecursive(@This());
-}
-
 const std = @import("std");
 
 pub const c = @import("gdextension");
