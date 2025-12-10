@@ -45,6 +45,7 @@
           default = pkgs.mkShell {
             buildInputs =
               [
+                pkgs.godot
                 pkgs.lldb
                 zigPinned
                 zlsPinned
