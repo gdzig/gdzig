@@ -135,6 +135,7 @@ pub const c = @import("gdextension");
 
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
+pub const classdb = @import("classdb.zig");
 pub const general = @import("general.zig");
 pub const global = @import("global.zig");
 pub const heap = @import("heap.zig");
