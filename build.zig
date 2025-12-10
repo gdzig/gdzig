@@ -1,145 +1,44 @@
-pub fn build(b: *Build) !void {
-    const opt: Options = .{
-        .target = b.standardTargetOptions(.{}),
-        .optimize = b.standardOptimizeOption(.{}),
-        .godot_path = b.option([]const u8, "godot", "Path to Godot engine binary [default: `godot`]") orelse "godot",
-        .precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float",
-        .architecture = b.option([]const u8, "arch", "32") orelse "64",
-        .headers = blk: {
-            const input = b.option([]const u8, "headers", "Where to source Godot header files. [options: GENERATED, VENDORED, DEPENDENCY, <dir_path>] [default: GENERATED]") orelse "GENERATED";
-            const normalized = std.ascii.allocLowerString(b.allocator, input) catch unreachable;
-            const tag = std.meta.stringToEnum(Tag(HeadersSource), normalized);
-            break :blk if (tag) |t| switch (t) {
-                .dependency => .dependency,
-                .generated => .generated,
-                .vendored => .vendored,
-                // edge case if the user uses the literal path "custom"
-                .custom => .{ .custom = b.path("custom") },
-            } else if (normalized.len == 0)
-                .generated
-            else
-                .{ .custom = b.path(normalized) };
-        },
-    };
+const std = @import("std");
+const Build = std.Build;
+const Step = std.Build.Step;
 
-    // Targets
-    const bbcodez = buildBbcodez(b);
-    const case = buildCase(b);
-    const oopz = buildOopz(b);
-    const temp = buildTemp(b);
+pub fn build(b: *Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
-    const headers = installHeaders(b, opt);
+    const godot_path = b.option([]const u8, "godot", "Path to Godot engine binary, used when 'headers' are 'GENERATED' [default: `godot`]") orelse "godot";
+    const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
+    const architecture = b.option([]const u8, "arch", "32") orelse "64";
+    const headers_input = b.option([]const u8, "headers", "Where to source Godot header files. [options: GENERATED, VENDORED, DEPENDENCY, <dir_path>] [default: GENERATED]") orelse "GENERATED";
 
-    const gdextension = buildGdExtension(b, opt, headers.header);
-    const gdzig_bindgen = buildBindgen(b, opt);
-    const generated = buildGenerated(b, opt, gdzig_bindgen.exe, headers.root);
+    const headers_normalized = std.ascii.allocLowerString(b.allocator, headers_input) catch unreachable;
 
-    const gdzig = buildGdzig(b, opt, generated.output);
-    const docs = buildDocs(b, gdzig.lib);
-    const tests = buildTests(b, gdzig.mod, gdzig_bindgen.mod);
-
+    //
     // Dependencies
-    gdzig_bindgen.mod.addImport("bbcodez", bbcodez.mod);
-    gdzig_bindgen.mod.addImport("case", case.mod);
-    gdzig_bindgen.mod.addImport("gdextension", gdextension.mod);
-    gdzig_bindgen.mod.addImport("temp", temp.mod);
+    //
 
-    gdzig.mod.addImport("gdextension", gdextension.mod);
-    gdzig.mod.addImport("oopz", oopz.mod);
-    gdzig.mod.addImport("case", case.mod);
+    const dep_bbcodez = b.dependency("bbcodez", .{});
+    const dep_case = b.dependency("case", .{});
+    const dep_oopz = b.dependency("oopz", .{});
+    const dep_temp = b.dependency("temp", .{});
 
-    // Steps
-    b.step("bindgen", "Build the gdzig_bindgen executable").dependOn(&gdzig_bindgen.install.step);
-    b.step("generated", "Run bindgen to generate builtin/class code").dependOn(&generated.install.step);
-    b.step("docs", "Install docs into zig-out/docs").dependOn(docs.step);
+    //
+    // Headers
+    //
 
-    const test_ = b.step("test", "Run tests");
-    test_.dependOn(&tests.bindgen.step);
-    test_.dependOn(&tests.module.step);
+    const headers_files = b.addWriteFiles();
+    const headers_source: Build.LazyPath = blk: {
+        if (std.mem.eql(u8, headers_normalized, "dependency"))
+            break :blk b.dependency("godot_cpp", .{}).path("gdextension");
 
-    // Install
-    b.installArtifact(gdzig_bindgen.exe);
-    b.installArtifact(gdzig.lib);
-}
+        if (std.mem.eql(u8, headers_normalized, "vendored"))
+            break :blk b.path("vendor");
 
-const HeadersSource = union(enum) {
-    dependency: void,
-    vendored: void,
-    generated: void,
-    custom: Build.LazyPath,
-};
-
-const Options = struct {
-    target: Target,
-    optimize: Optimize,
-    godot_path: []const u8,
-    precision: []const u8,
-    architecture: []const u8,
-    headers: HeadersSource,
-};
-
-const GdzDependency = struct {
-    dep: *Dependency,
-    mod: *Module,
-};
-
-// Dependency: bbcodez
-fn buildBbcodez(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("bbcodez", .{});
-    const mod = dep.module("bbcodez");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: case
-fn buildCase(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("case", .{});
-    const mod = dep.module("case");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: oopz
-fn buildOopz(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("oopz", .{});
-    const mod = dep.module("oopz");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// Dependency: temp
-fn buildTemp(
-    b: *Build,
-) GdzDependency {
-    const dep = b.dependency("temp", .{});
-    const mod = dep.module("temp");
-
-    return .{ .dep = dep, .mod = mod };
-}
-
-// GDExtension Headers
-fn installHeaders(
-    b: *Build,
-    opt: Options,
-) struct {
-    root: Build.LazyPath,
-    api: Build.LazyPath,
-    header: Build.LazyPath,
-} {
-    const files = b.addWriteFiles();
-    const out = switch (opt.headers) {
-        .dependency => b.dependency("godot_cpp", .{}).path("gdextension"),
-        .generated => blk: {
+        if (std.mem.eql(u8, headers_normalized, "generated") or headers_normalized.len == 0) {
             const tmp = b.addWriteFiles();
             const out = tmp.getDirectory();
             const dump = b.addSystemCommand(&.{
-                opt.godot_path,
+                godot_path,
                 "--dump-extension-api-with-docs",
                 "--dump-gdextension-interface",
                 "--headless",
@@ -147,199 +46,161 @@ fn installHeaders(
             dump.setCwd(out);
             _ = dump.captureStdOut();
             _ = dump.captureStdErr();
-            files.step.dependOn(&dump.step);
+            headers_files.step.dependOn(&dump.step);
             break :blk out;
-        },
-        .vendored => b.path("vendor"),
-        .custom => |root| root,
+        }
+
+        break :blk b.path(headers_normalized);
     };
 
-    return .{
-        .root = files.getDirectory(),
-        .api = files.addCopyFile(out.path(b, "extension_api.json"), "extension_api.json"),
-        .header = files.addCopyFile(out.path(b, "gdextension_interface.h"), "gdextension_interface.h"),
-    };
-}
+    const headers_root = headers_files.getDirectory();
+    _ = headers_files.addCopyFile(headers_source.path(b, "extension_api.json"), "extension_api.json");
+    const headers_header = headers_files.addCopyFile(headers_source.path(b, "gdextension_interface.h"), "gdextension_interface.h");
 
-// GDExtension
-fn buildGdExtension(
-    b: *Build,
-    opt: Options,
-    header: Build.LazyPath,
-) struct {
-    mod: *Module,
-    source: *Step.TranslateC,
-} {
-    const source = b.addTranslateC(.{
+    //
+    // GDExtension
+    //
+
+    const gdextension_translate = b.addTranslateC(.{
         .link_libc = true,
-        .optimize = opt.optimize,
-        .target = opt.target,
-        .root_source_file = header,
+        .optimize = optimize,
+        .target = target,
+        .root_source_file = headers_header,
     });
 
-    const mod = b.createModule(.{
-        .root_source_file = source.getOutput(),
-        .optimize = opt.optimize,
-        .target = opt.target,
+    const gdextension_mod = b.createModule(.{
+        .root_source_file = gdextension_translate.getOutput(),
+        .optimize = optimize,
+        .target = target,
         .link_libc = true,
     });
 
-    return .{
-        .mod = mod,
-        .source = source,
-    };
-}
+    //
+    // Bindgen
+    //
 
-// Binding Generator
-fn buildBindgen(
-    b: *Build,
-    opt: Options,
-) struct {
-    install: *Step.InstallArtifact,
-    mod: *Module,
-    exe: *Step.Compile,
-} {
-    const mod = b.addModule("gdzig_bindgen", .{
-        .target = opt.target,
-        .optimize = opt.optimize,
+    const bindgen_options = b.addOptions();
+    bindgen_options.addOption([]const u8, "architecture", architecture);
+    bindgen_options.addOption([]const u8, "precision", precision);
+
+    const bindgen_mod = b.addModule("gdzig_bindgen", .{
+        .target = target,
+        .optimize = optimize,
         .root_source_file = b.path("gdzig_bindgen/main.zig"),
         .link_libc = true,
+        .imports = &.{
+            .{ .name = "bbcodez", .module = dep_bbcodez.module("bbcodez") },
+            .{ .name = "build_options", .module = bindgen_options.createModule() },
+            .{ .name = "case", .module = dep_case.module("case") },
+            .{ .name = "gdextension", .module = gdextension_mod },
+            .{ .name = "temp", .module = dep_temp.module("temp") },
+        },
     });
 
-    const options = b.addOptions();
-    options.addOption([]const u8, "architecture", opt.architecture);
-    options.addOption([]const u8, "precision", opt.precision);
-    mod.addOptions("build_options", options);
-
-    const exe = b.addExecutable(.{
+    const bindgen_exe = b.addExecutable(.{
         .name = "gdzig-bindgen",
-        .root_module = mod,
+        .root_module = bindgen_mod,
     });
 
-    const install = b.addInstallArtifact(exe, .{});
+    const bindgen_install = b.addInstallArtifact(bindgen_exe, .{});
 
-    return .{ .install = install, .mod = mod, .exe = exe };
-}
+    //
+    // Bindings
+    //
 
-// Bindgen
-fn buildGenerated(
-    b: *Build,
-    opt: Options,
-    bindgen: *Step.Compile,
-    headers: Build.LazyPath,
-) struct {
-    run: *Step.Run,
-    install: *Step.InstallDir,
-    output: Build.LazyPath,
-} {
-    const files = b.addWriteFiles();
-    const input = files.addCopyDirectory(b.path("gdzig"), "input", .{
+    const bindings_files = b.addWriteFiles();
+    const bindings_mixins = bindings_files.addCopyDirectory(b.path("gdzig"), "input", .{
         .include_extensions = &.{".mixin.zig"},
     });
 
-    const run = b.addRunArtifact(bindgen);
-    run.expectExitCode(0);
+    const bindings_run = b.addRunArtifact(bindgen_exe);
+    bindings_run.expectExitCode(0);
+    bindings_run.addDirectoryArg(headers_root);
+    bindings_run.addDirectoryArg(bindings_mixins);
 
-    run.addDirectoryArg(headers);
-    run.addDirectoryArg(input);
-    const output = run.addOutputDirectoryArg("generated");
-    run.addArg(opt.precision);
-    run.addArg(opt.architecture);
-    run.addArg(if (b.verbose) "verbose" else "quiet");
+    const bindings_output = bindings_run.addOutputDirectoryArg("bindings");
+    bindings_run.addArg(precision);
+    bindings_run.addArg(architecture);
+    bindings_run.addArg(if (b.verbose) "verbose" else "quiet");
 
-    const install = b.addInstallDirectory(.{
-        .source_dir = output,
+    const bindings_install = b.addInstallDirectory(.{
+        .source_dir = bindings_output,
         .install_dir = .{ .custom = "../" },
         .install_subdir = "gdzig",
     });
 
-    return .{ .install = install, .run = run, .output = output };
-}
+    //
+    // Library
+    //
 
-// gdzig
-fn buildGdzig(
-    b: *Build,
-    opt: Options,
-    generated: Build.LazyPath,
-) struct {
-    lib: *Step.Compile,
-    mod: *Module,
-} {
-    const files = b.addWriteFiles();
-    const combined = files.addCopyDirectory(b.path("gdzig"), "gdzig", .{
+    const gdzig_files = b.addWriteFiles();
+    const gdzig_combined = gdzig_files.addCopyDirectory(b.path("gdzig"), "gdzig", .{
         .exclude_extensions = &.{".mixin.zig"},
     });
-    _ = files.addCopyDirectory(generated, "gdzig", .{});
+    _ = gdzig_files.addCopyDirectory(bindings_output, "gdzig", .{});
 
-    const mod = b.addModule("gdzig", .{
-        .root_source_file = combined.path(b, "gdzig.zig"),
-        .target = opt.target,
-        .optimize = opt.optimize,
+    const gdzig_options = b.addOptions();
+    gdzig_options.addOption([]const u8, "architecture", architecture);
+    gdzig_options.addOption([]const u8, "precision", precision);
+
+    const gdzig_mod = b.addModule("gdzig", .{
+        .root_source_file = gdzig_combined.path(b, "gdzig.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "build_options", .module = gdzig_options.createModule() },
+            .{ .name = "case", .module = dep_case.module("case") },
+            .{ .name = "gdextension", .module = gdextension_mod },
+            .{ .name = "oopz", .module = dep_oopz.module("oopz") },
+        },
     });
 
-    const lib = b.addLibrary(.{
+    const gdzig_lib = b.addLibrary(.{
         .name = "gdzig",
-        .root_module = mod,
+        .root_module = gdzig_mod,
         .linkage = .static,
         .use_llvm = true,
     });
 
-    const options = b.addOptions();
-    options.addOption([]const u8, "architecture", opt.architecture);
-    options.addOption([]const u8, "precision", opt.precision);
-    mod.addOptions("build_options", options);
+    //
+    // Tests
+    //
 
-    return .{ .lib = lib, .mod = mod };
-}
+    const tests_bindgen = b.addTest(.{ .root_module = bindgen_mod });
+    const tests_gdzig = b.addTest(.{ .root_module = gdzig_mod });
+    const tests_bindgen_run = b.addRunArtifact(tests_bindgen);
+    const tests_gdzig_run = b.addRunArtifact(tests_gdzig);
 
-// Tests
-fn buildTests(
-    b: *Build,
-    godot_module: *Module,
-    bindgen_module: *Module,
-) struct {
-    bindgen: *Step.Run,
-    module: *Step.Run,
-} {
-    const bindgen_tests = b.addTest(.{
-        .root_module = bindgen_module,
-    });
-    const module_tests = b.addTest(.{
-        .root_module = godot_module,
-    });
-
-    const bindgen_run = b.addRunArtifact(bindgen_tests);
-    const module_run = b.addRunArtifact(module_tests);
-
-    return .{
-        .bindgen = bindgen_run,
-        .module = module_run,
-    };
-}
-
-// Docs
-fn buildDocs(
-    b: *Build,
-    lib: *Step.Compile,
-) struct {
-    step: *Step,
-} {
-    const install = b.addInstallDirectory(.{
-        .source_dir = lib.getEmittedDocs(),
+    //
+    // Docs
+    //
+    const docs_install = b.addInstallDirectory(.{
+        .source_dir = gdzig_lib.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
 
-    return .{
-        .step = &install.step,
-    };
-}
+    //
+    // Steps
+    //
 
-const std = @import("std");
-const Build = std.Build;
-const Dependency = std.Build.Dependency;
-const Module = std.Build.Module;
-const Optimize = std.builtin.OptimizeMode;
-const Step = std.Build.Step;
-const Tag = std.meta.Tag;
-const Target = std.Build.ResolvedTarget;
+    b.step("build-bindgen", "Build the gdzig_bindgen executable").dependOn(&bindgen_install.step);
+    b.step("run-bindgen", "Run bindgen to generate builtin/class code").dependOn(&bindings_install.step);
+    b.step("docs", "Install docs into zig-out/docs").dependOn(&docs_install.step);
+
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&tests_bindgen_run.step);
+    test_step.dependOn(&tests_gdzig_run.step);
+
+    //
+    // Default build
+    //
+
+    b.installArtifact(bindgen_exe);
+    b.installArtifact(gdzig_lib);
+    b.installDirectory(.{
+        .source_dir = gdzig_lib.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+}
