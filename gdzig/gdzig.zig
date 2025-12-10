@@ -97,6 +97,21 @@ pub const GodotVersion = extern struct {
     }
 };
 
+pub const CallError = error{
+    InvalidMethod,
+    InvalidArgument,
+    TooManyArguments,
+    TooFewArguments,
+    InstanceIsNull,
+    MethodNotConst,
+};
+
+pub const PropertyError = error{
+    InvalidOperation,
+    InvalidKey,
+    IndexOutOfBounds,
+};
+
 pub fn entrypoint(
     comptime name: []const u8,
     comptime opt: struct {

@@ -95,7 +95,7 @@ pub fn ClassCallbacks1(comptime T: type, comptime ClassUserdata: type) type {
         set: ?Set(T) = null,
         get: ?Get(T) = null,
         get_property_list: ?GetPropertyList(T) = null,
-        free_property_list: ?FreePropertyList(T) = null,
+        destroy_property_list: ?DestroyPropertyList(T) = null,
         property_can_revert: ?PropertyCanRevert(T) = null,
         property_get_revert: ?PropertyGetRevert(T) = null,
         notification: ?Notification1(T) = null,
@@ -119,11 +119,11 @@ pub fn ClassCallbacks2(comptime T: type, comptime ClassUserdata: type, comptime 
         set: ?Set(T) = null,
         get: ?Get(T) = null,
         get_property_list: ?GetPropertyList(T) = null,
-        free_property_list: ?FreePropertyList(T) = null,
+        destroy_property_list: ?DestroyPropertyList(T) = null,
         property_can_revert: ?PropertyCanRevert(T) = null,
         property_get_revert: ?PropertyGetRevert(T) = null,
         validate_property: ?ValidateProperty(T) = null,
-        notification: ?Notification(T) = null,
+        notification: ?Notification2(T) = null,
         to_string: ?ToString(T) = null,
         reference: ?Reference(T) = null,
         unreference: ?Unreference(T) = null,
@@ -144,11 +144,11 @@ pub fn ClassCallbacks3(comptime T: type, comptime ClassUserdata: type, comptime 
         set: ?Set(T) = null,
         get: ?Get(T) = null,
         get_property_list: ?GetPropertyList(T) = null,
-        free_property_list: ?FreePropertyList2(T) = null,
+        destroy_property_list: ?DestroyPropertyList2(T) = null,
         property_can_revert: ?PropertyCanRevert(T) = null,
         property_get_revert: ?PropertyGetRevert(T) = null,
         validate_property: ?ValidateProperty(T) = null,
-        notification: ?Notification(T) = null,
+        notification: ?Notification2(T) = null,
         to_string: ?ToString(T) = null,
         reference: ?Reference(T) = null,
         unreference: ?Unreference(T) = null,
@@ -169,11 +169,11 @@ pub fn ClassCallbacks4(comptime T: type, comptime ClassUserdata: type, comptime 
         set: ?Set(T) = null,
         get: ?Get(T) = null,
         get_property_list: ?GetPropertyList(T) = null,
-        free_property_list: ?FreePropertyList2(T) = null,
+        destroy_property_list: ?DestroyPropertyList2(T) = null,
         property_can_revert: ?PropertyCanRevert(T) = null,
         property_get_revert: ?PropertyGetRevert(T) = null,
         validate_property: ?ValidateProperty(T) = null,
-        notification: ?Notification(T) = null,
+        notification: ?Notification2(T) = null,
         to_string: ?ToString(T) = null,
         reference: ?Reference(T) = null,
         unreference: ?Unreference(T) = null,
@@ -277,7 +277,7 @@ fn wrapRecreate(comptime T: type, comptime ClassUserdata: type, comptime callbac
 //
 
 pub fn Set(comptime T: type) type {
-    return fn (self: *T, name: *const StringName, value: *const Variant) bool;
+    return fn (self: *T, name: *const StringName, value: *const Variant) PropertyError!void;
 }
 
 fn wrapSet(comptime T: type, comptime callback: Set(T)) Child(c.GDExtensionClassSet) {
@@ -286,13 +286,14 @@ fn wrapSet(comptime T: type, comptime callback: Set(T)) Child(c.GDExtensionClass
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const name = @as(*const StringName, @ptrCast(p_name));
             const value = @as(*const Variant, @ptrCast(p_value));
-            return if (callback(instance, name, value)) 1 else 0;
+            callback(instance, name, value) catch return 0;
+            return 1;
         }
     }.wrapped;
 }
 
 pub fn Get(comptime T: type) type {
-    return fn (self: *T, name: *const StringName, ret: *Variant) bool;
+    return fn (self: *T, name: *const StringName) PropertyError!Variant;
 }
 
 fn wrapGet(comptime T: type, comptime callback: Get(T)) Child(c.GDExtensionClassGet) {
@@ -301,30 +302,36 @@ fn wrapGet(comptime T: type, comptime callback: Get(T)) Child(c.GDExtensionClass
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const name = @as(*const StringName, @ptrCast(p_name));
             const ret = @as(*Variant, @ptrCast(@alignCast(r_ret)));
-            return if (callback(instance, name, ret)) 1 else 0;
+            ret.* = callback(instance, name) catch return 0;
+            return 1;
         }
     }.wrapped;
 }
 
 pub fn GetPropertyList(comptime T: type) type {
-    return fn (self: *T, count: *u32) ?[*]const PropertyInfo;
+    return fn (self: *T) Allocator.Error![]const PropertyInfo;
 }
 
 fn wrapGetPropertyList(comptime T: type, comptime callback: GetPropertyList(T)) Child(c.GDExtensionClassGetPropertyList) {
     return struct {
         fn wrapped(p_instance: c.GDExtensionClassInstancePtr, r_count: *u32) callconv(.c) ?*const c.GDExtensionPropertyInfo {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
-            const list = callback(instance, r_count);
-            return @ptrCast(list);
+            const list = callback(instance) catch {
+                r_count.* = 0;
+                return null;
+            };
+            r_count.* = @intCast(list.len);
+            if (list.len == 0) return null;
+            return @ptrCast(list.ptr);
         }
     }.wrapped;
 }
 
-pub fn FreePropertyList(comptime T: type) type {
+pub fn DestroyPropertyList(comptime T: type) type {
     return fn (self: *T, list: [*]const PropertyInfo) void;
 }
 
-fn wrapFreePropertyList(comptime T: type, comptime callback: FreePropertyList(T)) Child(c.GDExtensionClassFreePropertyList) {
+fn wrapDestroyPropertyList(comptime T: type, comptime callback: DestroyPropertyList(T)) Child(c.GDExtensionClassFreePropertyList) {
     return struct {
         fn wrapped(p_instance: c.GDExtensionClassInstancePtr, p_list: ?*const c.GDExtensionPropertyInfo) callconv(.c) void {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
@@ -335,11 +342,11 @@ fn wrapFreePropertyList(comptime T: type, comptime callback: FreePropertyList(T)
     }.wrapped;
 }
 
-pub fn FreePropertyList2(comptime T: type) type {
+pub fn DestroyPropertyList2(comptime T: type) type {
     return fn (self: *T, list: []const PropertyInfo) void;
 }
 
-fn wrapFreePropertyList2(comptime T: type, comptime callback: FreePropertyList2(T)) Child(c.GDExtensionClassFreePropertyList2) {
+fn wrapDestroyPropertyList2(comptime T: type, comptime callback: DestroyPropertyList2(T)) Child(c.GDExtensionClassFreePropertyList2) {
     return struct {
         fn wrapped(p_instance: c.GDExtensionClassInstancePtr, p_list: ?*const c.GDExtensionPropertyInfo, p_count: u32) callconv(.c) void {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
@@ -366,7 +373,7 @@ fn wrapPropertyCanRevert(comptime T: type, comptime callback: PropertyCanRevert(
 }
 
 pub fn PropertyGetRevert(comptime T: type) type {
-    return fn (self: *T, name: *const StringName, ret: *Variant) bool;
+    return fn (self: *T, name: *const StringName) PropertyError!Variant;
 }
 
 fn wrapPropertyGetRevert(comptime T: type, comptime callback: PropertyGetRevert(T)) Child(c.GDExtensionClassPropertyGetRevert) {
@@ -375,7 +382,8 @@ fn wrapPropertyGetRevert(comptime T: type, comptime callback: PropertyGetRevert(
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const name = @as(*const StringName, @ptrCast(p_name));
             const ret = @as(*Variant, @ptrCast(@alignCast(r_ret)));
-            return if (callback(instance, name, ret)) 1 else 0;
+            ret.* = callback(instance, name) catch return 0;
+            return 1;
         }
     }.wrapped;
 }
@@ -411,11 +419,11 @@ fn wrapNotification1(comptime T: type, comptime callback: Notification1(T)) Chil
     }.wrapped;
 }
 
-pub fn Notification(comptime T: type) type {
+pub fn Notification2(comptime T: type) type {
     return fn (self: *T, what: i32, reversed: bool) void;
 }
 
-fn wrapNotification(comptime T: type, comptime callback: Notification(T)) Child(c.GDExtensionClassNotification2) {
+fn wrapNotification(comptime T: type, comptime callback: Notification2(T)) Child(c.GDExtensionClassNotification2) {
     return struct {
         fn wrapped(p_instance: c.GDExtensionClassInstancePtr, p_what: i32, p_reversed: c.GDExtensionBool) callconv(.c) void {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
@@ -433,12 +441,11 @@ fn wrapToString(comptime T: type, comptime callback: ToString(T)) Child(c.GDExte
         fn wrapped(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: *c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.c) void {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const out = @as(*String, @ptrCast(@alignCast(p_out)));
-            if (callback(instance)) |str| {
-                out.* = str;
-                r_is_valid.* = 1;
-            } else {
+            out.* = callback(instance) orelse {
                 r_is_valid.* = 0;
-            }
+                return;
+            };
+            r_is_valid.* = 1;
         }
     }.wrapped;
 }
@@ -669,9 +676,9 @@ pub const MethodArgumentMetadata = enum(c_uint) {
 
 pub fn Call(comptime T: type, comptime Userdata: type) type {
     return if (Userdata != void)
-        fn (userdata: *Userdata, instance: *T, args: []const *const Variant, ret: *Variant) ?CallError
+        fn (userdata: *Userdata, instance: *T, args: []const *const Variant) CallError!Variant
     else
-        fn (instance: *T, args: []const *const Variant, ret: *Variant) ?CallError;
+        fn (instance: *T, args: []const *const Variant) CallError!Variant;
 }
 
 fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T, Userdata)) Child(c.GDExtensionClassMethodCall) {
@@ -681,16 +688,19 @@ fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T
             const args = @as([*]const *const Variant, @ptrCast(p_args))[0..@intCast(p_argument_count)];
             const ret = @as(*Variant, @ptrCast(@alignCast(r_return)));
 
-            const result: ?CallError = if (Userdata != void) blk: {
+            if (Userdata != void) {
                 const userdata = @as(*Userdata, @ptrCast(@alignCast(method_userdata)));
-                break :blk callback(userdata, instance, args, ret);
-            } else callback(instance, args, ret);
-
-            if (result) |err| {
-                r_error.* = @bitCast(err);
+                ret.* = callback(userdata, instance, args) catch |err| {
+                    r_error.* = @bitCast(CallResult.fromError(err));
+                    return;
+                };
             } else {
-                r_error.*.@"error" = c.GDEXTENSION_CALL_OK;
+                ret.* = callback(instance, args) catch |err| {
+                    r_error.* = @bitCast(CallResult.fromError(err));
+                    return;
+                };
             }
+            r_error.*.@"error" = c.GDEXTENSION_CALL_OK;
         }
     }.wrapped;
 }
@@ -718,15 +728,15 @@ fn wrapPtrCall(comptime T: type, comptime Userdata: type, comptime callback: Ptr
 }
 
 //
-// Call Error
+// Call Result
 //
 
-pub const CallError = extern struct {
-    @"error": Error,
-    argument: i32,
-    expected: i32,
+pub const CallResult = extern struct {
+    @"error": Status = .ok,
+    argument: i32 = 0,
+    expected: i32 = 0,
 
-    pub const Error = enum(c_uint) {
+    pub const Status = enum(c_uint) {
         ok = c.GDEXTENSION_CALL_OK,
         invalid_method = c.GDEXTENSION_CALL_ERROR_INVALID_METHOD,
         invalid_argument = c.GDEXTENSION_CALL_ERROR_INVALID_ARGUMENT,
@@ -735,6 +745,31 @@ pub const CallError = extern struct {
         instance_is_null = c.GDEXTENSION_CALL_ERROR_INSTANCE_IS_NULL,
         method_not_const = c.GDEXTENSION_CALL_ERROR_METHOD_NOT_CONST,
     };
+
+    pub fn throw(self: CallResult) CallError!void {
+        return switch (self.@"error") {
+            .ok => {},
+            .invalid_method => error.InvalidMethod,
+            .invalid_argument => error.InvalidArgument,
+            .too_many_arguments => error.TooManyArguments,
+            .too_few_arguments => error.TooFewArguments,
+            .instance_is_null => error.InstanceIsNull,
+            .method_not_const => error.MethodNotConst,
+        };
+    }
+
+    pub fn fromError(err: CallError) CallResult {
+        return .{
+            .@"error" = switch (err) {
+                error.InvalidMethod => .invalid_method,
+                error.InvalidArgument => .invalid_argument,
+                error.TooManyArguments => .too_many_arguments,
+                error.TooFewArguments => .too_few_arguments,
+                error.InstanceIsNull => .instance_is_null,
+                error.MethodNotConst => .method_not_const,
+            },
+        };
+    }
 };
 
 //
@@ -782,7 +817,7 @@ pub inline fn registerClass1(
             .set_func = if (callbacks.set) |f| wrapSet(T, f) else null,
             .get_func = if (callbacks.get) |f| wrapGet(T, f) else null,
             .get_property_list_func = if (callbacks.get_property_list) |f| wrapGetPropertyList(T, f) else null,
-            .free_property_list_func = if (callbacks.free_property_list) |f| wrapFreePropertyList(T, f) else null,
+            .free_property_list_func = if (callbacks.destroy_property_list) |f| wrapDestroyPropertyList(T, f) else null,
             .property_can_revert_func = if (callbacks.property_can_revert) |f| wrapPropertyCanRevert(T, f) else null,
             .property_get_revert_func = if (callbacks.property_get_revert) |f| wrapPropertyGetRevert(T, f) else null,
             .notification_func = if (callbacks.notification) |f| wrapNotification1(T, f) else null,
@@ -829,7 +864,7 @@ pub inline fn registerClass2(
             .set_func = if (callbacks.set) |f| wrapSet(T, f) else null,
             .get_func = if (callbacks.get) |f| wrapGet(T, f) else null,
             .get_property_list_func = if (callbacks.get_property_list) |f| wrapGetPropertyList(T, f) else null,
-            .free_property_list_func = if (callbacks.free_property_list) |f| wrapFreePropertyList(T, f) else null,
+            .free_property_list_func = if (callbacks.destroy_property_list) |f| wrapDestroyPropertyList(T, f) else null,
             .property_can_revert_func = if (callbacks.property_can_revert) |f| wrapPropertyCanRevert(T, f) else null,
             .property_get_revert_func = if (callbacks.property_get_revert) |f| wrapPropertyGetRevert(T, f) else null,
             .validate_property_func = if (callbacks.validate_property) |f| wrapValidateProperty(T, f) else null,
@@ -878,7 +913,7 @@ pub inline fn registerClass3(
             .set_func = if (callbacks.set) |f| wrapSet(T, f) else null,
             .get_func = if (callbacks.get) |f| wrapGet(T, f) else null,
             .get_property_list_func = if (callbacks.get_property_list) |f| wrapGetPropertyList(T, f) else null,
-            .free_property_list_func = if (callbacks.free_property_list) |f| wrapFreePropertyList2(T, f) else null,
+            .free_property_list_func = if (callbacks.destroy_property_list) |f| wrapDestroyPropertyList2(T, f) else null,
             .property_can_revert_func = if (callbacks.property_can_revert) |f| wrapPropertyCanRevert(T, f) else null,
             .property_get_revert_func = if (callbacks.property_get_revert) |f| wrapPropertyGetRevert(T, f) else null,
             .validate_property_func = if (callbacks.validate_property) |f| wrapValidateProperty(T, f) else null,
@@ -928,7 +963,7 @@ pub inline fn registerClass4(
             .set_func = if (callbacks.set) |f| wrapSet(T, f) else null,
             .get_func = if (callbacks.get) |f| wrapGet(T, f) else null,
             .get_property_list_func = if (callbacks.get_property_list) |f| wrapGetPropertyList(T, f) else null,
-            .free_property_list_func = if (callbacks.free_property_list) |f| wrapFreePropertyList2(T, f) else null,
+            .free_property_list_func = if (callbacks.destroy_property_list) |f| wrapDestroyPropertyList2(T, f) else null,
             .property_can_revert_func = if (callbacks.property_can_revert) |f| wrapPropertyCanRevert(T, f) else null,
             .property_get_revert_func = if (callbacks.property_get_revert) |f| wrapPropertyGetRevert(T, f) else null,
             .validate_property_func = if (callbacks.validate_property) |f| wrapValidateProperty(T, f) else null,
@@ -1106,18 +1141,21 @@ test {
 //
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const Child = std.meta.Child;
 
 const c = @import("gdextension");
 
 const godot = @import("gdzig.zig");
-const builtin = godot.builtin;
+const CallError = godot.CallError;
+const MethodFlags = global.MethodFlags;
+const Object = godot.class.Object;
+const PropertyError = godot.PropertyError;
+const PropertyHint = global.PropertyHint;
+const PropertyUsageFlags = global.PropertyUsageFlags;
+const RID = builtin.RID;
 const String = builtin.String;
 const StringName = builtin.StringName;
 const Variant = builtin.Variant;
-const RID = builtin.RID;
-const Object = godot.class.Object;
+const builtin = godot.builtin;
 const global = godot.global;
-const MethodFlags = global.MethodFlags;
-const PropertyHint = global.PropertyHint;
-const PropertyUsageFlags = global.PropertyUsageFlags;
