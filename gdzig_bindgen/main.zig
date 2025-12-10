@@ -5,6 +5,23 @@ const Config = @import("Config.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("GodotApi.zig");
 
+var verbose: bool = false;
+
+pub const std_options: std.Options = .{
+    .logFn = logFn,
+};
+
+fn logFn(
+    comptime level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    if (!verbose and level != .err) return;
+    if (!verbose and scope == .markdown_formatter) return;
+    std.log.defaultLog(level, scope, format, args);
+}
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -15,13 +32,15 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 5) {
-        std.debug.print("Usage: bindgen <vendor_path> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
+        std.debug.print("Usage: bindgen <vendor_path> <mixins_root> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
         return;
     }
 
     // Assemble the bindgen configuration
     var config = try Config.loadFromArgs(args);
     defer config.deinit();
+
+    verbose = config.verbosity == .verbose;
 
     var buf: [4096]u8 = undefined;
     var reader = config.extension_api.reader(&buf);
