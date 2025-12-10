@@ -1,7 +1,3 @@
-const std = @import("std");
-const Build = std.Build;
-const Step = std.Build.Step;
-
 pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -204,3 +200,7 @@ pub fn build(b: *Build) void {
         .install_subdir = "docs",
     });
 }
+
+const std = @import("std");
+const Build = std.Build;
+const Step = std.Build.Step;
