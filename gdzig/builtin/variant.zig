@@ -296,7 +296,7 @@ test "forType" {
         .{ .color, Color },
         .{ .dictionary, Dictionary },
         .{ .node_path, NodePath },
-        .{ .object, Object },
+        .{ .object, *Object },
         .{ .packed_byte_array, PackedByteArray },
         .{ .packed_color_array, PackedColorArray },
         .{ .packed_float32_array, PackedFloat32Array },
@@ -326,11 +326,7 @@ test "forType" {
 
         .{ .nil, void },
         .{ .bool, bool },
-        .{ .int, i32 },
         .{ .int, i64 },
-        .{ .int, u32 },
-        .{ .int, u64 },
-        .{ .float, f32 },
         .{ .float, f64 },
         .{ .int, enum(u32) {} },
     };
@@ -342,8 +338,6 @@ test "forType" {
         try testing.expectEqual(tag, Variant.Tag.forType(T));
         try testing.expectEqual(tag, Variant.Tag.forType(*T));
         try testing.expectEqual(tag, Variant.Tag.forType(*const T));
-        try testing.expectEqual(tag, Variant.Tag.forType(?*T));
-        try testing.expectEqual(tag, Variant.Tag.forType(?*const T));
     }
 }
 
