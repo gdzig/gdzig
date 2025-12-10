@@ -9,6 +9,7 @@ project/lib/
 **/.godot/**
 **/*.import
 **/.direnv
+.envrc
 
 !**/.godot/extension_list.cfg
 !**/.godot/global_script_class_cache.cfg
