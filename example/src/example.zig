@@ -1,7 +1,11 @@
-var gpa: std.heap.DebugAllocator(.{}) = .init;
+var godot_allocator: godot.godot_allocator = .{};
 
 comptime {
-    godot.entrypoint("my_extension_init", .{ .init = &init, .deinit = &deinit });
+    godot.entrypoint("my_extension_init", .{
+        .allocator = godot_allocator.allocator(),
+        .init = &init,
+        .deinit = &deinit,
+    });
 }
 
 fn init(level: godot.InitializationLevel) void {
@@ -14,14 +18,7 @@ fn init(level: godot.InitializationLevel) void {
 
 fn deinit(level: godot.InitializationLevel) void {
     std.debug.print("[{s}] deinit\n", .{@tagName(level)});
-
-    if (level == .core) {
-        _ = gpa.deinit();
-    }
 }
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const DebugAllocator = std.heap.DebugAllocator;
-
 const godot = @import("gdzig");

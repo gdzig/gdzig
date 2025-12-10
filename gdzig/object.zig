@@ -33,7 +33,7 @@ pub fn create(comptime T: type) !*T {
 
     // Allocate the user object, and link it to the base object
     const class_name = meta.typeName(T);
-    const self: *T = try godot.heap.general_allocator.create(T);
+    const self: *T = try godot.godot_allocator.general_allocator.create(T);
     godot.interface.objectSetInstance(@ptrCast(base), @ptrCast(class_name), @ptrCast(self));
     godot.interface.objectSetInstanceBinding(@ptrCast(base), godot.interface.library, @ptrCast(self), &dummy_callbacks);
 

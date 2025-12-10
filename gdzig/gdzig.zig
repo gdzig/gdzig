@@ -17,7 +17,7 @@
 //!
 //! We also provide a framework around the generated code that helps you write your extension:
 //!
-//! - `heap` - Work with Godot's allocator
+//! - `godot_allocator` - Work with Godot's allocator
 //! - `meta` - Type introspection and class hierarchy
 //! - `object` - Object lifecycle and class inheritance
 //! - `register` - Class, method, plugin and signal registration
@@ -35,6 +35,7 @@ pub const InitializationLevel = enum(c_int) {
 pub fn entrypoint(
     comptime name: []const u8,
     comptime opt: struct {
+        allocator: std.mem.Allocator,
         init: ?*const fn (level: InitializationLevel) void = null,
         deinit: ?*const fn (level: InitializationLevel) void = null,
         minimum_initialization_level: InitializationLevel = InitializationLevel.core,
@@ -42,6 +43,7 @@ pub fn entrypoint(
 ) void {
     comptime entrypointWithUserdata(name, void, .{
         .userdata = {},
+        .allocator = opt.allocator,
         .init = opt.init,
         .deinit = opt.deinit,
         .minimum_initialization_level = opt.minimum_initialization_level,
@@ -53,6 +55,7 @@ pub fn entrypointWithUserdata(
     comptime Userdata: type,
     comptime opt: struct {
         userdata: if (Userdata == void) void else *const fn () Userdata,
+        allocator: std.mem.Allocator,
         init: if (Userdata == void) ?*const fn (level: InitializationLevel) void else ?*const fn (userdata: Userdata, level: InitializationLevel) void = null,
         deinit: if (Userdata == void) ?*const fn (level: InitializationLevel) void else ?*const fn (userdata: Userdata, level: InitializationLevel) void = null,
         minimum_initialization_level: InitializationLevel = InitializationLevel.core,
@@ -66,6 +69,7 @@ pub fn entrypointWithUserdata(
         ) callconv(.c) c.GDExtensionBool {
             raw = .init(p_get_proc_address.?, p_library.?);
             interface = &raw;
+            godot_allocator.setAllocator(opt.allocator);
             r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
             r_initialization.*.initialize = @ptrCast(&init);
             r_initialization.*.deinitialize = @ptrCast(&deinit);
@@ -141,7 +145,7 @@ pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
 pub const general = @import("general.zig");
 pub const global = @import("global.zig");
-pub const heap = @import("heap.zig");
+pub const godot_allocator = @import("heap/GodotAllocator.zig");
 pub const Interface = @import("Interface.zig");
 pub const math = @import("math.zig");
 pub const meta = @import("meta.zig");

@@ -50,14 +50,14 @@ pub fn _ready(self: *Self) void {
         spr.gd_sprite.setScale(spr.scale);
         spr.size = spr.gd_sprite.getRect().size;
         self.base.addChild(.upcast(spr.gd_sprite), .{});
-        self.sprites.append(godot.heap.general_allocator, spr) catch |err| {
+        self.sprites.append(godot.godot_allocator.general_allocator, spr) catch |err| {
             std.log.err("Failed to append sprite: {}", .{err});
         };
     }
 }
 
 pub fn _exitTree(self: *Self) void {
-    self.sprites.deinit(godot.heap.general_allocator);
+    self.sprites.deinit(godot.godot_allocator.general_allocator);
 }
 
 pub fn _physicsProcess(self: *Self, delta: f64) void {

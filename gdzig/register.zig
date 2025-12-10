@@ -15,7 +15,7 @@ pub fn registerClass(
     const class_name = comptime meta.typeShortName(T);
 
     if (registered_classes.contains(class_name)) return;
-    registered_classes.putNoClobber(godot.heap.general_allocator, class_name, {}) catch unreachable;
+    registered_classes.putNoClobber(godot.godot_allocator.general_allocator, class_name, {}) catch unreachable;
 
     const PerClassData = struct {
         pub var class_info = init_blk: {
@@ -90,7 +90,7 @@ pub fn registerClass(
                 const ptr: *T = @ptrCast(@alignCast(p));
 
                 var builder = object.PropertyBuilder{
-                    .allocator = godot.heap.general_allocator,
+                    .allocator = godot.godot_allocator.general_allocator,
                 };
                 ptr._getPropertyList(&builder) catch @panic("Failed to get property list");
                 r_count.* = @intCast(builder.properties.items.len);
@@ -111,7 +111,7 @@ pub fn registerClass(
                 }
             }
             if (p_list) |list| {
-                heap.general_allocator.free(list[0..p_count]);
+                godot_allocator.general_allocator.free(list[0..p_count]);
             }
         }
 
@@ -179,7 +179,7 @@ pub fn registerClass(
             if (@hasDecl(T, "deinit")) {
                 @as(*T, @ptrCast(@alignCast(p_instance))).deinit();
             }
-            heap.general_allocator.destroy(@as(*T, @ptrCast(@alignCast(p_instance))));
+            godot_allocator.general_allocator.destroy(@as(*T, @ptrCast(@alignCast(p_instance))));
             _ = p_userdata;
         }
 
@@ -221,7 +221,7 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     //prevent duplicate registration
     const fullname = comptime meta.typeShortName(T) ++ "::" ++ name;
     if (registered_methods.contains(fullname)) return;
-    registered_methods.putNoClobber(godot.heap.general_allocator, fullname, {}) catch unreachable;
+    registered_methods.putNoClobber(godot.godot_allocator.general_allocator, fullname, {}) catch unreachable;
 
     const p_method = @field(T, name);
     const MethodBinder = support.MethodBinderT(@TypeOf(p_method));
@@ -274,7 +274,7 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
     //prevent duplicate registration
     const fullname = comptime meta.typeShortName(T) ++ "::" ++ meta.typeShortName(S);
     if (registered_signals.contains(fullname)) return;
-    registered_signals.putNoClobber(godot.heap.general_allocator, fullname, {}) catch unreachable;
+    registered_signals.putNoClobber(godot.godot_allocator.general_allocator, fullname, {}) catch unreachable;
 
     if (@typeInfo(S) != .@"struct") {
         @compileError("Signal '" ++ meta.typeShortName(S) ++ "' for '" ++ meta.typeShortName(T) ++ "' must be a struct");
@@ -282,7 +282,7 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
 
     const signal_name = comptime meta.signalName(S);
 
-    var arena = ArenaAllocator.init(std.heap.page_allocator);
+    var arena = ArenaAllocator.init(godot.godot_allocator.general_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
@@ -309,9 +309,9 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
 }
 
 pub fn deinit() void {
-    registered_signals.deinit(godot.heap.general_allocator);
-    registered_methods.deinit(godot.heap.general_allocator);
-    registered_classes.deinit(godot.heap.general_allocator);
+    registered_signals.deinit(godot.godot_allocator.general_allocator);
+    registered_methods.deinit(godot.godot_allocator.general_allocator);
+    registered_classes.deinit(godot.godot_allocator.general_allocator);
 }
 
 const std = @import("std");
@@ -322,7 +322,7 @@ const oopz = @import("oopz");
 
 const godot = @import("gdzig.zig");
 const c = godot.c;
-const heap = godot.heap;
+const godot_allocator = godot.godot_allocator;
 const meta = godot.meta;
 const object = godot.object;
 const support = godot.support;
