@@ -486,6 +486,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     try w.writeLine(
         \\const oopz = @import("oopz");
         \\const typeName = @import("../gdzig.zig").typeName;
+        \\const gdzig_object = @import("../object.zig");
     );
     try writeImports(w, "..", &class.imports, ctx);
 }
@@ -580,68 +581,26 @@ fn writeClassFunctionObjectPtr(w: *CodeWriter, class: *const Context.Class, func
 }
 
 fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
-    try w.writeLine(
-        \\pub fn getVirtualDispatch(comptime T: type, p_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) c.GDExtensionClassCallVirtual {
-    );
-    w.indent += 1;
-
-    // Inherited virtual/abstract functions
-    var cur: ?*const Context.Class = class;
-    while (cur) |base| : (cur = base.getBasePtr(ctx)) {
-        for (base.functions.values()) |*function| {
-            if (function.mode == .final) continue;
-            try w.printLine(
-                \\if (@hasDecl(T, "{0s}") and @import("std").meta.eql(@as(*StringName, @ptrCast(@constCast(p_name))).*, StringName.fromComptimeLatin1("{1s}"))) {{
-                \\    return &struct {{
-                \\        fn call(p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, p_return: c.GDExtensionTypePtr) callconv(.c) void {{
-                \\            const Fn = @TypeOf(T.{0s});
-                \\            const info = @typeInfo(Fn).@"fn";
-                \\            const method: *Fn = @ptrCast(@constCast(&T.{0s}));
-                \\            var args: std.meta.ArgsTuple(Fn) = undefined;
-                \\            if (info.params.len > 0) {{
-                \\                args[0] = @ptrCast(@alignCast(p_instance));
-                \\                inline for (1..info.params.len, 0..) |i, j| {{
-                \\                    const Arg = @TypeOf(args[i]);
-                \\                    const ArgChild = if (@typeInfo(Arg) == .pointer) @typeInfo(Arg).pointer.child else Arg;
-                \\                    if (comptime oopz.isA(RefCounted, ArgChild)) {{
-                \\                        const obj = raw.refGetObject(p_args[j]);
-                \\                        args[i] = @ptrCast(obj.?);
-                \\                    }} else if (comptime oopz.isOpaqueClassPtr(Arg)) {{
-                \\                        args[i] = @ptrCast(@constCast(p_args[j].?));
-                \\                    }} else {{
-                \\                        args[i] = @as(*Arg, @ptrCast(@constCast(@alignCast(p_args[j])))).*;
-                \\                    }}
-                \\                }}
-                \\            }}
-                \\            if (info.return_type == void or info.return_type == null) {{
-                \\                @call(.auto, method, args);
-                \\            }} else {{
-                \\                @as(*info.return_type.?, @ptrCast(@alignCast(p_return))).* = @call(.auto, method, args);
-                \\            }}
-                \\        }}
-                \\    }}.call;
-                \\}}
-            , .{ function.name, function.name_api });
-        }
-    }
-
     if (class.base) |base| {
-        try w.printLine(
-            \\return {s}.getVirtualDispatch(T, p_userdata, p_name);
-        , .{base});
+        try w.printLine("pub const VTable = {s}.VTable.extend(@This(), .{{", .{base});
+
+        w.indent += 1;
+        for (class.functions.values()) |*function| {
+            if (function.mode == .final) continue;
+            try w.printLine("\"{s}\",", .{function.name});
+        }
+        w.indent -= 1;
+
+        try w.writeLine("});\n");
     } else {
-        try w.writeLine(
-            \\_ = T;
-            \\_ = p_userdata;
-            \\_ = p_name;
-            \\return null;
-        );
+        // The root Object has its VTable defined in Object.mixin.zig
     }
 
-    w.indent -= 1;
-    try w.writeLine(
-        \\}
-    );
+    for (class.functions.values()) |*function| {
+        if (function.mode == .final) continue;
+        try writeClassFunction(w, class, function, ctx);
+        try w.writeAll("\n");
+    }
 }
 
 fn writeConstant(w: *CodeWriter, constant: *const Context.Constant) !void {

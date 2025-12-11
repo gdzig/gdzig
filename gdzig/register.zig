@@ -135,8 +135,10 @@ fn makeClassCallbacks(comptime T: type) struct {
 
         fn getVirtual(name: *const StringName) ?classdb.CallVirtual(T) {
             const Base = object.BaseOf(T);
-            const raw_ptr = Base.getVirtualDispatch(T, null, @ptrCast(name));
-            return @ptrCast(raw_ptr);
+            const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
+            var buf: [256]u8 = undefined;
+            const name_str = name.toUtf8(&buf);
+            return UserVTable.get(name_str);
         }
 
         fn getVirtual2(name: *const StringName, hash: u32) ?classdb.CallVirtual(T) {
@@ -230,6 +232,48 @@ fn makeClassCallbacks(comptime T: type) struct {
             .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
         },
     };
+}
+
+fn virtualMethodNames(comptime T: type) []const []const u8 {
+    const callbacks = [_][]const u8{
+        "_bindMethods",
+        "_destroyPropertyList",
+        "_get",
+        "_getPropertyList",
+        "_getRid",
+        "_notification",
+        "_propertyCanRevert",
+        "_propertyGetRevert",
+        "_reference",
+        "_set",
+        "_toString",
+        "_unreference",
+        "_validateProperty",
+    };
+
+    const decls = @typeInfo(T).@"struct".decls;
+    var names: [decls.len][]const u8 = undefined;
+    var count: usize = 0;
+
+    inline for (decls) |decl| {
+        // Must start with _
+        if (decl.name.len == 0 or decl.name[0] != '_') continue;
+
+        // Must be a function
+        const field = @field(T, decl.name);
+        if (@typeInfo(@TypeOf(field)) != .@"fn") continue;
+
+        // Must not be a callback
+        const is_callback = for (callbacks) |cb| {
+            if (std.mem.eql(u8, decl.name, cb)) break true;
+        } else false;
+        if (is_callback) continue;
+
+        names[count] = decl.name;
+        count += 1;
+    }
+
+    return names[0..count];
 }
 
 pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {

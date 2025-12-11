@@ -174,6 +174,80 @@ fn assertCanInitialize(comptime T: type) void {
     }
 }
 
+pub fn VTable(comptime T: type, comptime method_names: anytype) type {
+    return struct {
+        const map: std.StaticStringMap(CallVirtual(T)) = .initComptime(blk: {
+            var kvs: [method_names.len]struct { []const u8, CallVirtual(T) } = undefined;
+            for (method_names, 0..) |name, i| {
+                kvs[i] = .{ name, makeWrapper(name) };
+            }
+            break :blk &kvs;
+        });
+
+        pub fn has(name: []const u8) bool {
+            return map.has(name);
+        }
+
+        pub fn get(name: []const u8) ?CallVirtual(T) {
+            return map.get(name);
+        }
+
+        pub fn extend(comptime Derived: type, comptime override_names: anytype) type {
+            return VTable(Derived, combineNames(override_names));
+        }
+
+        fn combineNames(comptime override_names: anytype) [][]const u8 {
+            var combined_names: [method_names.len + override_names.len][]const u8 = undefined;
+            var i = 0;
+            @memcpy(combined_names[0..method_names.len], method_names);
+            outer: inline for (override_names) |override_name| {
+                inline for (method_names) |method_name| {
+                    if (std.mem.eql(u8, override_name, method_name)) {
+                        continue :outer;
+                    }
+                }
+                combined_names[method_names.len + i] = override_name;
+                i += 1;
+            }
+            return combined_names[0 .. method_names.len + i];
+        }
+
+        fn makeWrapper(comptime method_name: []const u8) CallVirtual(T) {
+            inline for (selfAndAncestorsOf(T)) |Owner| {
+                if (@hasDecl(Owner, method_name)) {
+                    const method = @field(Owner, method_name);
+                    const FnType = @TypeOf(method);
+                    const fn_info = @typeInfo(FnType).@"fn";
+                    const ReturnType = fn_info.return_type orelse void;
+
+                    return struct {
+                        fn call(p_instance: *T, p_args: [*]const *const anyopaque, p_ret: *anyopaque) void {
+                            const instance: *Owner = if (Owner == T) p_instance else upcast(*Owner, p_instance);
+
+                            var args: std.meta.ArgsTuple(FnType) = undefined;
+                            args[0] = instance;
+
+                            inline for (1..fn_info.params.len) |j| {
+                                const Arg = fn_info.params[j].type.?;
+                                args[j] = @as(*const Arg, @ptrCast(@alignCast(p_args[j - 1]))).*;
+                            }
+
+                            if (ReturnType == void) {
+                                @call(.always_inline, method, args);
+                            } else {
+                                const result = @call(.always_inline, method, args);
+                                const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
+                                ret.* = result;
+                            }
+                        }
+                    }.call;
+                }
+            }
+            @compileError("Method '" ++ method_name ++ "' not found on " ++ @typeName(T) ++ " or any ancestor");
+        }
+    };
+}
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
@@ -195,6 +269,7 @@ pub const isAny = oopz.isAny;
 pub const upcast = oopz.upcast;
 
 const godot = @import("gdzig.zig");
+const CallVirtual = godot.classdb.CallVirtual;
 const Child = godot.meta.RecursiveChild;
 const c = godot.c;
 const meta = godot.meta;
