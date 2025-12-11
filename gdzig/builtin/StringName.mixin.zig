@@ -1,6 +1,4 @@
-pub inline fn empty() StringName {
-    return .fromComptimeLatin1("");
-}
+pub const empty: StringName = std.mem.zeroes(StringName);
 
 /// Creates a StringName from a Latin-1 encoded C string.
 ///
@@ -63,6 +61,8 @@ pub inline fn fromNullTerminatedUtf8(str: [:0]const u8) StringName {
 }
 
 // @mixin stop
+
+const std = @import("std");
 
 const raw: *Interface = &@import("../gdzig.zig").raw;
 

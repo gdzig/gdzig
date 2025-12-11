@@ -204,6 +204,21 @@ pub fn signalName(comptime S: type) builtin.StringName {
     return .fromComptimeLatin1(meta.signalName(S));
 }
 
+pub const CallError = error{
+    InvalidMethod,
+    InvalidArgument,
+    TooManyArguments,
+    TooFewArguments,
+    InstanceIsNull,
+    MethodNotConst,
+};
+
+pub const PropertyError = error{
+    InvalidOperation,
+    InvalidKey,
+    IndexOutOfBounds,
+};
+
 const std = @import("std");
 
 pub const c = @import("gdextension");

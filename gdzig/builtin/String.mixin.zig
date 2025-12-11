@@ -1,3 +1,5 @@
+pub const empty: String = std.mem.zeroes(String);
+
 /// **Deprecated** in Godot 4.3. Use `fromUtf8_2` instead.
 ///
 /// Creates a String from a UTF-8 encoded C string with the given length.

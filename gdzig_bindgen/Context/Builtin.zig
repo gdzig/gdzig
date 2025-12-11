@@ -150,13 +150,13 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs
     const contents = try allocator.allocSentinel(u8, @intCast(try file.getEndPos()), 0);
     try file_reader.interface.readSliceAll(contents);
 
-    // find the @mixin stop marker and only parse up to that point
+    // find the @mixin start/stop markers and only parse that section
     const parse_contents: [:0]const u8 = blk: {
-        if (std.mem.indexOf(u8, contents, "// @mixin stop")) |stop_idx| {
-            contents[stop_idx] = 0;
-            break :blk contents[0..stop_idx :0];
-        }
-        break :blk contents;
+        const start_marker = "// @mixin start\n";
+        const start_idx = if (std.mem.indexOf(u8, contents, start_marker)) |idx| idx + start_marker.len else 0;
+        const stop_idx = if (std.mem.indexOf(u8, contents[start_idx..], "// @mixin stop")) |idx| start_idx + idx else contents.len;
+        contents[stop_idx] = 0;
+        break :blk contents[start_idx..stop_idx :0];
     };
 
     var ast = try Ast.parse(allocator, parse_contents, .zig);

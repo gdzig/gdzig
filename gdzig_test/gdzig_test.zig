@@ -46,6 +46,16 @@ fn fail(err: anyerror) noreturn {
     std.process.exit(1);
 }
 
+pub fn expectCall(object: anytype, comptime name: [:0]const u8, args: anytype, expected: anytype) !void {
+    const method: StringName = .fromComptimeLatin1(name);
+
+    var result = Object.call(.upcast(object), method, args);
+    defer result.deinit();
+
+    const val = result.as(@TypeOf(expected)) orelse return error.InvalidResult;
+    try expectEqual(expected, val);
+}
+
 const std = @import("std");
 pub const FailingAllocator = std.testing.FailingAllocator;
 pub const FuzzInputOptions = std.testing.FuzzInputOptions;
@@ -55,6 +65,10 @@ pub const allocator = std.testing.allocator;
 pub const backend_can_print = std.testing.backend_can_print;
 pub const checkAllAllocationFailures = std.testing.checkAllAllocationFailures;
 pub const expect = std.testing.expect;
+pub const expectApproxEqAbs = std.testing.expectApproxEqAbs;
+pub const expectApproxEqRel = std.testing.expectApproxEqRel;
+pub const expectEqual = std.testing.expectEqual;
+pub const expectEqualDeep = std.testing.expectEqualDeep;
 pub const expectEqualSentinel = std.testing.expectEqualSentinel;
 pub const expectEqualSlices = std.testing.expectEqualSlices;
 pub const expectEqualStrings = std.testing.expectEqualStrings;
@@ -63,8 +77,11 @@ pub const expectFmt = std.testing.expectFmt;
 pub const expectStringEndsWith = std.testing.expectStringEndsWith;
 pub const expectStringStartsWith = std.testing.expectStringStartsWith;
 pub const failing_allocator = std.testing.failing_allocator;
+pub const fuzz = std.testing.fuzz;
 pub const refAllDecls = std.testing.refAllDecls;
 pub const refAllDeclsRecursive = std.testing.refAllDeclsRecursive;
 pub const tmpDir = std.testing.tmpDir;
 
 const godot = @import("gdzig");
+const Object = godot.class.Object;
+const StringName = godot.builtin.StringName;

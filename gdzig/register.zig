@@ -230,8 +230,8 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     MethodBinder.arg_metadata[0] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
     MethodBinder.arg_properties[0] = c.GDExtensionPropertyInfo{
         .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ReturnType.?)),
-        .name = @ptrCast(@constCast(&StringName.empty())),
-        .class_name = @ptrCast(@constCast(&StringName.empty())),
+        .name = @ptrCast(@constCast(&StringName.empty)),
+        .class_name = @ptrCast(@constCast(&StringName.empty)),
         .hint = @intFromEnum(PropertyHint.property_hint_none),
         .hint_string = @ptrCast(@constCast(&String.init())),
         .usage = @bitCast(PropertyUsageFlags.property_usage_none),
@@ -240,8 +240,8 @@ pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
     inline for (1..MethodBinder.ArgCount) |i| {
         MethodBinder.arg_properties[i] = c.GDExtensionPropertyInfo{
             .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ArgsTuple[i].type)),
-            .name = @ptrCast(@constCast(&StringName.empty())),
-            .class_name = if (oopz.isClass(MethodBinder.ArgsTuple[i].type)) meta.typeName(MethodBinder.ArgsTuple[i].type) else @ptrCast(@constCast(&StringName.empty())),
+            .name = @ptrCast(@constCast(&StringName.empty)),
+            .class_name = if (oopz.isClass(MethodBinder.ArgsTuple[i].type)) meta.typeName(MethodBinder.ArgsTuple[i].type) else @ptrCast(@constCast(&StringName.empty)),
             .hint = @intFromEnum(PropertyHint.property_hint_none),
             .hint_string = @ptrCast(@constCast(&String.init())),
             .usage = @bitCast(PropertyUsageFlags.property_usage_none),

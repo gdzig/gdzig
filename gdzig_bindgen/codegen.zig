@@ -1051,6 +1051,26 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
         var file_reader = f.reader(&buf);
         var reader = &file_reader.interface;
 
+        // Skip lines until we find @mixin start (or copy from beginning if not found)
+        var found_start = false;
+        while (true) {
+            const line = reader.takeDelimiterInclusive('\n') catch |err| switch (err) {
+                error.EndOfStream => break,
+                else => return err,
+            };
+
+            if (std.mem.startsWith(u8, line, "// @mixin start")) {
+                found_start = true;
+                break;
+            }
+        }
+
+        // If no @mixin start found, reopen file to read from beginning
+        if (!found_start) {
+            file_reader.seekTo(0) catch return;
+        }
+
+        // Copy lines until we find @mixin stop
         while (true) {
             const line = reader.takeDelimiterInclusive('\n') catch |err| switch (err) {
                 error.EndOfStream => break,
@@ -1061,7 +1081,7 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
                 break;
             }
 
-            try w.writeLine(line);
+            try w.writeAll(line);
         }
     }
 }
