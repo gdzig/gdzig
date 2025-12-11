@@ -1,6 +1,6 @@
 pub fn run() !void {
     const node = godot.class.Node.init();
-    defer godot.object.destroy(node);
+    defer godot.destroy(node);
 
     var name = node.getName();
     defer name.deinit();

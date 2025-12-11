@@ -1,5 +1,6 @@
 const Self = @This();
 
+allocator: Allocator,
 base: *Control,
 rng: std.Random = undefined,
 sprites: ArrayList(Sprite) = .empty,
@@ -12,9 +13,18 @@ const Sprite = struct {
     gd_sprite: *Sprite2D,
 };
 
-pub fn newSpritesNode() *Self {
-    var self = godot.create(Self);
-    self.example_node = null;
+pub fn create(allocator: *Allocator) !*Self {
+    const self = try allocator.create(Self);
+    self.* = .{
+        .allocator = allocator.*,
+        .base = Control.init(),
+    };
+    self.base.setInstance(Self, self);
+    return self;
+}
+
+pub fn destroy(self: *Self, allocator: *Allocator) void {
+    allocator.destroy(self);
 }
 
 pub fn randfRange(self: Self, comptime T: type, min: T, max: T) T {
@@ -50,14 +60,14 @@ pub fn _ready(self: *Self) void {
         spr.gd_sprite.setScale(spr.scale);
         spr.size = spr.gd_sprite.getRect().size;
         self.base.addChild(.upcast(spr.gd_sprite), .{});
-        self.sprites.append(godot.heap.general_allocator, spr) catch |err| {
+        self.sprites.append(godot.heap.engine_allocator, spr) catch |err| {
             std.log.err("Failed to append sprite: {}", .{err});
         };
     }
 }
 
 pub fn _exitTree(self: *Self) void {
-    self.sprites.deinit(godot.heap.general_allocator);
+    self.sprites.deinit(godot.heap.engine_allocator);
 }
 
 pub fn _physicsProcess(self: *Self, delta: f64) void {
@@ -83,6 +93,7 @@ pub fn _physicsProcess(self: *Self, delta: f64) void {
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 const godot = @import("gdzig");

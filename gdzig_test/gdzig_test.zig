@@ -25,7 +25,11 @@ pub fn runDeinit(comptime testcase: type, current: godot.InitializationLevel) vo
     if (@hasDecl(testcase, "deinit")) {
         callTestFn(testcase.deinit) catch |e| fail(e);
     }
-    pass();
+
+    switch (allocator_instance.deinit()) {
+        .ok => pass(),
+        .leak => fail(error.Leak),
+    }
 }
 
 fn callTestFn(comptime func: anytype) !void {
@@ -63,7 +67,13 @@ pub const FailingAllocator = std.testing.FailingAllocator;
 pub const FuzzInputOptions = std.testing.FuzzInputOptions;
 pub const Reader = std.testing.Reader;
 pub const TmpDir = std.testing.TmpDir;
-pub const allocator = std.testing.allocator;
+pub const allocator = allocator_instance.allocator();
+pub var allocator_instance: std.heap.GeneralPurposeAllocator(.{
+    .stack_trace_frames = if (std.debug.sys_can_stack_trace) 10 else 0,
+    .resize_stack_traces = true,
+}) = .{
+    .backing_allocator = godot.heap.engine_allocator,
+};
 pub const backend_can_print = std.testing.backend_can_print;
 pub const checkAllAllocationFailures = std.testing.checkAllAllocationFailures;
 pub const expect = std.testing.expect;

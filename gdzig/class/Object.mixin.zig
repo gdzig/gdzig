@@ -41,11 +41,64 @@ pub fn constPtr(self: *const Self) *const anyopaque {
     return @ptrCast(self);
 }
 
+/// Bind an instance of an extension class to this engine class.
+pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
+    comptime std.debug.assert(oopz.BaseOf(T) == Self);
+    comptime std.debug.assert(oopz.isStructClass(T));
+
+    const token = comptime typeToken(T);
+
+    raw.objectSetInstance(@ptrCast(self), @ptrCast(typeName(T)), @ptrCast(instance_));
+    raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
+        const callbacks = c.GDExtensionInstanceBindingCallbacks{
+            .create_callback = create_callback,
+            .free_callback = free_callback,
+            .reference_callback = reference_callback,
+        };
+
+        fn create_callback(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
+            return null;
+        }
+
+        fn free_callback(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {}
+
+        fn reference_callback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExtensionBool) callconv(.c) c.GDExtensionBool {
+            return 1;
+        }
+    }.callbacks);
+}
+
+pub fn asInstance(self: *Self, comptime T: type) ?*T {
+    comptime std.debug.assert(oopz.BaseOf(T) == Self);
+    comptime std.debug.assert(oopz.isStructClass(T));
+
+    const token = comptime typeToken(T);
+
+    const ptr_ = raw.objectGetInstanceBinding(@ptrCast(self), token, null) orelse return null;
+
+    return @ptrCast(@alignCast(ptr_));
+}
+
+fn typeToken(comptime T: type) *anyopaque {
+    return @ptrCast(&struct {
+        var token: void = {};
+        comptime {
+            _ = T;
+        }
+    }.token);
+}
+
 // @mixin stop
+
+const std = @import("std");
+
+const typeName = @import("../gdzig.zig").meta.typeName;
 
 const oopz = @import("oopz");
 const raw = &@import("../gdzig.zig").raw;
 const StringName = @import("../builtin.zig").StringName;
+
+const c = @import("gdextension");
 
 const Self = @import("./object.zig").Object;
 const self_name = "Object";

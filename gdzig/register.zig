@@ -1,329 +1,369 @@
-const ClassUserData = struct {
-    class_name: []const u8,
+pub const ExtensionOptions = struct {
+    entry_symbol: []const u8,
+    minimum_initialization_level: InitializationLevel = .core,
 };
 
-var registered_classes: StringHashMap(void) = .empty;
-pub fn registerClass(
-    comptime T: type,
-    comptime opt: struct {
-        virtual: bool = false,
-        abstract: bool = false,
-        exposed: bool = true,
-        runtime: bool = false,
-    },
-) void {
-    const class_name = comptime meta.typeShortName(T);
+pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void {
+    const return_type = @typeInfo(@TypeOf(T.create)).@"fn".return_type.?;
+    const actual_type = switch (@typeInfo(return_type)) {
+        .error_union => |eu| eu.payload,
+        else => return_type,
+    };
 
-    if (registered_classes.contains(class_name)) return;
-    registered_classes.putNoClobber(godot.heap.general_allocator, class_name, {}) catch unreachable;
+    assert(@typeInfo(actual_type) == .pointer);
+    assert(@typeInfo(actual_type).pointer.child == T);
 
-    const PerClassData = struct {
-        pub var class_info = init_blk: {
-            const ClassInfo: struct { T: type, version: i8 } = if (@hasDecl(c, "GDExtensionClassCreationInfo3"))
-                .{ .T = c.GDExtensionClassCreationInfo3, .version = 3 }
-            else if (@hasDecl(c, "GDExtensionClassCreationInfo2"))
-                .{ .T = c.GDExtensionClassCreationInfo2, .version = 2 }
+    @export(&struct {
+        fn entrypoint(
+            p_get_proc_address: c.GDExtensionInterfaceGetProcAddress,
+            p_library: c.GDExtensionClassLibraryPtr,
+            r_initialization: [*c]c.GDExtensionInitialization,
+        ) callconv(.c) c.GDExtensionBool {
+            godot.raw = .init(p_get_proc_address.?, p_library.?);
+            godot.raw.getGodotVersion(@ptrCast(&godot.version));
+            godot.interface = &godot.raw;
+
+            const self = if (@typeInfo(return_type) == .error_union)
+                T.create() catch return @intFromBool(false)
             else
-                @compileError("Godot 4.2 or higher is required.");
+                T.create();
 
-            var info: ClassInfo.T = .{
-                .is_virtual = @intFromBool(opt.virtual),
-                .is_abstract = @intFromBool(opt.abstract),
-                .is_exposed = @intFromBool(opt.exposed),
-                .set_func = if (@hasDecl(T, "_set")) setBind else null,
-                .get_func = if (@hasDecl(T, "_get")) getBind else null,
-                .get_property_list_func = if (@hasDecl(T, "_getPropertyList")) getPropertyListBind else null,
-                .free_property_list_func = freePropertyListBind,
-                .property_can_revert_func = if (@hasDecl(T, "_propertyCanRevert")) propertyCanRevertBind else null,
-                .property_get_revert_func = if (@hasDecl(T, "_propertyGetRevert")) propertyGetRevertBind else null,
-                .validate_property_func = if (@hasDecl(T, "_validateProperty")) validatePropertyBind else null,
-                .notification_func = if (@hasDecl(T, "_notification")) notificationBind else null,
-                .to_string_func = if (@hasDecl(T, "_toString")) toStringBind else null,
-                .reference_func = null,
-                .unreference_func = null,
-                .create_instance_func = createInstanceBind, // (Default) constructor; mandatory. If the class is not instantiable, consider making it virtual or abstract.
-                .free_instance_func = freeInstanceBind, // Destructor; mandatory.
-                .recreate_instance_func = recreateInstanceBind,
-                .get_virtual_func = getVirtualBind, // Queries a virtual function by name and returns a callback to invoke the requested virtual function.
-                .get_virtual_call_data_func = null,
-                .call_virtual_with_data_func = null,
-                .get_rid_func = null,
-                .class_userdata = @ptrCast(@constCast(&ClassUserData{
-                    .class_name = @typeName(T),
-                })), // Per-class user data, later accessible in instance bindings.
-            };
+            r_initialization.*.userdata = @ptrCast(@constCast(self));
+            r_initialization.*.initialize = @ptrCast(&init);
+            r_initialization.*.deinitialize = @ptrCast(&deinit);
+            r_initialization.*.minimum_initialization_level = @intFromEnum(opt.minimum_initialization_level);
 
-            if (ClassInfo.version >= 3) {
-                info.is_runtime = @intFromBool(opt.runtime);
-            }
+            return @intFromBool(true);
+        }
 
-            const t = @TypeOf(info.free_property_list_func);
+        fn init(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
+            const self: *T = @ptrCast(@alignCast(userdata.?));
+            const level: InitializationLevel = @enumFromInt(p_level);
 
-            if (t == c.GDExtensionClassFreePropertyList) {
-                @compileError("Unsupported version of Godot");
-            } else if (t == c.GDExtensionClassFreePropertyList2) {
-                info.free_property_list_func = freePropertyListBind;
-            } else {
-                @compileError(".free_property_list_func is an unknown type.");
-            }
-            break :init_blk info;
-        };
-
-        pub fn setBind(p_instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, value: c.GDExtensionConstVariantPtr) callconv(.c) c.GDExtensionBool {
-            if (p_instance) |p| {
-                return if (T._set(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(name))).*, @as(*Variant, @ptrCast(@alignCast(@constCast(value)))).*)) 1 else 0; //fn _set(_: *Self, name: Godot.StringName, _: Godot.Variant) bool
-            } else {
-                return 0;
+            if (@hasDecl(T, "init")) {
+                self.init(level);
             }
         }
 
-        pub fn getBind(p_instance: c.GDExtensionClassInstancePtr, name: c.GDExtensionConstStringNamePtr, value: c.GDExtensionVariantPtr) callconv(.c) c.GDExtensionBool {
-            if (p_instance) |p| {
-                return if (T._get(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(name))).*, @as(*Variant, @ptrCast(@alignCast(value))))) 1 else 0; //fn _get(self:*Self, name: StringName, value:*Variant) bool
-            } else {
-                return 0;
-            }
-        }
+        fn deinit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
+            const self: *T = @ptrCast(@alignCast(userdata.?));
+            const level: InitializationLevel = @enumFromInt(p_level);
 
-        pub fn getPropertyListBind(p_instance: c.GDExtensionClassInstancePtr, r_count: [*c]u32) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
-            if (p_instance) |p| {
-                const ptr: *T = @ptrCast(@alignCast(p));
-
-                var builder = object.PropertyBuilder{
-                    .allocator = godot.heap.general_allocator,
-                };
-                ptr._getPropertyList(&builder) catch @panic("Failed to get property list");
-                r_count.* = @intCast(builder.properties.items.len);
-
-                return @ptrCast(@alignCast(builder.properties.items.ptr));
-            } else {
-                if (r_count) |r| {
-                    r.* = 0;
-                }
-                return null;
-            }
-        }
-
-        pub fn freePropertyListBind(p_instance: c.GDExtensionClassInstancePtr, p_list: [*c]const c.GDExtensionPropertyInfo, p_count: u32) callconv(.c) void {
-            if (@hasDecl(T, "_freePropertyList")) {
-                if (p_instance) |p| {
-                    T._freePropertyList(@ptrCast(@alignCast(p)), p_list[0..p_count]); //fn _freePropertyList(self:*Self, p_list:[]const c.GDExtensionPropertyInfo) void {}
-                }
-            }
-            if (p_list) |list| {
-                heap.general_allocator.free(list[0..p_count]);
-            }
-        }
-
-        pub fn propertyCanRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionBool {
-            if (p_instance) |p| {
-                return if (T._propertyCanRevert(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(p_name))).*)) 1 else 0; //fn _property_can_revert(self:*Self, name: StringName) bool
-            } else {
-                return 0;
-            }
-        }
-
-        pub fn propertyGetRevertBind(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr, r_ret: c.GDExtensionVariantPtr) callconv(.c) c.GDExtensionBool {
-            if (p_instance) |p| {
-                return if (T._propertyGetRevert(@ptrCast(@alignCast(p)), @as(*StringName, @ptrCast(@constCast(p_name))).*, @as(*Variant, @ptrCast(@alignCast(r_ret))))) 1 else 0; //fn _property_get_revert(self:*Self, name: StringName, ret:*Variant) bool
-            } else {
-                return 0;
-            }
-        }
-
-        pub fn validatePropertyBind(p_instance: c.GDExtensionClassInstancePtr, p_property: [*c]c.GDExtensionPropertyInfo) callconv(.c) c.GDExtensionBool {
-            if (p_instance) |p| {
-                return if (T._validateProperty(@ptrCast(@alignCast(p)), p_property)) 1 else 0; //fn _validate_property(self:*Self, p_property: [*c]c.GDExtensionPropertyInfo) bool
-            } else {
-                return 0;
-            }
-        }
-
-        pub fn notificationBind(p_instance: c.GDExtensionClassInstancePtr, p_what: i32, _: c.GDExtensionBool) callconv(.c) void {
-            if (p_instance) |p| {
-                T._notification(@ptrCast(@alignCast(p)), p_what); //fn _notification(self:*Self, what:i32) void
-            }
-        }
-
-        pub fn toStringBind(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: [*c]c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.c) void {
-            if (p_instance) |p| {
-                const ret: ?String = T._toString(@ptrCast(@alignCast(p))); //fn _to_string(self:*Self) ?Godot.builtin.String {}
-                if (ret) |r| {
-                    r_is_valid.* = 1;
-                    @as(*String, @ptrCast(p_out)).* = r;
-                }
-            }
-        }
-
-        pub fn referenceBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
-            T._reference(@ptrCast(@alignCast(p_instance)));
-        }
-
-        pub fn unreferenceBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
-            T._unreference(@ptrCast(@alignCast(p_instance)));
-        }
-
-        pub fn createInstanceBind(p_userdata: ?*anyopaque) callconv(.c) c.GDExtensionObjectPtr {
-            _ = p_userdata;
-            const ret = object.create(T) catch unreachable;
-            return @ptrCast(object.asObject(ret));
-        }
-
-        pub fn recreateInstanceBind(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.c) c.GDExtensionClassInstancePtr {
-            _ = p_class_userdata;
-            const ret = object.recreate(T, p_object) catch unreachable;
-            return @ptrCast(ret);
-        }
-
-        pub fn freeInstanceBind(p_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
             if (@hasDecl(T, "deinit")) {
-                @as(*T, @ptrCast(@alignCast(p_instance))).deinit();
+                self.deinit(level);
             }
-            heap.general_allocator.destroy(@as(*T, @ptrCast(@alignCast(p_instance))));
-            _ = p_userdata;
+
+            if (level == opt.minimum_initialization_level) {
+                PropertyListMeta.cleanup();
+                if (@hasDecl(T, "destroy")) self.destroy();
+            }
+        }
+    }.entrypoint, .{
+        .name = opt.entry_symbol,
+        .linkage = .strong,
+    });
+}
+
+pub const InitializationLevel = enum(c_int) {
+    core = 0,
+    servers = 1,
+    scene = 2,
+    editor = 3,
+};
+
+pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
+    const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
+    const base_name = StringName.fromComptimeLatin1(meta.typeShortName(object.BaseOf(T)));
+    const callbacks = comptime makeClassCallbacks(T);
+
+    if (godot.version.gte(.@"4.4")) {
+        classdb.registerClass4(T, ClassUserdataOf(T), void, &class_name, &base_name, .{
+            .userdata = info.userdata,
+            .is_virtual = info.is_virtual,
+            .is_abstract = info.is_abstract,
+            .is_exposed = info.is_exposed,
+            .is_runtime = info.is_runtime,
+        }, callbacks.v4);
+    } else if (godot.version.gte(.@"4.3")) {
+        classdb.registerClass3(T, ClassUserdataOf(T), void, &class_name, &base_name, .{
+            .userdata = info.userdata,
+            .is_virtual = info.is_virtual,
+            .is_abstract = info.is_abstract,
+            .is_exposed = info.is_exposed,
+            .is_runtime = info.is_runtime,
+        }, callbacks.v3);
+    } else if (godot.version.gte(.@"4.2")) {
+        classdb.registerClass2(T, ClassUserdataOf(T), void, &class_name, &base_name, .{
+            .userdata = info.userdata,
+            .is_virtual = info.is_virtual,
+            .is_abstract = info.is_abstract,
+            .is_exposed = info.is_exposed,
+        }, callbacks.v2);
+    } else if (godot.version.gte(.@"4.1")) {
+        classdb.registerClass1(T, ClassUserdataOf(T), &class_name, &base_name, .{
+            .userdata = info.userdata,
+            .is_virtual = info.is_virtual,
+            .is_abstract = info.is_abstract,
+        }, callbacks.v1);
+    } else {
+        @panic("Unsupported Godot version");
+    }
+}
+
+/// Extracts the `ClassUserdata` type from a type `T` by inspecting its `create` function.
+fn ClassUserdataOf(comptime T: type) type {
+    if (!@hasDecl(T, "create")) {
+        @compileError("Type '" ++ @typeName(T) ++ "' must have a 'create' function");
+    }
+    const params = @typeInfo(@TypeOf(T.create)).@"fn".params;
+    return switch (params.len) {
+        0 => void,
+        1 => params[0].type.?,
+        inline else => @compileError("Type '" ++ @typeName(T) ++ "'.create must take zero or one parameters"),
+    };
+}
+
+/// This instance binding is only used in Godot 4.1 through 4.3; versions 4.4+
+/// properly store and pass around the list lengths. Allocations are backed by a
+/// memory pool and cleaned up at extension deinitialization.
+const PropertyListMeta = struct {
+    len: usize = 0,
+
+    var gpa: if (builtin.is_test) void else DebugAllocator(.{}) = if (builtin.is_test) {} else .init;
+    var pool: MemoryPool(PropertyListMeta) = .init(gpa.allocator());
+
+    const callbacks: godot.c.GDExtensionInstanceBindingCallbacks = .{
+        .create_callback = &create,
+        .free_callback = &free,
+    };
+
+    fn allocator() Allocator {
+        return if (builtin.is_test) std.testing.allocator else gpa.allocator();
+    }
+
+    fn create(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
+        return @ptrCast(pool.create() catch return null);
+    }
+
+    fn free(_: ?*anyopaque, _: ?*anyopaque, binding: ?*anyopaque) callconv(.c) void {
+        if (binding) |self| pool.destroy(@ptrCast(@alignCast(self)));
+    }
+
+    pub fn cleanup() void {
+        pool.deinit();
+        if (!builtin.is_test) assert(gpa.deinit() == .ok);
+    }
+};
+
+fn makeClassCallbacks(comptime T: type) struct {
+    v1: classdb.ClassCallbacks1(T, ClassUserdataOf(T)),
+    v2: classdb.ClassCallbacks2(T, ClassUserdataOf(T), void),
+    v3: classdb.ClassCallbacks3(T, ClassUserdataOf(T), void),
+    v4: classdb.ClassCallbacks4(T, ClassUserdataOf(T), void),
+} {
+    comptime {
+        if (!@hasDecl(T, "create")) {
+            @compileError("Type '" ++ @typeName(T) ++ "' must have a 'create' function");
+        }
+        if (!@hasDecl(T, "destroy")) {
+            @compileError("Type '" ++ @typeName(T) ++ "' must have a 'destroy' function");
+        }
+    }
+
+    const Base = object.BaseOf(T);
+
+    const Callbacks = struct {
+        /// Wraps `create` to bind the instance.
+        ///
+        /// @since 4.1
+        /// @until 4.4
+        fn create1(userdata: ClassUserdataOf(T)) anyerror!*T {
+            return create2(userdata, false);
         }
 
-        fn getClassDataFromOpaque(p_class_userdata: ?*anyopaque) *const ClassUserData {
-            return @ptrCast(@alignCast(p_class_userdata));
+        /// Wraps `create` to bind the instance and send the POSTINITIALIZE notification.
+        ///
+        /// @since 4.4
+        fn create2(userdata: ClassUserdataOf(T), notify: bool) anyerror!*T {
+            const self = if (ClassUserdataOf(T) == void)
+                try T.create()
+            else
+                try T.create(userdata);
+
+            if (notify) {
+                Object.upcast(self).notification(Object.NOTIFICATION_POSTINITIALIZE, .{
+                    .reversed = false,
+                });
+            }
+
+            return self;
         }
 
-        pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionClassCallVirtual {
-            _ = p_class_userdata;
-            const Base = object.BaseOf(T);
+        /// Wraps `destroy` to set `base` to `undefined`.
+        ///
+        /// Godot's ownership rules of the base object are broken; they expect you
+        /// to create the Base type `create()`, but not to destroy it in `destroy()`.
+        ///
+        /// Setting it to `undefined` will make it extremely obvious to the user that
+        /// they made a mistake in Debug/ReleaseSafe builds.
+        ///
+        /// @since 4.1
+        fn destroy(self: *T, userdata: ClassUserdataOf(T)) void {
+            self.base = undefined;
+            T.destroy(self, userdata);
+        }
+
+        /// Wraps `_notification` to best-effort synthesize a "reversed" parameter.
+        ///
+        /// @since 4.1
+        /// @until 4.2
+        fn notification1(instance: *T, what: i32) void {
+            // This is a best-effort synthesization of "reversed" for Godot v4.1 and v4.2;
+            // it does not cover the unlikely edge case where users are sending notifications
+            // that are reversed unexpectedly.
+            const reversed = switch (what) {
+                godot.class.Object.NOTIFICATION_PREDELETE,
+                godot.class.Node.NOTIFICATION_EXIT_TREE,
+                godot.class.CanvasItem.NOTIFICATION_EXIT_CANVAS,
+                godot.class.Node3D.NOTIFICATION_EXIT_WORLD,
+                godot.class.Control.NOTIFICATION_FOCUS_EXIT,
+                => true,
+                else => false,
+            };
+            T._notification(instance, what, reversed);
+        }
+
+        fn getVirtual(userdata: ClassUserdataOf(T), name: *const StringName) ?*const classdb.CallVirtual(T) {
+            _ = userdata;
             const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
             var buf: [256]u8 = undefined;
-            const name: *const StringName = @ptrCast(p_name);
-            const name_str = godot.string.stringNameToAscii(name.*, &buf);
-            return @ptrCast(UserVTable.get(name_str));
+            const name_str = godot.string.stringNameToAscii(name.*, buf[0..]);
+            const result = UserVTable.get(name_str);
+            return @ptrCast(result);
         }
 
-        pub fn getRidBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) u64 {
-            return T._getRid(@ptrCast(@alignCast(p_instance)));
+        fn getVirtual2(userdata: ClassUserdataOf(T), name: *const StringName, hash: u32) ?*const classdb.CallVirtual(T) {
+            _ = hash;
+            return getVirtual(userdata, name);
+        }
+
+        /// Wraps `_getPropertyList` to store the returned list length in a `PropertyListMeta` instance binding.
+        ///
+        /// @since 4.1
+        /// @until 4.3
+        fn getPropertyList1(self: *T) std.mem.Allocator.Error![]const classdb.PropertyInfo {
+            const list = try T._getPropertyList(self);
+            errdefer destroyPropertyList1(self, list.ptr);
+
+            const obj = Object.upcast(self);
+            const raw_ptr = godot.raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&PropertyListMeta.callbacks)), &PropertyListMeta.callbacks);
+            const ptr: *PropertyListMeta = @ptrCast(@alignCast(raw_ptr orelse return error.OutOfMemory));
+            ptr.len = list.len;
+
+            return list;
+        }
+
+        /// Wraps `_destroyPropertyList` to fetch the list length from a `PropertyListMeta` instance binding.
+        ///
+        /// @since 4.1
+        /// @until 4.3
+        fn destroyPropertyList1(self: *T, list: [*]const classdb.PropertyInfo) void {
+            const obj = Object.upcast(self);
+            const raw_ptr = godot.raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&PropertyListMeta.callbacks)), &PropertyListMeta.callbacks);
+            const ptr: *PropertyListMeta = @ptrCast(@alignCast(raw_ptr orelse @panic("Failed to get property list metadata")));
+            T._destroyPropertyList(self, list[0..ptr.len]);
         }
     };
 
-    const classdbRegisterExtensionClass = if (@hasField(Interface, "classdbRegisterExtensionClass3"))
-        godot.interface.classdbRegisterExtensionClass3
-    else if (@hasField(Interface, "classdbRegisterExtensionClass2"))
-        godot.interface.classdbRegisterExtensionClass2
-    else
-        @compileError("Godot 4.2 or higher is required.");
+    return .{
+        .v1 = .{
+            .create = Callbacks.create1,
+            .destroy = Callbacks.destroy,
 
-    classdbRegisterExtensionClass(
-        @ptrCast(godot.interface.library),
-        @ptrCast(godot.typeName(T)),
-        @ptrCast(godot.typeName(object.BaseOf(T))),
-        @ptrCast(&PerClassData.class_info),
-    );
+            .get_virtual = Callbacks.getVirtual,
 
-    if (@hasDecl(T, "_bindMethods")) {
-        T._bindMethods();
-    }
-}
+            .set = if (@hasDecl(T, "_set")) T._set else null,
+            .get = if (@hasDecl(T, "_get")) T._get else null,
+            .get_property_list = if (@hasDecl(T, "_getPropertyList")) Callbacks.getPropertyList1 else null,
+            .destroy_property_list = if (@hasDecl(T, "_destroyPropertyList")) Callbacks.destroyPropertyList1 else null,
+            .property_can_revert = if (@hasDecl(T, "_propertyCanRevert")) T._propertyCanRevert else null,
+            .property_get_revert = if (@hasDecl(T, "_propertyGetRevert")) T._propertyGetRevert else null,
+            .notification = if (@hasDecl(T, "_notification")) Callbacks.notification1 else null,
+            .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+            .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
+        },
+        .v2 = .{
+            .create = Callbacks.create1,
+            .destroy = T.destroy,
+            .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
 
-var registered_methods: StringHashMap(void) = .empty;
-pub fn registerMethod(comptime T: type, comptime name: [:0]const u8) void {
-    //prevent duplicate registration
-    const fullname = comptime meta.typeShortName(T) ++ "::" ++ name;
-    if (registered_methods.contains(fullname)) return;
-    registered_methods.putNoClobber(godot.heap.general_allocator, fullname, {}) catch unreachable;
+            .get_virtual = Callbacks.getVirtual,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
 
-    const p_method = @field(T, name);
-    const MethodBinder = support.MethodBinderT(@TypeOf(p_method));
+            .set = if (@hasDecl(T, "_set")) T._set else null,
+            .get = if (@hasDecl(T, "_get")) T._get else null,
+            .get_property_list = if (@hasDecl(T, "_getPropertyList")) Callbacks.getPropertyList1 else null,
+            .destroy_property_list = if (@hasDecl(T, "_destroyPropertyList")) Callbacks.destroyPropertyList1 else null,
+            .property_can_revert = if (@hasDecl(T, "_propertyCanRevert")) T._propertyCanRevert else null,
+            .property_get_revert = if (@hasDecl(T, "_propertyGetRevert")) T._propertyGetRevert else null,
+            .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
+            .notification = if (@hasDecl(T, "_notification")) T._notification else null,
+            .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+            .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
+        },
+        .v3 = .{
+            .create = Callbacks.create1,
+            .destroy = T.destroy,
+            .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
 
-    MethodBinder.method_name = StringName.fromComptimeLatin1(name);
-    MethodBinder.arg_metadata[0] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
-    MethodBinder.arg_properties[0] = c.GDExtensionPropertyInfo{
-        .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ReturnType.?)),
-        .name = @ptrCast(@constCast(&StringName.empty)),
-        .class_name = @ptrCast(@constCast(&StringName.empty)),
-        .hint = @intFromEnum(PropertyHint.property_hint_none),
-        .hint_string = @ptrCast(@constCast(&String.init())),
-        .usage = @bitCast(PropertyUsageFlags.property_usage_none),
+            .get_virtual = Callbacks.getVirtual,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
+
+            .set = if (@hasDecl(T, "_set")) T._set else null,
+            .get = if (@hasDecl(T, "_get")) T._get else null,
+            .get_property_list = if (@hasDecl(T, "_getPropertyList")) T._getPropertyList else null,
+            .destroy_property_list = if (@hasDecl(T, "_destroyPropertyList")) T._destroyPropertyList else null,
+            .property_can_revert = if (@hasDecl(T, "_propertyCanRevert")) T._propertyCanRevert else null,
+            .property_get_revert = if (@hasDecl(T, "_propertyGetRevert")) T._propertyGetRevert else null,
+            .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
+            .notification = if (@hasDecl(T, "_notification")) T._notification else null,
+            .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+            .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
+        },
+        .v4 = .{
+            .create = Callbacks.create2,
+            .destroy = T.destroy,
+            .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
+
+            .get_virtual = Callbacks.getVirtual2,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
+
+            .set = if (@hasDecl(T, "_set")) T._set else null,
+            .get = if (@hasDecl(T, "_get")) T._get else null,
+            .get_property_list = if (@hasDecl(T, "_getPropertyList")) T._getPropertyList else null,
+            .destroy_property_list = if (@hasDecl(T, "_destroyPropertyList")) T._destroyPropertyList else null,
+            .property_can_revert = if (@hasDecl(T, "_propertyCanRevert")) T._propertyCanRevert else null,
+            .property_get_revert = if (@hasDecl(T, "_propertyGetRevert")) T._propertyGetRevert else null,
+            .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
+            .notification = if (@hasDecl(T, "_notification")) T._notification else null,
+            .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+        },
     };
-
-    inline for (1..MethodBinder.ArgCount) |i| {
-        MethodBinder.arg_properties[i] = c.GDExtensionPropertyInfo{
-            .type = @intFromEnum(Variant.Tag.forType(MethodBinder.ArgsTuple[i].type)),
-            .name = @ptrCast(@constCast(&StringName.empty)),
-            .class_name = if (oopz.isClass(MethodBinder.ArgsTuple[i].type)) meta.typeName(MethodBinder.ArgsTuple[i].type) else @ptrCast(@constCast(&StringName.empty)),
-            .hint = @intFromEnum(PropertyHint.property_hint_none),
-            .hint_string = @ptrCast(@constCast(&String.init())),
-            .usage = @bitCast(PropertyUsageFlags.property_usage_none),
-        };
-
-        MethodBinder.arg_metadata[i] = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_NONE;
-    }
-
-    MethodBinder.method_info = c.GDExtensionClassMethodInfo{
-        .name = @ptrCast(&MethodBinder.method_name),
-        .method_userdata = @ptrCast(@constCast(&p_method)),
-        .call_func = MethodBinder.bindCall,
-        .ptrcall_func = MethodBinder.bindPtrcall,
-        .method_flags = c.GDEXTENSION_METHOD_FLAG_NORMAL,
-        .has_return_value = if (MethodBinder.ReturnType != void) 1 else 0,
-        .return_value_info = @ptrCast(&MethodBinder.arg_properties[0]),
-        .return_value_metadata = MethodBinder.arg_metadata[0],
-        .argument_count = MethodBinder.ArgCount - 1,
-        .arguments_info = @ptrCast(&MethodBinder.arg_properties[1]),
-        .arguments_metadata = @ptrCast(&MethodBinder.arg_metadata[1]),
-        .default_argument_count = 0,
-        .default_arguments = null,
-    };
-
-    godot.interface.classdbRegisterExtensionClassMethod(godot.interface.library, meta.typeName(T), &MethodBinder.method_info);
 }
 
-var registered_signals: StringHashMap(void) = .empty;
-pub fn registerSignal(comptime T: type, comptime S: type) void {
-    //prevent duplicate registration
-    const fullname = comptime meta.typeShortName(T) ++ "::" ++ meta.typeShortName(S);
-    if (registered_signals.contains(fullname)) return;
-    registered_signals.putNoClobber(godot.heap.general_allocator, fullname, {}) catch unreachable;
-
-    if (@typeInfo(S) != .@"struct") {
-        @compileError("Signal '" ++ meta.typeShortName(S) ++ "' for '" ++ meta.typeShortName(T) ++ "' must be a struct");
-    }
-
-    const signal_name = comptime meta.signalName(S);
-
-    var arena = ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var arguments: [std.meta.fields(S).len]object.PropertyInfo = undefined;
-    inline for (std.meta.fields(S), 0..) |field, i| {
-        arguments[i] = object.PropertyInfo.fromField(allocator, S, field.name, .{}) catch unreachable;
-    }
-
-    var properties: [arguments.len]c.GDExtensionPropertyInfo = undefined;
-    inline for (arguments, 0..) |a, i| {
-        properties[i].type = @intFromEnum(a.type);
-        properties[i].hint = @intCast(@intFromEnum(a.hint));
-        properties[i].usage = @bitCast(a.usage);
-        properties[i].name = if (a.name) |name| @ptrCast(@constCast(name)) else null;
-        properties[i].class_name = if (a.class_name) |class_name| @ptrCast(@constCast(class_name)) else null;
-        properties[i].hint_string = if (a.hint_string) |hint_string| @ptrCast(@constCast(hint_string)) else null;
-    }
-
-    if (comptime arguments.len > 0) {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name), &properties[0], @intCast(arguments.len));
-    } else {
-        godot.interface.classdbRegisterExtensionClassSignal(godot.interface.library, meta.typeName(T), &StringName.fromComptimeLatin1(signal_name), null, 0);
-    }
-}
-
-pub fn deinit() void {
-    registered_signals.deinit(godot.heap.general_allocator);
-    registered_methods.deinit(godot.heap.general_allocator);
-    registered_classes.deinit(godot.heap.general_allocator);
-}
-
-/// Extract virtual method names from a user type.
-/// Virtual methods start with _ but are not internal callbacks.
 fn virtualMethodNames(comptime T: type) []const []const u8 {
     const callbacks = [_][]const u8{
-        "_bindMethods",
         "_destroyPropertyList",
         "_get",
         "_getPropertyList",
@@ -348,7 +388,11 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
 
         // Must be a function
         const field = @field(T, decl.name);
-        if (@typeInfo(@TypeOf(field)) != .@"fn") continue;
+        const field_type_info = @typeInfo(@TypeOf(field));
+        if (field_type_info != .@"fn") continue;
+
+        // Must have at least one parameter (self) to be a virtual method
+        if (field_type_info.@"fn".params.len == 0) continue;
 
         // Must not be a callback
         const is_callback = for (callbacks) |cb| {
@@ -363,21 +407,133 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
     return names[0..count];
 }
 
-const std = @import("std");
-const ArenaAllocator = std.heap.ArenaAllocator;
-const StringHashMap = std.StringHashMapUnmanaged;
+pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
+    const name_str = @tagName(name);
+    var class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
+    var method_name = StringName.fromComptimeLatin1(name_str);
 
+    const MethodType = @TypeOf(@field(T, name_str));
+    const fn_info = @typeInfo(MethodType).@"fn";
+    const Args = fn_info.params;
+    const ReturnType = fn_info.return_type orelse void;
+    const arg_count = Args.len - 1;
+
+    const return_value: classdb.PropertyInfo = .{
+        .type = .forType(ReturnType),
+    };
+
+    const arg_infos: [arg_count]classdb.PropertyInfo = comptime blk: {
+        var infos: [arg_count]classdb.PropertyInfo = undefined;
+        for (0..arg_count) |i| {
+            const ArgType = Args[i + 1].type.?;
+            infos[i] = .{ .type = .forType(ArgType) };
+        }
+        break :blk infos;
+    };
+
+    const arg_metas: [arg_count]classdb.MethodArgumentMetadata = comptime blk: {
+        var metas: [arg_count]classdb.MethodArgumentMetadata = undefined;
+        for (0..arg_count) |i| {
+            metas[i] = .none;
+        }
+        break :blk metas;
+    };
+
+    const Callbacks = struct {
+        const method = @field(T, name_str);
+
+        fn call(instance: *T, args: []const *const Variant) godot.CallError!Variant {
+            var call_args: std.meta.ArgsTuple(MethodType) = undefined;
+            call_args[0] = instance;
+            inline for (1..Args.len) |i| {
+                const ArgType = Args[i].type.?;
+                if (i - 1 < args.len) {
+                    call_args[i] = args[i - 1].as(ArgType) orelse return error.InvalidArgument;
+                }
+            }
+            if (ReturnType == void) {
+                @call(.auto, method, call_args);
+                return Variant.nil;
+            } else {
+                const result = @call(.auto, method, call_args);
+                return Variant.init(result);
+            }
+        }
+
+        fn ptrCall(instance: *T, args: [*]const *const anyopaque, ret: *anyopaque) void {
+            var call_args: std.meta.ArgsTuple(MethodType) = undefined;
+            call_args[0] = instance;
+            inline for (1..Args.len) |i| {
+                const ArgType = Args[i].type.?;
+                call_args[i] = ptrToArg(ArgType, args[i - 1]);
+            }
+            if (ReturnType == void) {
+                @call(.auto, method, call_args);
+            } else {
+                const result = @call(.auto, method, call_args);
+                @as(*ReturnType, @ptrCast(@alignCast(ret))).* = result;
+            }
+        }
+
+        fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
+            if (comptime object.isRefCountedPtr(ArgType) and object.isOpaqueClassPtr(ArgType)) {
+                const obj = godot.raw.refGetObject(@ptrCast(p_arg));
+                return @ptrCast(obj.?);
+            } else if (comptime object.isOpaqueClassPtr(ArgType)) {
+                return @ptrCast(@constCast(p_arg));
+            } else {
+                return @as(*const ArgType, @ptrCast(@alignCast(p_arg))).*;
+            }
+        }
+    };
+
+    classdb.registerMethod(T, void, &class_name, .{
+        .name = &method_name,
+        .return_value_info = if (ReturnType != void) &return_value else null,
+        .argument_info = &arg_infos,
+        .argument_metadata = &arg_metas,
+    }, .{
+        .call = Callbacks.call,
+        .ptr_call = Callbacks.ptrCall,
+    });
+}
+
+pub fn registerSignal(comptime T: type, comptime S: type) void {
+    const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
+    const signal_name = StringName.fromComptimeLatin1(meta.signalName(S));
+
+    const fields = @typeInfo(S).@"struct".fields;
+    var arg_info: [fields.len]classdb.PropertyInfo = undefined;
+    var names: [fields.len]StringName = undefined;
+    inline for (fields, 0..) |field, i| {
+        names[i] = StringName.fromComptimeLatin1(field.name);
+        arg_info[i] = .{
+            .type = .forType(field.type),
+            .name = &names[i],
+        };
+    }
+
+    classdb.registerSignal(&class_name, &signal_name, &arg_info);
+}
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const DebugAllocator = std.heap.DebugAllocator;
+const DeclEnum = std.meta.DeclEnum;
+const MemoryPool = std.heap.MemoryPool;
+const assert = std.debug.assert;
+
+const builtin = @import("builtin");
+
+const c = @import("gdextension");
 const oopz = @import("oopz");
 
 const godot = @import("gdzig.zig");
-const c = godot.c;
-const heap = godot.heap;
+const classdb = godot.class.ClassDB;
+const ClassInfo4 = godot.class.ClassDB.ClassInfo4;
 const meta = godot.meta;
 const object = godot.object;
-const support = godot.support;
-const String = godot.builtin.String;
+const Object = godot.class.Object;
 const StringName = godot.builtin.StringName;
+const String = godot.builtin.String;
 const Variant = godot.builtin.Variant;
-const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const PropertyHint = godot.global.PropertyHint;
-const Interface = godot.Interface;

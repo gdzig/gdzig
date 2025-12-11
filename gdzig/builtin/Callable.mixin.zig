@@ -23,7 +23,8 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
     var method_string_name: StringName = .fromComptimeLatin1(method_name.?);
     defer method_string_name.deinit();
 
-    return .initObjectMethod(oopz.upcast(*Object, p_instance), method_string_name);
+    const obj = oopz.upcast(*Object, p_instance);
+    return .initObjectMethod(obj, method_string_name);
 }
 // @mixin stop
 

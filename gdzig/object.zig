@@ -1,75 +1,3 @@
-pub fn assertIsObject(comptime T: type) void {
-    assertIsA(Object, T);
-}
-
-pub fn assertIsObjectPtr(comptime T: type) void {
-    assertIsA(Object, Child(T));
-}
-
-/// Create a Godot object.
-pub fn create(comptime T: type) !*T {
-    comptime assertIsObject(T);
-
-    // If this is an engine type, just return it.
-    if (comptime @typeInfo(T) == .@"opaque") {
-        return @ptrCast(godot.interface.classdbConstructObject2(@ptrCast(meta.typeName(T))).?);
-    }
-
-    // Assert that we can initialize the user type
-    comptime {
-        if (!@hasDecl(T, "init")) {
-            for (@typeInfo(T).@"struct".fields) |field| {
-                if (std.mem.eql(u8, "base", field.name)) continue;
-                if (field.default_value_ptr == null) {
-                    @compileError("The type '" ++ meta.typeShortName(T) ++ "' should either have an 'fn init(base: *" ++ meta.typeShortName(meta.BaseOf(T)) ++ ") " ++ meta.typeShortName(T) ++ "' function, or a default value for the field '" ++ field.name ++ "', but it has neither.");
-                }
-            }
-        }
-    }
-
-    // Construct the base object
-    const base_name = meta.typeName(BaseOf(T));
-    const base: *BaseOf(T) = @ptrCast(godot.interface.classdbConstructObject2(@ptrCast(base_name)).?);
-
-    // Allocate the user object, and link it to the base object
-    const class_name = meta.typeName(T);
-    const self: *T = try godot.heap.general_allocator.create(T);
-    godot.interface.objectSetInstance(@ptrCast(base), @ptrCast(class_name), @ptrCast(self));
-    godot.interface.objectSetInstanceBinding(@ptrCast(base), godot.interface.library, @ptrCast(self), &dummy_callbacks);
-
-    // Initialize the user object
-    if (@hasDecl(T, "init")) {
-        self.* = T.init(base);
-    } else {
-        self.* = .{ .base = base };
-    }
-
-    return self;
-}
-
-/// Recreate a Godot object.
-pub fn recreate(comptime T: type, ptr: ?*anyopaque) !*T {
-    assertIsObject(T);
-    _ = ptr;
-    @panic("Extension reloading is not currently supported");
-}
-
-/// Destroy a Godot object.
-pub fn destroy(instance: anytype) void {
-    assertIsObjectPtr(@TypeOf(instance));
-
-    const ptr: *anyopaque = @ptrCast(asObject(instance));
-    godot.interface.objectFreeInstanceBinding(ptr, godot.interface.library);
-    godot.interface.objectDestroy(ptr);
-}
-
-/// Unreference a Godot object.
-pub fn unreference(instance: anytype) void {
-    if (meta.asRefCounted(instance).unreference()) {
-        godot.interface.objectDestroy(@ptrCast(asObject(instance)));
-    }
-}
-
 pub fn connect(obj: anytype, comptime S: type, callable: Callable) void {
     var signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
     defer signal_name.deinit();
@@ -144,88 +72,6 @@ pub fn asRefCounted(value: anytype) RefCounted {
     return upcast(*RefCounted, value);
 }
 
-pub const PropertyBuilder = struct {
-    allocator: Allocator,
-    properties: std.ArrayListUnmanaged(PropertyInfo) = .empty,
-
-    pub fn append(self: *PropertyBuilder, comptime T: type, comptime field_name: [:0]const u8, comptime opt: struct {
-        hint: PropertyHint = .property_hint_none,
-        hint_string: [:0]const u8 = "",
-        usage: PropertyUsageFlags = .property_usage_default,
-    }) !void {
-        const info = try PropertyInfo.fromField(self.allocator, T, field_name, .{
-            .hint = opt.hint,
-            .hint_string = opt.hint_string,
-            .usage = opt.usage,
-        });
-        try self.properties.append(self.allocator, info);
-    }
-};
-
-pub const PropertyInfo = extern struct {
-    type: Variant.Tag,
-    name: ?*StringName = null,
-    class_name: ?*StringName = null,
-    hint: PropertyHint = .property_hint_none,
-    hint_string: ?*String = null,
-    usage: PropertyUsageFlags = .property_usage_default,
-
-    pub fn init(allocator: Allocator, comptime tag: Variant.Tag, comptime field_name: [:0]const u8) !PropertyInfo {
-        const name = try allocator.create(StringName);
-        name.* = StringName.fromComptimeLatin1(field_name);
-
-        return .{
-            .name = name,
-            .type = tag,
-        };
-    }
-
-    pub fn fromField(allocator: Allocator, comptime T: type, comptime field_name: [:0]const u8, comptime opt: struct {
-        hint: PropertyHint = .property_hint_none,
-        hint_string: [:0]const u8 = "",
-        usage: PropertyUsageFlags = .property_usage_default,
-    }) !PropertyInfo {
-        // This double allocation is dumb, but the API expects *String and *StringName
-        const name = try allocator.create(StringName);
-        name.* = StringName.fromComptimeLatin1(field_name);
-
-        const hint_string = try allocator.create(String);
-        hint_string.* = String.fromLatin1(opt.hint_string);
-
-        return .{
-            .class_name = meta.typeName(T),
-            .name = name,
-            .type = Variant.Tag.forType(@FieldType(T, field_name)),
-            .hint_string = hint_string,
-            .hint = opt.hint,
-            .usage = opt.usage,
-        };
-    }
-
-    pub fn deinit(self: *PropertyInfo, allocator: Allocator) void {
-        allocator.free(self.name);
-        allocator.free(self.hint_string);
-    }
-};
-
-pub var dummy_callbacks = struct {
-    const dummy_callbacks = c.GDExtensionInstanceBindingCallbacks{
-        .create_callback = instanceBindingCreateCallback,
-        .free_callback = instanceBindingFreeCallback,
-        .reference_callback = instanceBindingReferenceCallback,
-    };
-
-    fn instanceBindingCreateCallback(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
-        return null;
-    }
-
-    fn instanceBindingFreeCallback(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {}
-
-    fn instanceBindingReferenceCallback(_: ?*anyopaque, _: ?*anyopaque, _: c.GDExtensionBool) callconv(.c) c.GDExtensionBool {
-        return 1;
-    }
-}.dummy_callbacks;
-
 fn assertCanInitialize(comptime T: type) void {
     comptime {
         if (@hasDecl(T, "init")) return;
@@ -243,6 +89,10 @@ fn assertCanInitialize(comptime T: type) void {
 /// The VTable computes snake_case keys at comptime for O(1) lookup.
 pub fn VTable(comptime T: type, comptime method_names: anytype) type {
     return struct {
+        // Zig calling convention for user implementation
+        const CallVirtual = godot.class.ClassDB.CallVirtual(T);
+        // C calling convention wrapper for Godot
+        const CCallVirtual = fn (self: *T, args: [*]const *const anyopaque, ret: *anyopaque) callconv(.c) void;
         const implemented_count = countImplemented();
         const map: std.StaticStringMap(c.GDExtensionClassCallVirtual) = .initComptime(blk: {
             var kvs: [implemented_count]struct { []const u8, c.GDExtensionClassCallVirtual } = undefined;
@@ -258,7 +108,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
         });
 
         fn countImplemented() usize {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(20000);
             var count: usize = 0;
             for (method_names) |name| {
                 if (findMethod(name) != null) count += 1;
@@ -267,7 +117,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
         }
 
         fn findMethod(comptime method_name: []const u8) c.GDExtensionClassCallVirtual {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(20000);
             inline for (selfAndAncestorsOf(T)) |Owner| {
                 if (@hasDecl(Owner, method_name)) {
                     const method = @field(Owner, method_name);
@@ -386,7 +236,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
         }
 
         fn countNew(comptime override_names: anytype) usize {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(20000);
             var count: usize = 0;
             outer: for (override_names) |override_name| {
                 for (method_names) |base_name| {
@@ -400,7 +250,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
         }
 
         fn combineNames(comptime override_names: anytype) [method_names.len + countNew(override_names)][]const u8 {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(20000);
             var combined: [method_names.len + countNew(override_names)][]const u8 = undefined;
 
             // Copy base names

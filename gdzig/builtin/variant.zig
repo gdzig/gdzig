@@ -76,8 +76,9 @@ pub const Variant = extern struct {
             if (oopz.isOpaqueClassPtr(T)) {
                 return @ptrCast(@alignCast(object));
             } else {
-                const instance: *anyopaque = raw.objectGetInstanceBinding(object, raw.library, null) orelse return null;
-                return @ptrCast(@alignCast(instance));
+                const Base = oopz.BaseOf(Child(T));
+                const base: *Base = @ptrCast(object);
+                return base.asInstance(Child(T));
             }
         }
     }

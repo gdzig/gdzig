@@ -29,11 +29,9 @@ pub fn build(b: *std.Build) !void {
 
     const out_path = "../project/lib";
     // b.lib_dir = "./project/lib";
-    const install = b.addInstallArtifact(lib, .{
-        .dest_dir = .{
-            .override = .{ .custom = out_path },
-        }
-    });
+    const install = b.addInstallArtifact(lib, .{ .dest_dir = .{
+        .override = .{ .custom = out_path },
+    } });
 
     b.default_step.dependOn(&install.step);
 
@@ -51,7 +49,7 @@ pub fn build(b: *std.Build) !void {
         godot_path, "--path",
     });
     run_cmd.addDirectoryArg(project_path);
-    run_cmd.step.dependOn(load_step);
+    run_cmd.step.dependOn(b.getInstallStep());
     const run_step = b.step("run", "Run with Godot");
     run_step.dependOn(&run_cmd.step);
 }

@@ -49,7 +49,7 @@
 pub fn ClassInfo1(comptime Userdata: type) type {
     return if (Userdata != void)
         struct {
-            userdata: *Userdata,
+            userdata: Userdata,
             is_virtual: bool = false,
             is_abstract: bool = false,
         }
@@ -65,7 +65,7 @@ pub fn ClassInfo1(comptime Userdata: type) type {
 pub fn ClassInfo2(comptime Userdata: type) type {
     return if (Userdata != void)
         struct {
-            userdata: *Userdata,
+            userdata: Userdata,
             is_virtual: bool = false,
             is_abstract: bool = false,
             is_exposed: bool = true,
@@ -83,7 +83,7 @@ pub fn ClassInfo2(comptime Userdata: type) type {
 pub fn ClassInfo3(comptime Userdata: type) type {
     return if (Userdata != void)
         struct {
-            userdata: *Userdata,
+            userdata: Userdata,
             is_virtual: bool = false,
             is_abstract: bool = false,
             is_exposed: bool = true,
@@ -103,7 +103,7 @@ pub fn ClassInfo3(comptime Userdata: type) type {
 pub fn ClassInfo4(comptime Userdata: type) type {
     return if (Userdata != void)
         struct {
-            userdata: *Userdata,
+            userdata: Userdata,
             is_virtual: bool = false,
             is_abstract: bool = false,
             is_exposed: bool = true,
@@ -235,9 +235,9 @@ pub fn ClassCallbacks4(comptime T: type, comptime ClassUserdata: type, comptime 
 // @since 4.1
 pub fn Create(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata) *T
+        fn (userdata: ClassUserdata) anyerror!*T
     else
-        fn () *T;
+        fn () anyerror!*T;
 }
 
 // @ref GDExtensionClassCreateInstance
@@ -245,9 +245,9 @@ fn wrapCreate(comptime T: type, comptime ClassUserdata: type, comptime callback:
     return struct {
         fn wrapped(p_class_userdata: ?*anyopaque) callconv(.c) c.GDExtensionObjectPtr {
             const inst = if (ClassUserdata != void) blk: {
-                const ud = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
-                break :blk callback(ud);
-            } else callback();
+                const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                break :blk callback(ud) catch return null;
+            } else callback() catch return null;
             return @ptrCast(object_module.asObject(inst));
         }
     }.wrapped;
@@ -257,9 +257,9 @@ fn wrapCreate(comptime T: type, comptime ClassUserdata: type, comptime callback:
 // @since 4.4 (adds notify_postinitialize)
 pub fn Create2(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, notify_postinitialize: bool) *T
+        fn (userdata: ClassUserdata, notify_postinitialize: bool) anyerror!*T
     else
-        fn (notify_postinitialize: bool) *T;
+        fn (notify_postinitialize: bool) anyerror!*T;
 }
 
 // @ref GDExtensionClassCreateInstance2
@@ -268,9 +268,9 @@ fn wrapCreate2(comptime T: type, comptime ClassUserdata: type, comptime callback
         fn wrapped(p_class_userdata: ?*anyopaque, p_notify_postinitialize: c.GDExtensionBool) callconv(.c) c.GDExtensionObjectPtr {
             const notify = p_notify_postinitialize != 0;
             const inst = if (ClassUserdata != void) blk: {
-                const ud = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
-                break :blk callback(ud, notify);
-            } else callback(notify);
+                const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                break :blk callback(ud, notify) catch return null;
+            } else callback(notify) catch return null;
             return @ptrCast(object_module.asObject(inst));
         }
     }.wrapped;
@@ -280,7 +280,7 @@ fn wrapCreate2(comptime T: type, comptime ClassUserdata: type, comptime callback
 // @since 4.1
 pub fn Destroy(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, instance: *T) void
+        fn (instance: *T, userdata: ClassUserdata) void
     else
         fn (instance: *T) void;
 }
@@ -291,8 +291,8 @@ fn wrapDestroy(comptime T: type, comptime ClassUserdata: type, comptime callback
         fn wrapped(p_class_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr) callconv(.c) void {
             const inst = @as(*T, @ptrCast(@alignCast(p_instance)));
             if (ClassUserdata != void) {
-                const ud = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
-                callback(ud, inst);
+                const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                callback(inst, ud);
             } else {
                 callback(inst);
             }
@@ -304,7 +304,7 @@ fn wrapDestroy(comptime T: type, comptime ClassUserdata: type, comptime callback
 // @since 4.2
 pub fn Recreate(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, obj: *Object) *T
+        fn (userdata: ClassUserdata, obj: *Object) *T
     else
         fn (obj: *Object) *T;
 }
@@ -315,7 +315,7 @@ fn wrapRecreate(comptime T: type, comptime ClassUserdata: type, comptime callbac
         fn wrapped(p_class_userdata: ?*anyopaque, p_object: c.GDExtensionObjectPtr) callconv(.c) c.GDExtensionClassInstancePtr {
             const obj = @as(*Object, @ptrCast(@alignCast(p_object)));
             if (ClassUserdata != void) {
-                const ud = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 return @ptrCast(callback(ud, obj));
             } else {
                 return @ptrCast(callback(obj));
@@ -612,7 +612,7 @@ fn wrapCallVirtual(comptime T: type, comptime callback: CallVirtual(T)) Child(c.
 // @since 4.1
 pub fn GetVirtual(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, name: *const StringName) ?*const CallVirtual(T)
+        fn (userdata: ClassUserdata, name: *const StringName) ?*const CallVirtual(T)
     else
         fn (name: *const StringName) ?*const CallVirtual(T);
 }
@@ -623,7 +623,7 @@ fn wrapGetVirtual(comptime T: type, comptime ClassUserdata: type, comptime callb
         fn wrapped(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionClassCallVirtual {
             const name = @as(*const StringName, @ptrCast(p_name));
             const virtual: ?*const CallVirtual(T) = if (ClassUserdata != void) blk: {
-                const userdata = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                const userdata = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 break :blk callback(userdata, name);
             } else callback(name);
 
@@ -639,7 +639,7 @@ fn wrapGetVirtual(comptime T: type, comptime ClassUserdata: type, comptime callb
 // @since 4.4 (adds hash parameter)
 pub fn GetVirtual2(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, name: *const StringName, hash: u32) ?*const CallVirtual(T)
+        fn (userdata: ClassUserdata, name: *const StringName, hash: u32) ?*const CallVirtual(T)
     else
         fn (name: *const StringName, hash: u32) ?*const CallVirtual(T);
 }
@@ -650,7 +650,7 @@ fn wrapGetVirtual2(comptime T: type, comptime ClassUserdata: type, comptime call
         fn wrapped(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr, p_hash: u32) callconv(.c) c.GDExtensionClassCallVirtual {
             const name = @as(*const StringName, @ptrCast(p_name));
             const virtual: ?*const CallVirtual(T) = if (ClassUserdata != void) blk: {
-                const userdata = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                const userdata = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 break :blk callback(userdata, name, p_hash);
             } else callback(name, p_hash);
 
@@ -666,7 +666,7 @@ fn wrapGetVirtual2(comptime T: type, comptime ClassUserdata: type, comptime call
 // @since 4.2
 pub fn GetVirtualCallData(comptime ClassUserdata: type, comptime VirtualCallUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, name: *const StringName) ?*VirtualCallUserdata
+        fn (userdata: ClassUserdata, name: *const StringName) ?*VirtualCallUserdata
     else
         fn (name: *const StringName) ?*VirtualCallUserdata;
 }
@@ -677,7 +677,7 @@ fn wrapGetVirtualCallData(comptime ClassUserdata: type, comptime VirtualCallUser
         fn wrapped(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) ?*anyopaque {
             const name = @as(*const StringName, @ptrCast(p_name));
             if (ClassUserdata != void) {
-                const userdata = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                const userdata = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 return @ptrCast(callback(userdata, name));
             } else {
                 return @ptrCast(callback(name));
@@ -690,7 +690,7 @@ fn wrapGetVirtualCallData(comptime ClassUserdata: type, comptime VirtualCallUser
 // @since 4.4 (adds hash parameter)
 pub fn GetVirtualCallData2(comptime ClassUserdata: type, comptime VirtualCallUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, name: *const StringName, hash: u32) ?*VirtualCallUserdata
+        fn (userdata: ClassUserdata, name: *const StringName, hash: u32) ?*VirtualCallUserdata
     else
         fn (name: *const StringName, hash: u32) ?*VirtualCallUserdata;
 }
@@ -701,7 +701,7 @@ fn wrapGetVirtualCallData2(comptime ClassUserdata: type, comptime VirtualCallUse
         fn wrapped(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr, p_hash: u32) callconv(.c) ?*anyopaque {
             const name = @as(*const StringName, @ptrCast(p_name));
             if (ClassUserdata != void) {
-                const userdata = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                const userdata = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 return @ptrCast(callback(userdata, name, p_hash));
             } else {
                 return @ptrCast(callback(name, p_hash));
@@ -932,7 +932,7 @@ pub inline fn registerClass1(
     info: ClassInfo1(Userdata),
     comptime callbacks: ClassCallbacks1(T, Userdata),
 ) void {
-    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(info.userdata) else null;
+    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
     raw.classdbRegisterExtensionClass(
         raw.library,
@@ -975,7 +975,7 @@ pub inline fn registerClass2(
     info: ClassInfo2(Userdata),
     comptime callbacks: ClassCallbacks2(T, Userdata, VirtualCallData),
 ) void {
-    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(info.userdata) else null;
+    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
     raw.classdbRegisterExtensionClass2(
         raw.library,
@@ -1023,7 +1023,7 @@ pub inline fn registerClass3(
     info: ClassInfo3(Userdata),
     comptime callbacks: ClassCallbacks3(T, Userdata, VirtualCallData),
 ) void {
-    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(info.userdata) else null;
+    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
     raw.classdbRegisterExtensionClass3(
         raw.library,
@@ -1072,7 +1072,7 @@ pub inline fn registerClass4(
     info: ClassInfo4(Userdata),
     comptime callbacks: ClassCallbacks4(T, Userdata, VirtualCallData),
 ) void {
-    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(info.userdata) else null;
+    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
     raw.classdbRegisterExtensionClass4(
         raw.library,
@@ -1119,7 +1119,7 @@ pub inline fn registerMethod(
     info: MethodInfo(Userdata),
     comptime callbacks: MethodCallbacks(T, Userdata),
 ) void {
-    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(info.userdata) else null;
+    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
     raw.classdbRegisterExtensionClassMethod(
         raw.library,

@@ -133,26 +133,30 @@ fn buildTestProject(b: *Build, opts: struct {
 fn generateMain(b: *Build) Build.LazyPath {
     const files = b.addWriteFiles();
     _ = files.add("main.zig",
+        \\comptime {
+        \\    godot.registerExtension(Extension, .{ .entry_symbol = "gdzig_test_entry" });
+        \\}
+        \\
+        \\pub const Extension = struct {
+        \\    pub fn create() *const Extension {
+        \\        return &.{};
+        \\    }
+        \\
+        \\    pub fn init(self: *const Extension, level: godot.InitializationLevel) void {
+        \\        _ = self;
+        \\        testing.runInit(testcase, level);
+        \\    }
+        \\
+        \\    pub fn deinit(self: *const Extension, level: godot.InitializationLevel) void {
+        \\        _ = self;
+        \\        testing.runDeinit(testcase, level);
+        \\    }
+        \\};
+        \\
         \\const std = @import("std");
         \\const godot = @import("gdzig");
-        \\const testing = @import("gdzig_test");
         \\const testcase = @import("testcase");
-        \\
-        \\comptime {
-        \\    godot.entrypoint("gdzig_test_entry", .{
-        \\        .init = init,
-        \\        .deinit = deinit,
-        \\    });
-        \\}
-        \\
-        \\fn init(level: godot.InitializationLevel) void {
-        \\    testing.runInit(testcase, level);
-        \\}
-        \\
-        \\fn deinit(level: godot.InitializationLevel) void {
-        \\    testing.runDeinit(testcase, level);
-        \\}
-        \\
+        \\const testing = @import("gdzig_test");
     );
     return files.getDirectory().path(b, "main.zig");
 }

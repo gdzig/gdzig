@@ -20,17 +20,9 @@
 //! - `heap` - Work with Godot's allocator
 //! - `meta` - Type introspection and class hierarchy
 //! - `object` - Object lifecycle and class inheritance
-//! - `register` - Class, method, plugin and signal registration
 //! - `string` - String handling utilities and conversions
 //! - `support` - Method binding and constructor utilities
 //!
-
-pub const InitializationLevel = enum(c_int) {
-    core = 0,
-    servers = 1,
-    scene = 2,
-    editor = 3,
-};
 
 /// The current running version of Godot, initialized during extension initialization.
 pub var version: Version = undefined;
@@ -106,77 +98,6 @@ pub const Version = extern struct {
     }
 };
 
-pub fn entrypoint(
-    comptime name: []const u8,
-    comptime opt: struct {
-        init: ?*const fn (level: InitializationLevel) void = null,
-        deinit: ?*const fn (level: InitializationLevel) void = null,
-        minimum_initialization_level: InitializationLevel = InitializationLevel.core,
-    },
-) void {
-    comptime entrypointWithUserdata(name, void, .{
-        .userdata = {},
-        .init = opt.init,
-        .deinit = opt.deinit,
-        .minimum_initialization_level = opt.minimum_initialization_level,
-    });
-}
-
-pub fn entrypointWithUserdata(
-    comptime name: []const u8,
-    comptime Userdata: type,
-    comptime opt: struct {
-        userdata: if (Userdata == void) void else *const fn () Userdata,
-        init: if (Userdata == void) ?*const fn (level: InitializationLevel) void else ?*const fn (userdata: Userdata, level: InitializationLevel) void = null,
-        deinit: if (Userdata == void) ?*const fn (level: InitializationLevel) void else ?*const fn (userdata: Userdata, level: InitializationLevel) void = null,
-        minimum_initialization_level: InitializationLevel = InitializationLevel.core,
-    },
-) void {
-    @export(&struct {
-        fn entrypoint(
-            p_get_proc_address: c.GDExtensionInterfaceGetProcAddress,
-            p_library: c.GDExtensionClassLibraryPtr,
-            r_initialization: [*c]c.GDExtensionInitialization,
-        ) callconv(.c) c.GDExtensionBool {
-            raw = .init(p_get_proc_address.?, p_library.?);
-            raw.getGodotVersion(@ptrCast(&version));
-            interface = &raw;
-            r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
-            r_initialization.*.initialize = @ptrCast(&init);
-            r_initialization.*.deinitialize = @ptrCast(&deinit);
-            r_initialization.*.minimum_initialization_level = @intFromEnum(opt.minimum_initialization_level);
-            return 1;
-        }
-
-        fn init(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
-            if (opt.init) |init_cb| {
-                if (Userdata == void) {
-                    init_cb(@enumFromInt(p_level));
-                } else {
-                    init_cb(@ptrCast(userdata.?), @enumFromInt(p_level));
-                }
-            }
-        }
-
-        fn deinit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
-            if (opt.deinit) |deinit_cb| {
-                if (Userdata == void) {
-                    deinit_cb(@enumFromInt(p_level));
-                } else {
-                    deinit_cb(@ptrCast(userdata.?), @enumFromInt(p_level));
-                }
-                if (p_level == c.GDEXTENSION_INITIALIZATION_CORE) {
-                    // TODO: remove
-                    register.deinit();
-                }
-            }
-        }
-    }.entrypoint, .{
-        .name = name,
-        .linkage = .strong,
-    });
-}
-
 test {
     std.testing.refAllDecls(@This());
 }
@@ -204,6 +125,28 @@ pub fn signalName(comptime S: type) builtin.StringName {
     return .fromComptimeLatin1(meta.signalName(S));
 }
 
+/// Create any Godot object.
+pub fn create(comptime T: type) !*T {
+    comptime oopz.assertIsA(class.Object, T);
+
+    const Base = oopz.BaseOf(T);
+    const ptr = raw.classdbConstructObject2(@ptrCast(meta.typeName(T))) orelse return error.OutOfMemory;
+    const obj: *Base = @ptrCast(@alignCast(ptr));
+
+    return obj.asInstance(T) orelse @panic("Failed to create object");
+}
+
+/// Destroy any Godot object.
+pub fn destroy(obj: anytype) void {
+    raw.objectDestroy(class.Object.upcast(obj).ptr());
+}
+
+/// Unreference any `RefCounted` object.
+pub fn unreference(ref_counted: anytype) void {
+    const ref = class.RefCounted.upcast(ref_counted);
+    if (ref.unreference()) destroy(ref_counted);
+}
+
 pub const CallError = error{
     InvalidMethod,
     InvalidArgument,
@@ -222,6 +165,7 @@ pub const PropertyError = error{
 const std = @import("std");
 
 pub const c = @import("gdextension");
+const oopz = @import("oopz");
 
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
@@ -234,9 +178,13 @@ pub const meta = @import("meta.zig");
 pub const object = @import("object.zig");
 pub const connect = object.connect;
 pub const random = @import("random.zig");
-pub const register = @import("register.zig");
+
+const register = @import("register.zig");
+pub const InitializationLevel = register.InitializationLevel;
 pub const registerClass = register.registerClass;
+pub const registerExtension = register.registerExtension;
 pub const registerMethod = register.registerMethod;
 pub const registerSignal = register.registerSignal;
+
 pub const string = @import("string.zig");
 pub const support = @import("support.zig");

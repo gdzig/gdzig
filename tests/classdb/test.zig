@@ -3,8 +3,8 @@ pub fn init() void {
 }
 
 pub fn run() !void {
-    const node = godot.object.create(TestNode) catch return error.CreateFailed;
-    defer godot.object.destroy(node);
+    const node = godot.create(TestNode) catch return error.CreateFailed;
+    defer godot.destroy(node);
 
     _ = Object.call(.upcast(node), .fromComptimeLatin1("increment"), .{});
     try testing.expectCall(node, "get_counter", .{}, @as(i64, 1));

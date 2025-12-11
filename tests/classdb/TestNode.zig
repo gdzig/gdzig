@@ -5,12 +5,15 @@ counter: i64 = 0,
 my_property: i64 = 42,
 indexed_values: [3]i64 = .{ 100, 200, 300 },
 
-pub fn init(base: *Node) TestNode {
-    return .{ .base = base };
+pub fn create() !*TestNode {
+    const self: *TestNode = testing.allocator.create(TestNode) catch @panic("out of memory");
+    self.* = .{ .base = Node.init() };
+    self.base.setInstance(TestNode, self);
+    return self;
 }
 
-pub fn deinit(self: *TestNode) void {
-    _ = self;
+pub fn destroy(instance: *TestNode) void {
+    testing.allocator.destroy(instance);
 }
 
 pub fn increment(self: *TestNode) void {
@@ -169,15 +172,6 @@ pub fn register() void {
     });
 }
 
-fn create() *TestNode {
-    return godot.object.create(TestNode) catch @panic("Failed to create TestNode");
-}
-
-fn destroy(instance: *TestNode) void {
-    instance.deinit();
-    godot.heap.general_allocator.destroy(instance);
-}
-
 fn callIncrement(instance: *TestNode, _: []const *const Variant) godot.CallError!Variant {
     instance.increment();
     return Variant.nil;
@@ -224,3 +218,5 @@ const Node = godot.class.Node;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
+
+const testing = @import("gdzig_test");

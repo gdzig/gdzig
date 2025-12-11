@@ -7,7 +7,6 @@ zig-out
 gen
 project/lib/
 **/.godot/**
-**/*.import
 **/.direnv
 .envrc
 

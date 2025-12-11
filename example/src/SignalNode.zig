@@ -1,5 +1,6 @@
 const Self = @This();
 
+allocator: Allocator,
 base: *Control, //this makes @Self a valid gdextension class
 color_rect: *ColorRect = undefined,
 
@@ -10,16 +11,18 @@ pub const Signal1 = struct {
 pub const Signal2 = struct {};
 pub const Signal3 = struct {};
 
-pub fn _bindMethods() void {
-    godot.registerMethod(Self, "onSignal1");
-    godot.registerMethod(Self, "onSignal2");
-    godot.registerMethod(Self, "onSignal3");
-    godot.registerMethod(Self, "emitSignal1");
-    godot.registerMethod(Self, "emitSignal2");
-    godot.registerMethod(Self, "emitSignal3");
-    godot.registerSignal(Self, Signal1);
-    godot.registerSignal(Self, Signal2);
-    godot.registerSignal(Self, Signal3);
+pub fn create(allocator: *Allocator) !*Self {
+    const self = try allocator.create(Self);
+    self.* = .{
+        .allocator = allocator.*,
+        .base = Control.init(),
+    };
+    self.base.setInstance(Self, self);
+    return self;
+}
+
+pub fn destroy(self: *Self, allocator: *Allocator) void {
+    allocator.destroy(self);
 }
 
 pub fn _enterTree(self: *Self) void {
@@ -87,6 +90,7 @@ pub fn emitSignal3(self: *Self) void {
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const godot = @import("gdzig");
 const Button = godot.class.Button;

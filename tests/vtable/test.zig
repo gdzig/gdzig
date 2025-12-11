@@ -1,5 +1,7 @@
 pub fn init() void {
-    godot.registerClass(VTableNode, .{});
+    godot.registerClass(VTableNode, .{
+        .userdata = &testing.allocator,
+    });
 }
 
 pub fn deinit() !void {
