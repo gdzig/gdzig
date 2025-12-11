@@ -54,8 +54,8 @@ pub fn registerClass(
         @panic("Unsupported Godot version");
     }
 
-    if (@hasDecl(T, "_bindMethods")) {
-        T._bindMethods();
+    if (@hasDecl(T, "_register")) {
+        T._register();
     }
 }
 
@@ -236,7 +236,7 @@ fn makeClassCallbacks(comptime T: type) struct {
 
 fn virtualMethodNames(comptime T: type) []const []const u8 {
     const callbacks = [_][]const u8{
-        "_bindMethods",
+        "_register",
         "_destroyPropertyList",
         "_get",
         "_getPropertyList",
