@@ -167,6 +167,14 @@ pub fn build(b: *Build) void {
     const tests_bindgen_run = b.addRunArtifact(tests_bindgen);
     const tests_gdzig_run = b.addRunArtifact(tests_gdzig);
 
+    const tests_integration_run = gdzig_test.addTestCases(b, .{
+        .root_dir = b.path("tests"),
+        .godot = godot_path,
+        .gdzig = gdzig_mod,
+        .target = target,
+        .optimize = optimize,
+    });
+
     //
     // Docs
     //
@@ -188,6 +196,10 @@ pub fn build(b: *Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&tests_bindgen_run.step);
     test_step.dependOn(&tests_gdzig_run.step);
+    test_step.dependOn(&tests_integration_run.step);
+
+    const test_integration_step = b.step("test-integration", "Run integration tests");
+    test_integration_step.dependOn(&tests_integration_run.step);
 
     //
     // Default build
@@ -205,3 +217,4 @@ pub fn build(b: *Build) void {
 const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
+const gdzig_test = @import("gdzig_test/build.zig");
