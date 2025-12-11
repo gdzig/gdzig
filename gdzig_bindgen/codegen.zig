@@ -582,7 +582,7 @@ fn writeClassFunctionObjectPtr(w: *CodeWriter, class: *const Context.Class, func
 
 fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
     if (class.base) |base| {
-        try w.printLine("pub const VTable = {s}.VTable.extend(@This(), .{{", .{base});
+        try w.printLine("pub const VTable = {s}.VTable.extend({s}, .{{", .{ class.name, base });
 
         w.indent += 1;
         for (class.functions.values()) |*function| {
