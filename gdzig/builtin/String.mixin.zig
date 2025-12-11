@@ -156,7 +156,7 @@ pub inline fn fromNullTerminatedWideChars(wc: [:0]const c_int) String {
 /// **Since Godot 4.1**
 pub inline fn toLatin1Buf(self: *const String, buffer: []u8) []u8 {
     // These functions all return the number of characters and not byte
-    @memset(&buffer, 0);
+    @memset(buffer, 0);
     _ = raw.stringToLatin1Chars(self.constPtr(), @ptrCast(buffer.ptr), @intCast(buffer.len));
     const len = std.mem.indexOfSentinel(u8, 0, @ptrCast(buffer.ptr));
     return buffer[0..len];
@@ -171,7 +171,7 @@ pub inline fn toLatin1Buf(self: *const String, buffer: []u8) []u8 {
 /// **Since Godot 4.1**
 pub inline fn toUtf8Buf(self: *const String, buffer: []u8) []u8 {
     // These functions all return the number of characters and not bytes
-    @memset(&buffer, 0);
+    @memset(buffer, 0);
     _ = raw.stringToUtf8Chars(self.constPtr(), @ptrCast(buffer.ptr), @intCast(buffer.len));
     const len = std.mem.indexOfSentinel(u8, 0, @ptrCast(buffer.ptr));
     return buffer[0..len];
@@ -186,7 +186,7 @@ pub inline fn toUtf8Buf(self: *const String, buffer: []u8) []u8 {
 /// **Since Godot 4.1**
 pub inline fn toUtf16Buf(self: *const String, buffer: []u16) []u16 {
     // These functions all return the number of characters and not bytes
-    @memset(&buffer, 0);
+    @memset(buffer, 0);
     _ = raw.stringToUtf16Chars(self.constPtr(), @ptrCast(buffer.ptr), @intCast(buffer.len));
     const len = std.mem.indexOfSentinel(u16, 0, @ptrCast(buffer.ptr));
     return buffer[0..len];
@@ -213,7 +213,7 @@ pub inline fn toUtf32Buf(self: *const String, buffer: []u32) []u32 {
 /// **Since Godot 4.1**
 pub inline fn toWideChars(self: *const String, buffer: []c_int) []c_int {
     // These functions all return the number of characters and not bytes
-    @memset(&buffer, 0);
+    @memset(buffer, 0);
     _ = raw.stringToWideChars(self.constPtr(), @ptrCast(buffer.ptr), @intCast(buffer.len));
     const len = std.mem.indexOfSentinel(c_int, 0, @ptrCast(buffer.ptr));
     return buffer[0..len];

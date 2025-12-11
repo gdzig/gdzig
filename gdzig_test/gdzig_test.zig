@@ -9,7 +9,9 @@ pub fn runInit(comptime testcase: type, current: godot.InitializationLevel) void
     if (@hasDecl(testcase, "init")) {
         callTestFn(testcase.init) catch |e| fail(e);
     }
-    callTestFn(testcase.run) catch |e| fail(e);
+    if (@hasDecl(testcase, "run")) {
+        callTestFn(testcase.run) catch |e| fail(e);
+    }
 }
 
 pub fn runDeinit(comptime testcase: type, current: godot.InitializationLevel) void {

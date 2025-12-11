@@ -188,8 +188,13 @@ pub fn registerClass(
         }
 
         pub fn getVirtualBind(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionClassCallVirtual {
-            const virtual_bind = @field(object.BaseOf(T), "getVirtualDispatch");
-            return virtual_bind(T, p_class_userdata, p_name);
+            _ = p_class_userdata;
+            const Base = object.BaseOf(T);
+            const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
+            var buf: [256]u8 = undefined;
+            const name: *const StringName = @ptrCast(p_name);
+            const name_str = godot.string.stringNameToAscii(name.*, &buf);
+            return @ptrCast(UserVTable.get(name_str));
         }
 
         pub fn getRidBind(p_instance: c.GDExtensionClassInstancePtr) callconv(.c) u64 {
@@ -312,6 +317,50 @@ pub fn deinit() void {
     registered_signals.deinit(godot.heap.general_allocator);
     registered_methods.deinit(godot.heap.general_allocator);
     registered_classes.deinit(godot.heap.general_allocator);
+}
+
+/// Extract virtual method names from a user type.
+/// Virtual methods start with _ but are not internal callbacks.
+fn virtualMethodNames(comptime T: type) []const []const u8 {
+    const callbacks = [_][]const u8{
+        "_bindMethods",
+        "_destroyPropertyList",
+        "_get",
+        "_getPropertyList",
+        "_getRid",
+        "_notification",
+        "_propertyCanRevert",
+        "_propertyGetRevert",
+        "_reference",
+        "_set",
+        "_toString",
+        "_unreference",
+        "_validateProperty",
+    };
+
+    const decls = @typeInfo(T).@"struct".decls;
+    var names: [decls.len][]const u8 = undefined;
+    var count: usize = 0;
+
+    for (decls) |decl| {
+        // Must start with _
+        if (decl.name.len == 0 or decl.name[0] != '_') continue;
+
+        // Must be a function
+        const field = @field(T, decl.name);
+        if (@typeInfo(@TypeOf(field)) != .@"fn") continue;
+
+        // Must not be a callback
+        const is_callback = for (callbacks) |cb| {
+            if (std.mem.eql(u8, decl.name, cb)) break true;
+        } else false;
+        if (is_callback) continue;
+
+        names[count] = decl.name;
+        count += 1;
+    }
+
+    return names[0..count];
 }
 
 const std = @import("std");
