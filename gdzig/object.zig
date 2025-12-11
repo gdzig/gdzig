@@ -176,8 +176,8 @@ fn assertCanInitialize(comptime T: type) void {
 
 pub fn VTable(comptime T: type, comptime method_names: anytype) type {
     return struct {
-        const map: std.StaticStringMap(CallVirtual(T)) = .initComptime(blk: {
-            var kvs: [method_names.len]struct { []const u8, CallVirtual(T) } = undefined;
+        const map: std.StaticStringMap(*const CallVirtual(T)) = .initComptime(blk: {
+            var kvs: [method_names.len]struct { []const u8, *const CallVirtual(T) } = undefined;
             for (method_names, 0..) |name, i| {
                 kvs[i] = .{ name, makeWrapper(name) };
             }
@@ -188,7 +188,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
             return map.has(name);
         }
 
-        pub fn get(name: []const u8) ?CallVirtual(T) {
+        pub fn get(name: []const u8) ?*const CallVirtual(T) {
             return map.get(name);
         }
 
@@ -196,12 +196,30 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
             return VTable(Derived, combineNames(override_names));
         }
 
-        fn combineNames(comptime override_names: anytype) [][]const u8 {
-            var combined_names: [method_names.len + override_names.len][]const u8 = undefined;
-            var i = 0;
-            @memcpy(combined_names[0..method_names.len], method_names);
-            outer: inline for (override_names) |override_name| {
-                inline for (method_names) |method_name| {
+        fn countNew(comptime override_names: anytype) usize {
+            @setEvalBranchQuota(10000);
+            var count: usize = 0;
+            outer: for (override_names) |override_name| {
+                for (method_names) |method_name| {
+                    if (std.mem.eql(u8, override_name, method_name)) {
+                        continue :outer;
+                    }
+                }
+                count += 1;
+            }
+            return count;
+        }
+
+        fn combineNames(comptime override_names: anytype) [method_names.len + countNew(override_names)][]const u8 {
+            @setEvalBranchQuota(10000);
+            var combined_names: [method_names.len + countNew(override_names)][]const u8 = undefined;
+            for (0..method_names.len) |i| {
+                combined_names[i] = method_names[i];
+            }
+
+            var i: usize = 0;
+            outer: for (override_names) |override_name| {
+                for (method_names) |method_name| {
                     if (std.mem.eql(u8, override_name, method_name)) {
                         continue :outer;
                     }
@@ -209,10 +227,12 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                 combined_names[method_names.len + i] = override_name;
                 i += 1;
             }
-            return combined_names[0 .. method_names.len + i];
+
+            return combined_names;
         }
 
-        fn makeWrapper(comptime method_name: []const u8) CallVirtual(T) {
+        fn makeWrapper(comptime method_name: []const u8) *const CallVirtual(T) {
+            @setEvalBranchQuota(10000);
             inline for (selfAndAncestorsOf(T)) |Owner| {
                 if (@hasDecl(Owner, method_name)) {
                     const method = @field(Owner, method_name);
@@ -220,16 +240,18 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                     const fn_info = @typeInfo(FnType).@"fn";
                     const ReturnType = fn_info.return_type orelse void;
 
-                    return struct {
+                    return &struct {
                         fn call(p_instance: *T, p_args: [*]const *const anyopaque, p_ret: *anyopaque) void {
                             const instance: *Owner = if (Owner == T) p_instance else upcast(*Owner, p_instance);
 
                             var args: std.meta.ArgsTuple(FnType) = undefined;
-                            args[0] = instance;
+                            if (fn_info.params.len > 0) {
+                                args[0] = instance;
 
-                            inline for (1..fn_info.params.len) |j| {
-                                const Arg = fn_info.params[j].type.?;
-                                args[j] = @as(*const Arg, @ptrCast(@alignCast(p_args[j - 1]))).*;
+                                inline for (1..fn_info.params.len) |j| {
+                                    const Arg = fn_info.params[j].type.?;
+                                    args[j] = @as(*const Arg, @ptrCast(@alignCast(p_args[j - 1]))).*;
+                                }
                             }
 
                             if (ReturnType == void) {

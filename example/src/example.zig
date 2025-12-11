@@ -1,14 +1,19 @@
-var gpa: std.heap.DebugAllocator(.{}) = .init;
-
 comptime {
     godot.entrypoint("my_extension_init", .{ .init = &init, .deinit = &deinit });
 }
+
+var gpa: std.heap.DebugAllocator(.{}) = .{
+    .backing_allocator = godot.heap.godot_allocator.allocator(),
+};
 
 fn init(level: godot.InitializationLevel) void {
     std.debug.print("[{s}] init\n", .{@tagName(level)});
 
     if (level == .scene) {
-        godot.registerClass(@import("ExampleNode.zig"), .{});
+        godot.registerClass(gpa.allocator(), @import("ExampleNode.zig"), .{});
+        godot.registerClass(gpa.allocator(), @import("SpriteNode.zig"), .{});
+        godot.registerClass(gpa.allocator(), @import("GuiNode.zig"), .{});
+        godot.registerClass(gpa.allocator(), @import("SignalNode.zig"), .{});
     }
 }
 

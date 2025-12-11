@@ -1,9 +1,5 @@
 /// Global instance of the Godot allocator
 pub var godot_allocator: GodotAllocator = .init;
-pub var debug_allocator: std.heap.DebugAllocator(.{}) = .{
-    .backing_allocator = godot_allocator.allocator(),
-};
-pub var general_allocator = debug_allocator.allocator();
 
 /// Godot memory allocator that implements the Zig Allocator interface.
 /// This allocator uses Godot's memory management functions internally.

@@ -48,7 +48,14 @@ pub const Type = union(enum) {
         .{ "int16", Type{ .int = "i16" } },
         .{ "int32", Type{ .int = "i32" } },
         .{ "int64", Type{ .int = "i64" } },
+        .{ "int8_t", Type{ .int = "i8" } },
+        .{ "int16_t", Type{ .int = "i16" } },
+        .{ "int32_t", Type{ .int = "i32" } },
+        .{ "int64_t", Type{ .int = "i64" } },
         .{ "uint8_t", Type{ .int = "u8" } },
+        .{ "uint16_t", Type{ .int = "u16" } },
+        .{ "uint32_t", Type{ .int = "u32" } },
+        .{ "uint64_t", Type{ .int = "u64" } },
         .{ "uint8", Type{ .int = "u8" } },
         .{ "uint16", Type{ .int = "u16" } },
         .{ "uint32", Type{ .int = "u32" } },
@@ -59,7 +66,7 @@ pub const Type = union(enum) {
     const meta_overrides: std.StaticStringMap(Type) = .initComptime(.{});
 
     pub fn from(allocator: Allocator, name: []const u8, is_meta: bool, ctx: *const Context) !Type {
-        var normalized = name;
+        var normalized = mem.trim(u8, name, " ");
 
         const n = mem.count(u8, normalized, ",");
         if (n > 0) {

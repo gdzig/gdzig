@@ -22,7 +22,7 @@ pub fn registerClass(
     const version = GodotVersion.current();
 
     if (version.gte(.@"4.4")) {
-        classdb.registerClass4(T, *Allocator, void, &class_name, &base_name, .{
+        classdb.registerClass4(T, Allocator, void, &class_name, &base_name, .{
             .userdata = &Static.class_allocator,
             .is_virtual = opt.virtual,
             .is_abstract = opt.abstract,
@@ -30,7 +30,7 @@ pub fn registerClass(
             .is_runtime = opt.runtime,
         }, callbacks.v4);
     } else if (version.gte(.@"4.3")) {
-        classdb.registerClass3(T, *Allocator, void, &class_name, &base_name, .{
+        classdb.registerClass3(T, Allocator, void, &class_name, &base_name, .{
             .userdata = &Static.class_allocator,
             .is_virtual = opt.virtual,
             .is_abstract = opt.abstract,
@@ -38,14 +38,14 @@ pub fn registerClass(
             .is_runtime = opt.runtime,
         }, callbacks.v3);
     } else if (version.gte(.@"4.2")) {
-        classdb.registerClass2(T, *Allocator, void, &class_name, &base_name, .{
+        classdb.registerClass2(T, Allocator, void, &class_name, &base_name, .{
             .userdata = &Static.class_allocator,
             .is_virtual = opt.virtual,
             .is_abstract = opt.abstract,
             .is_exposed = opt.exposed,
         }, callbacks.v2);
     } else if (version.gte(.@"4.1")) {
-        classdb.registerClass1(T, *Allocator, &class_name, &base_name, .{
+        classdb.registerClass1(T, Allocator, &class_name, &base_name, .{
             .userdata = &Static.class_allocator,
             .is_virtual = opt.virtual,
             .is_abstract = opt.abstract,
@@ -60,10 +60,10 @@ pub fn registerClass(
 }
 
 fn makeClassCallbacks(comptime T: type) struct {
-    v1: classdb.ClassCallbacks1(T, *Allocator),
-    v2: classdb.ClassCallbacks2(T, *Allocator, void),
-    v3: classdb.ClassCallbacks3(T, *Allocator, void),
-    v4: classdb.ClassCallbacks4(T, *Allocator, void),
+    v1: classdb.ClassCallbacks1(T, Allocator),
+    v2: classdb.ClassCallbacks2(T, Allocator, void),
+    v3: classdb.ClassCallbacks3(T, Allocator, void),
+    v4: classdb.ClassCallbacks4(T, Allocator, void),
 } {
     // Assert that we can initialize the user type
     comptime {
@@ -133,17 +133,18 @@ fn makeClassCallbacks(comptime T: type) struct {
             T._notification(instance, what, false);
         }
 
-        fn getVirtual(name: *const StringName) ?classdb.CallVirtual(T) {
+        fn getVirtual(allocator: *Allocator, name: *const StringName) ?*const classdb.CallVirtual(T) {
+            _ = allocator;
             const Base = object.BaseOf(T);
             const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
             var buf: [256]u8 = undefined;
-            const name_str = name.toUtf8(&buf);
+            const name_str = godot.string.stringNameToAscii(name.*, buf[0..]);
             return UserVTable.get(name_str);
         }
 
-        fn getVirtual2(name: *const StringName, hash: u32) ?classdb.CallVirtual(T) {
+        fn getVirtual2(allocator: *Allocator, name: *const StringName, hash: u32) ?*const classdb.CallVirtual(T) {
             _ = hash;
-            return getVirtual(name);
+            return getVirtual(allocator, name);
         }
     };
 
@@ -277,8 +278,8 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
 }
 
 pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
-    const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
-    const method_name = StringName.fromComptimeLatin1(@tagName(name));
+    var class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
+    var method_name = StringName.fromComptimeLatin1(@tagName(name));
 
     const MethodType = @TypeOf(@field(T, @tagName(name)));
     const fn_info = @typeInfo(MethodType).@"fn";
@@ -288,25 +289,13 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
 
     const return_value: classdb.PropertyInfo = .{
         .type = .forType(ReturnType),
-        .name = &StringName.empty,
-        .class_name = &StringName.empty,
-        .hint = .property_hint_none,
-        .hint_string = &String.empty,
-        .usage = .property_usage_none,
     };
 
     const arg_infos: [arg_count]classdb.PropertyInfo = comptime blk: {
         var infos: [arg_count]classdb.PropertyInfo = undefined;
         for (0..arg_count) |i| {
             const ArgType = Args[i + 1].type.?;
-            infos[i] = .{
-                .type = Variant.Tag.forType(ArgType),
-                .name = &StringName.empty,
-                .class_name = &StringName.empty,
-                .hint = .property_hint_none,
-                .hint_string = &String.empty,
-                .usage = .property_usage_none,
-            };
+            infos[i] = .{ .type = .forType(ArgType) };
         }
         break :blk infos;
     };
@@ -351,21 +340,15 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
     const signal_name = StringName.fromComptimeLatin1(meta.signalName(S));
 
     const fields = @typeInfo(S).@"struct".fields;
-    const arg_info = comptime blk: {
-        var infos: [fields.len]classdb.PropertyInfo = undefined;
-        for (fields, 0..) |field, i| {
-            const name = StringName.fromComptimeLatin1(field.name);
-            infos[i] = .{
-                .type = .forType(field.type),
-                .name = &name,
-                .class_name = &StringName.empty,
-                .hint = .property_hint_none,
-                .hint_string = &String.empty,
-                .usage = .property_usage_none,
-            };
-        }
-        break :blk infos;
-    };
+    var arg_info: [fields.len]classdb.PropertyInfo = undefined;
+    var names: [fields.len]StringName = undefined;
+    inline for (fields, 0..) |field, i| {
+        names[i] = StringName.fromComptimeLatin1(field.name);
+        arg_info[i] = .{
+            .type = .forType(field.type),
+            .name = &names[i],
+        };
+    }
 
     classdb.registerSignal(&class_name, &signal_name, &arg_info);
 }

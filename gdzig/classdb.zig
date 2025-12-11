@@ -285,7 +285,7 @@ fn wrapSet(comptime T: type, comptime callback: Set(T)) Child(c.GDExtensionClass
         fn wrapped(p_instance: c.GDExtensionClassInstancePtr, p_name: c.GDExtensionConstStringNamePtr, p_value: c.GDExtensionConstVariantPtr) callconv(.c) c.GDExtensionBool {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const name = @as(*const StringName, @ptrCast(p_name));
-            const value = @as(*const Variant, @ptrCast(p_value));
+            const value = @as(*const Variant, @ptrCast(@alignCast(p_value)));
             callback(instance, name, value) catch return 0;
             return 1;
         }
@@ -314,13 +314,13 @@ pub fn GetPropertyList(comptime T: type) type {
 
 fn wrapGetPropertyList(comptime T: type, comptime callback: GetPropertyList(T)) Child(c.GDExtensionClassGetPropertyList) {
     return struct {
-        fn wrapped(p_instance: c.GDExtensionClassInstancePtr, r_count: *u32) callconv(.c) ?*const c.GDExtensionPropertyInfo {
+        fn wrapped(p_instance: c.GDExtensionClassInstancePtr, r_count: [*c]u32) callconv(.c) [*c]const c.GDExtensionPropertyInfo {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const list = callback(instance) catch {
-                r_count.* = 0;
+                if (r_count) |cnt| cnt.* = 0;
                 return null;
             };
-            r_count.* = @intCast(list.len);
+            if (r_count) |cnt| cnt.* = @intCast(list.len);
             if (list.len == 0) return null;
             return @ptrCast(list.ptr);
         }
@@ -438,14 +438,14 @@ pub fn ToString(comptime T: type) type {
 
 fn wrapToString(comptime T: type, comptime callback: ToString(T)) Child(c.GDExtensionClassToString) {
     return struct {
-        fn wrapped(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: *c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.c) void {
+        fn wrapped(p_instance: c.GDExtensionClassInstancePtr, r_is_valid: [*c]c.GDExtensionBool, p_out: c.GDExtensionStringPtr) callconv(.c) void {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const out = @as(*String, @ptrCast(@alignCast(p_out)));
             out.* = callback(instance) orelse {
-                r_is_valid.* = 0;
+                if (r_is_valid) |v| v.* = 0;
                 return;
             };
-            r_is_valid.* = 1;
+            if (r_is_valid) |v| v.* = 1;
         }
     }.wrapped;
 }
@@ -513,22 +513,22 @@ fn wrapCallVirtual(comptime T: type, comptime callback: CallVirtual(T)) Child(c.
 
 pub fn GetVirtual(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, name: *const StringName) ?CallVirtual(T)
+        fn (userdata: *ClassUserdata, name: *const StringName) ?*const CallVirtual(T)
     else
-        fn (name: *const StringName) ?CallVirtual(T);
+        fn (name: *const StringName) ?*const CallVirtual(T);
 }
 
 fn wrapGetVirtual(comptime T: type, comptime ClassUserdata: type, comptime callback: GetVirtual(T, ClassUserdata)) Child(c.GDExtensionClassGetVirtual) {
     return struct {
         fn wrapped(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr) callconv(.c) c.GDExtensionClassCallVirtual {
             const name = @as(*const StringName, @ptrCast(p_name));
-            const virtual: ?CallVirtual(T) = if (ClassUserdata != void) blk: {
+            const virtual: ?*const CallVirtual(T) = if (ClassUserdata != void) blk: {
                 const userdata = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 break :blk callback(userdata, name);
             } else callback(name);
 
             if (virtual) |v| {
-                return wrapCallVirtual(T, v);
+                return @ptrCast(v);
             }
             return null;
         }
@@ -537,22 +537,22 @@ fn wrapGetVirtual(comptime T: type, comptime ClassUserdata: type, comptime callb
 
 pub fn GetVirtual2(comptime T: type, comptime ClassUserdata: type) type {
     return if (ClassUserdata != void)
-        fn (userdata: *ClassUserdata, name: *const StringName, hash: u32) ?CallVirtual(T)
+        fn (userdata: *ClassUserdata, name: *const StringName, hash: u32) ?*const CallVirtual(T)
     else
-        fn (name: *const StringName, hash: u32) ?CallVirtual(T);
+        fn (name: *const StringName, hash: u32) ?*const CallVirtual(T);
 }
 
 fn wrapGetVirtual2(comptime T: type, comptime ClassUserdata: type, comptime callback: GetVirtual2(T, ClassUserdata)) Child(c.GDExtensionClassGetVirtual2) {
     return struct {
         fn wrapped(p_class_userdata: ?*anyopaque, p_name: c.GDExtensionConstStringNamePtr, p_hash: u32) callconv(.c) c.GDExtensionClassCallVirtual {
             const name = @as(*const StringName, @ptrCast(p_name));
-            const virtual: ?CallVirtual(T) = if (ClassUserdata != void) blk: {
+            const virtual: ?*const CallVirtual(T) = if (ClassUserdata != void) blk: {
                 const userdata = @as(*ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 break :blk callback(userdata, name, p_hash);
             } else callback(name, p_hash);
 
             if (virtual) |v| {
-                return wrapCallVirtual(T, v);
+                return @ptrCast(v);
             }
             return null;
         }
@@ -631,9 +631,9 @@ pub fn MethodInfo(comptime Userdata: type) type {
     return if (Userdata != void)
         struct {
             userdata: *Userdata,
-            name: *const StringName,
+            name: *StringName,
             flags: MethodFlags = .{},
-            return_value_info: ?*const PropertyInfo = null,
+            return_value_info: ?*PropertyInfo = null,
             return_value_metadata: MethodArgumentMetadata = .none,
             argument_info: []const PropertyInfo = &.{},
             argument_metadata: []const MethodArgumentMetadata = &.{},
@@ -641,9 +641,9 @@ pub fn MethodInfo(comptime Userdata: type) type {
         }
     else
         struct {
-            name: *const StringName,
+            name: *StringName,
             flags: MethodFlags = .{},
-            return_value_info: ?*const PropertyInfo = null,
+            return_value_info: ?*PropertyInfo = null,
             return_value_metadata: MethodArgumentMetadata = .none,
             argument_info: []const PropertyInfo = &.{},
             argument_metadata: []const MethodArgumentMetadata = &.{},
@@ -683,7 +683,7 @@ pub fn Call(comptime T: type, comptime Userdata: type) type {
 
 fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T, Userdata)) Child(c.GDExtensionClassMethodCall) {
     return struct {
-        fn wrapped(method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstVariantPtr, p_argument_count: c.GDExtensionInt, r_return: c.GDExtensionVariantPtr, r_error: *c.GDExtensionCallError) callconv(.c) void {
+        fn wrapped(method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstVariantPtr, p_argument_count: c.GDExtensionInt, r_return: c.GDExtensionVariantPtr, r_error: [*c]c.GDExtensionCallError) callconv(.c) void {
             const instance = @as(*T, @ptrCast(@alignCast(p_instance)));
             const args = @as([*]const *const Variant, @ptrCast(p_args))[0..@intCast(p_argument_count)];
             const ret = @as(*Variant, @ptrCast(@alignCast(r_return)));
@@ -691,16 +691,16 @@ fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T
             if (Userdata != void) {
                 const userdata = @as(*Userdata, @ptrCast(@alignCast(method_userdata)));
                 ret.* = callback(userdata, instance, args) catch |err| {
-                    r_error.* = @bitCast(CallResult.fromError(err));
+                    if (r_error) |e| e.* = @bitCast(CallResult.fromError(err));
                     return;
                 };
             } else {
                 ret.* = callback(instance, args) catch |err| {
-                    r_error.* = @bitCast(CallResult.fromError(err));
+                    if (r_error) |e| e.* = @bitCast(CallResult.fromError(err));
                     return;
                 };
             }
-            r_error.*.@"error" = c.GDEXTENSION_CALL_OK;
+            if (r_error) |e| e.*.@"error" = c.GDEXTENSION_CALL_OK;
         }
     }.wrapped;
 }
@@ -778,11 +778,11 @@ pub const CallResult = extern struct {
 
 pub const PropertyInfo = extern struct {
     type: Variant.Tag,
-    name: *const StringName,
-    class_name: *const StringName,
-    hint: PropertyHint,
-    hint_string: *const String,
-    usage: PropertyUsageFlags,
+    name: ?*const StringName = null,
+    class_name: ?*const StringName = null,
+    hint: PropertyHint = .property_hint_none,
+    hint_string: ?*const String = null,
+    usage: PropertyUsageFlags = .property_usage_none,
 };
 
 //
@@ -1002,10 +1002,10 @@ pub inline fn registerMethod(
             .return_value_info = @ptrCast(info.return_value_info),
             .return_value_metadata = @intFromEnum(info.return_value_metadata),
             .argument_count = @intCast(info.argument_info.len),
-            .arguments_info = @ptrCast(info.argument_info.ptr),
-            .arguments_metadata = @ptrCast(info.argument_metadata.ptr),
+            .arguments_info = @ptrCast(@constCast(info.argument_info.ptr)),
+            .arguments_metadata = @ptrCast(@constCast(info.argument_metadata.ptr)),
             .default_argument_count = @intCast(info.default_arguments.len),
-            .default_arguments = @ptrCast(info.default_arguments.ptr),
+            .default_arguments = @ptrCast(@constCast(info.default_arguments.ptr)),
         },
     );
 }

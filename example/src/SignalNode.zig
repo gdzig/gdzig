@@ -10,13 +10,13 @@ pub const Signal1 = struct {
 pub const Signal2 = struct {};
 pub const Signal3 = struct {};
 
-pub fn _bindMethods() void {
-    godot.registerMethod(Self, "onSignal1");
-    godot.registerMethod(Self, "onSignal2");
-    godot.registerMethod(Self, "onSignal3");
-    godot.registerMethod(Self, "emitSignal1");
-    godot.registerMethod(Self, "emitSignal2");
-    godot.registerMethod(Self, "emitSignal3");
+pub fn _register() void {
+    godot.registerMethod(Self, .onSignal1);
+    godot.registerMethod(Self, .onSignal2);
+    godot.registerMethod(Self, .onSignal3);
+    godot.registerMethod(Self, .emitSignal1);
+    godot.registerMethod(Self, .emitSignal2);
+    godot.registerMethod(Self, .emitSignal3);
     godot.registerSignal(Self, Signal1);
     godot.registerSignal(Self, Signal2);
     godot.registerSignal(Self, Signal3);

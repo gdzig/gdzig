@@ -1,9 +1,9 @@
-const Self = @This();
+const GuiNode = @This();
 
 base: *Control,
 sprite: *Sprite2D = undefined,
 
-pub fn _enterTree(self: *Self) void {
+pub fn _enterTree(self: *GuiNode) void {
     if (Engine.isEditorHint()) return;
 
     var normal_btn = Button.init();
@@ -33,23 +33,23 @@ pub fn _enterTree(self: *Self) void {
     self.base.addChild(.upcast(self.sprite), .{});
 }
 
-pub fn _exitTree(self: *Self) void {
+pub fn _exitTree(self: *GuiNode) void {
     _ = self;
 }
 
-pub fn onPressed(self: *Self) void {
+pub fn onPressed(self: *GuiNode) void {
     _ = self;
     std.debug.print("onPressed \n", .{});
 }
 
-pub fn onToggled(self: *Self, toggled_on: bool) void {
+pub fn onToggled(self: *GuiNode, toggled_on: bool) void {
     _ = self;
     std.debug.print("on_toggled {any}\n", .{toggled_on});
 }
 
 pub fn _bindMethods() void {
-    godot.registerMethod(@This(), "onPressed");
-    godot.registerMethod(@This(), "onToggled");
+    godot.registerMethod(GuiNode, .onPressed);
+    godot.registerMethod(GuiNode, .onToggled);
 }
 
 const std = @import("std");

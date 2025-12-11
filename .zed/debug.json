@@ -3,7 +3,7 @@
     "label": "Debug Example",
     "adapter": "CodeLLDB",
     "request": "launch",
-    "program": "godot",
+    "program": "/nix/store/bhmlywmx3g9vng9s7sla3hhalvjz4cdd-godot-4.4.1-stable/bin/godot",
     "args": [],
     "build": "Build Example",
     "cwd": "${ZED_WORKTREE_ROOT}/example/project"

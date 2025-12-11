@@ -582,19 +582,19 @@ fn writeClassFunctionObjectPtr(w: *CodeWriter, class: *const Context.Class, func
 
 fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
     if (class.base) |base| {
-        try w.printLine("pub const VTable = {s}.VTable.extend({s}, .{{", .{ class.name, base });
-
-        w.indent += 1;
-        for (class.functions.values()) |*function| {
-            if (function.mode == .final) continue;
-            try w.printLine("\"{s}\",", .{function.name});
-        }
-        w.indent -= 1;
-
-        try w.writeLine("});\n");
+        try w.printLine("pub const VTable = {s}.VTable.extend({s}, .{{", .{ base, class.name });
     } else {
-        // The root Object has its VTable defined in Object.mixin.zig
+        try w.printLine("pub const VTable = gdzig_object.VTable({s}, .{{", .{class.name});
     }
+
+    w.indent += 1;
+    for (class.functions.values()) |*function| {
+        if (function.mode == .final) continue;
+        try w.printLine("\"{s}\",", .{function.name});
+    }
+    w.indent -= 1;
+
+    try w.writeLine("});\n");
 
     for (class.functions.values()) |*function| {
         if (function.mode == .final) continue;
@@ -994,8 +994,10 @@ fn writeImports(w: *CodeWriter, root: []const u8, imports: *const Context.Import
             try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
         } else if (ctx.interface.typedefs.contains(import.*)) {
             try w.printLine("const {0s} = @import(\"gdextension\").{0s};", .{import.*});
+        } else if (ctx.native_structures.contains(import.*)) {
+            try w.printLine("const {0s} = @import(\"gdextension\").{0s};", .{import.*});
         } else {
-            // TODO: native structures?
+            // Unknown type - skip
         }
     }
 }

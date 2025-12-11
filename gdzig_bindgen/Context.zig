@@ -31,6 +31,7 @@ enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
 interface: Interface = .empty,
 modules: StringArrayHashMap(Module) = .empty,
+native_structures: StringHashMap(void) = .empty,
 
 symbol_lookup: StringHashMap(Symbol) = .empty,
 
@@ -212,6 +213,7 @@ fn parseClasses(self: *Context) !void {
 
     for (self.api.native_structures) |ns| {
         try self.engine_classes.put(self.allocator(), ns.name, false);
+        try self.native_structures.put(self.allocator(), ns.name, {});
     }
 }
 

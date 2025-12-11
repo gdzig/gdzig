@@ -32,6 +32,8 @@ pub const InitializationLevel = enum(c_int) {
     editor = 3,
 };
 
+pub var version: GodotVersion = undefined;
+
 pub const GodotVersion = extern struct {
     major: u32,
     minor: u32,
@@ -146,6 +148,7 @@ pub fn entrypointWithUserdata(
         ) callconv(.c) c.GDExtensionBool {
             raw = .init(p_get_proc_address.?, p_library.?);
             interface = &raw;
+            version = .current();
             r_initialization.*.userdata = if (Userdata != void) opt.userdata() else null;
             r_initialization.*.initialize = @ptrCast(&init);
             r_initialization.*.deinitialize = @ptrCast(&deinit);
@@ -169,10 +172,6 @@ pub fn entrypointWithUserdata(
                     deinit_cb(@enumFromInt(p_level));
                 } else {
                     deinit_cb(@ptrCast(userdata.?), @enumFromInt(p_level));
-                }
-                if (p_level == c.GDEXTENSION_INITIALIZATION_CORE) {
-                    // TODO: remove
-                    register.deinit();
                 }
             }
         }
@@ -207,6 +206,26 @@ pub fn typeName(comptime T: type) *builtin.StringName {
 
 pub fn signalName(comptime S: type) builtin.StringName {
     return .fromComptimeLatin1(meta.signalName(S));
+}
+
+pub fn create(comptime T: type) !*T {
+    const class_name = meta.typeName(T);
+
+    if (version.gte(.@"4.4")) {
+        return if (raw.classdbConstructObject2(class_name)) |any|
+            @ptrCast(@alignCast(any))
+        else
+            return error.OutOfMemory;
+    } else {
+        return if (raw.classdbConstructObject(class_name)) |any|
+            @ptrCast(@alignCast(any))
+        else
+            return error.OutOfMemory;
+    }
+}
+
+pub fn destroy(obj: anytype) void {
+    raw.objectDestroy(@ptrCast(obj));
 }
 
 const std = @import("std");
