@@ -171,14 +171,14 @@ fn generateProject(
         \\entry_symbol = "gdzig_test_entry"
         \\
         \\[libraries]
-        \\linux.debug.x86_64 = "lib/libtest_{s}.so"
-        \\linux.release.x86_64 = "lib/libtest_{s}.so"
-        \\macos.debug = "lib/libtest_{s}.dylib"
-        \\macos.release = "lib/libtest_{s}.dylib"
-        \\windows.debug.x86_64 = "lib/test_{s}.dll"
-        \\windows.release.x86_64 = "lib/test_{s}.dll"
+        \\linux.debug.x86_64 = "lib/libtest_{0s}.so"
+        \\linux.release.x86_64 = "lib/libtest_{0s}.so"
+        \\macos.debug = "lib/libtest_{0s}.dylib"
+        \\macos.release = "lib/libtest_{0s}.dylib"
+        \\windows.debug.x86_64 = "lib/test_{0s}.dll"
+        \\windows.release.x86_64 = "lib/test_{0s}.dll"
         \\
-    , .{ name, name, name, name, name, name }));
+    , .{name}));
 
     _ = project.add("project.godot", b.fmt(
         \\config_version=5
