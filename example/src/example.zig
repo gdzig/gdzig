@@ -41,11 +41,14 @@ pub const Extension = struct {
     }
 
     pub fn destroy(self: *Extension) void {
-        _ = self.gpa.deinit();
+        var gpa = self.gpa;
+        gpa.allocator().destroy(self);
+        assert(gpa.deinit() == .ok);
     }
 };
 
 const std = @import("std");
+const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const DebugAllocator = std.heap.DebugAllocator;
 const InitializationLevel = godot.InitializationLevel;

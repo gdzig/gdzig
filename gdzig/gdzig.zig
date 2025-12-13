@@ -125,28 +125,6 @@ pub fn signalName(comptime S: type) builtin.StringName {
     return .fromComptimeLatin1(meta.signalName(S));
 }
 
-/// Create any Godot object.
-pub fn create(comptime T: type) !*T {
-    comptime oopz.assertIsA(class.Object, T);
-
-    const Base = oopz.BaseOf(T);
-    const ptr = raw.classdbConstructObject2(@ptrCast(meta.typeName(T))) orelse return error.OutOfMemory;
-    const obj: *Base = @ptrCast(@alignCast(ptr));
-
-    return obj.asInstance(T) orelse @panic("Failed to create object");
-}
-
-/// Destroy any Godot object.
-pub fn destroy(obj: anytype) void {
-    raw.objectDestroy(class.Object.upcast(obj).ptr());
-}
-
-/// Unreference any `RefCounted` object.
-pub fn unreference(ref_counted: anytype) void {
-    const ref = class.RefCounted.upcast(ref_counted);
-    if (ref.unreference()) destroy(ref_counted);
-}
-
 pub const CallError = error{
     InvalidMethod,
     InvalidArgument,
@@ -165,7 +143,6 @@ pub const PropertyError = error{
 const std = @import("std");
 
 pub const c = @import("gdextension");
-const oopz = @import("oopz");
 
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");

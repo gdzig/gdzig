@@ -15,6 +15,7 @@ pub fn create(allocator: *const Allocator) !*VTableNode {
 }
 
 pub fn destroy(self: *VTableNode, allocator: *const Allocator) void {
+    self.base.destroy();
     allocator.destroy(self);
 }
 

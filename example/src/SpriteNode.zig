@@ -24,6 +24,7 @@ pub fn create(allocator: *Allocator) !*Self {
 }
 
 pub fn destroy(self: *Self, allocator: *Allocator) void {
+    self.base.destroy();
     allocator.destroy(self);
 }
 
@@ -42,7 +43,7 @@ pub fn _ready(self: *Self) void {
     defer logo_path.deinit();
 
     const tex = ResourceLoader.load(logo_path, .{}).?;
-    defer _ = tex.unreference();
+    defer if (tex.unreference()) tex.destroy();
 
     const sz = self.base.getParentAreaSize();
 

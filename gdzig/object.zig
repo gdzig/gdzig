@@ -1,7 +1,6 @@
 pub fn connect(obj: anytype, comptime S: type, callable: Callable) void {
-    var signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
-    defer signal_name.deinit();
-
+    // Use a static StringName - no deinit needed since it's comptime
+    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
     _ = obj.connect(signal_name, callable, .{});
 }
 

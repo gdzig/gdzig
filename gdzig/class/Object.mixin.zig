@@ -1,5 +1,14 @@
 // @mixin start
 
+/// Immediately destroys the object. Prefer `queueFree` in most situations.
+pub fn destroy(self: *Self) void {
+    if (DestroyMeta.get(Object.upcast(self))) |destroy_meta| {
+        if (destroy_meta.engine_destroying) return;
+        destroy_meta.user_destroying = true;
+    }
+    raw.objectDestroy(self.ptr());
+}
+
 /// Upcasts a child type to this type.
 pub fn upcast(value: anytype) *Self {
     return oopz.upcast(*Self, value);
@@ -88,14 +97,18 @@ fn typeToken(comptime T: type) *anyopaque {
     }.token);
 }
 
+const DestroyMeta = @import("../register.zig").DestroyMeta;
+
 // @mixin stop
 
 const std = @import("std");
 
-const typeName = @import("../gdzig.zig").meta.typeName;
+const godot = @import("../gdzig.zig");
+const typeName = godot.meta.typeName;
+const Object = @import("object.zig").Object;
 
 const oopz = @import("oopz");
-const raw = &@import("../gdzig.zig").raw;
+const raw = &godot.raw;
 const StringName = @import("../builtin.zig").StringName;
 
 const c = @import("gdextension");

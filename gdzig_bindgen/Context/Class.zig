@@ -97,6 +97,9 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Methods
     for (api.methods orelse &.{}) |method| {
+        // Skip 'destroy' on RefCounted classes - provided by mixin instead
+        if (self.is_refcounted and std.mem.eql(u8, method.name, "destroy")) continue;
+
         try self.functions.put(allocator, method.name, try Function.fromClass(allocator, self.name_api, self.has_singleton, method, ctx));
     }
 

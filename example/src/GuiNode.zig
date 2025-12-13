@@ -15,6 +15,7 @@ pub fn create(allocator: *Allocator) !*GuiNode {
 }
 
 pub fn destroy(self: *GuiNode, allocator: *Allocator) void {
+    self.base.destroy();
     allocator.destroy(self);
 }
 
@@ -40,7 +41,7 @@ pub fn _enterTree(self: *GuiNode) void {
     defer res_name.deinit();
 
     const texture = ResourceLoader.load(res_name, .{}).?;
-    defer _ = texture.unreference();
+    defer if (texture.unreference()) texture.destroy();
     self.sprite = Sprite2D.init();
     self.sprite.setTexture(Texture2D.downcast(texture).?);
     self.sprite.setPosition(.initXY(400, 300));

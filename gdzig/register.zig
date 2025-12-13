@@ -55,6 +55,7 @@ pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void 
 
             if (level == opt.minimum_initialization_level) {
                 PropertyListMeta.cleanup();
+                DestroyMeta.cleanup();
                 if (@hasDecl(T, "destroy")) self.destroy();
             }
         }
@@ -155,6 +156,38 @@ const PropertyListMeta = struct {
     }
 };
 
+/// Tracks destruction state to prevent double-free.
+pub const DestroyMeta = struct {
+    user_destroying: bool = false,
+    engine_destroying: bool = false,
+
+    var gpa: if (builtin.is_test) void else DebugAllocator(.{}) = if (builtin.is_test) {} else .init;
+    var pool: MemoryPool(DestroyMeta) = .init(gpa.allocator());
+
+    pub const callbacks: godot.c.GDExtensionInstanceBindingCallbacks = .{
+        .create_callback = &create,
+        .free_callback = &free,
+    };
+
+    fn create(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
+        return @ptrCast(pool.create() catch return null);
+    }
+
+    fn free(_: ?*anyopaque, _: ?*anyopaque, binding: ?*anyopaque) callconv(.c) void {
+        if (binding) |self| pool.destroy(@ptrCast(@alignCast(self)));
+    }
+
+    pub fn get(obj: *Object) ?*DestroyMeta {
+        const raw_ptr = godot.raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&callbacks)), &callbacks);
+        return @ptrCast(@alignCast(raw_ptr));
+    }
+
+    pub fn cleanup() void {
+        pool.deinit();
+        if (!builtin.is_test) assert(gpa.deinit() == .ok);
+    }
+};
+
 fn makeClassCallbacks(comptime T: type) struct {
     v1: classdb.ClassCallbacks1(T, ClassUserdataOf(T)),
     v2: classdb.ClassCallbacks2(T, ClassUserdataOf(T), void),
@@ -190,8 +223,10 @@ fn makeClassCallbacks(comptime T: type) struct {
             else
                 try T.create(userdata);
 
+            const obj = Object.upcast(self);
+
             if (notify) {
-                Object.upcast(self).notification(Object.NOTIFICATION_POSTINITIALIZE, .{
+                obj.notification(Object.NOTIFICATION_POSTINITIALIZE, .{
                     .reversed = false,
                 });
             }
@@ -209,7 +244,11 @@ fn makeClassCallbacks(comptime T: type) struct {
         ///
         /// @since 4.1
         fn destroy(self: *T, userdata: ClassUserdataOf(T)) void {
-            self.base = undefined;
+            const obj = Object.upcast(self);
+            if (DestroyMeta.get(obj)) |destroy_meta| {
+                if (destroy_meta.user_destroying) return;
+                destroy_meta.engine_destroying = true;
+            }
             T.destroy(self, userdata);
         }
 
@@ -296,7 +335,7 @@ fn makeClassCallbacks(comptime T: type) struct {
         },
         .v2 = .{
             .create = Callbacks.create1,
-            .destroy = T.destroy,
+            .destroy = Callbacks.destroy,
             .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
 
             .get_virtual = Callbacks.getVirtual,
@@ -318,7 +357,7 @@ fn makeClassCallbacks(comptime T: type) struct {
         },
         .v3 = .{
             .create = Callbacks.create1,
-            .destroy = T.destroy,
+            .destroy = Callbacks.destroy,
             .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
 
             .get_virtual = Callbacks.getVirtual,
@@ -340,7 +379,7 @@ fn makeClassCallbacks(comptime T: type) struct {
         },
         .v4 = .{
             .create = Callbacks.create2,
-            .destroy = T.destroy,
+            .destroy = Callbacks.destroy,
             .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
 
             .get_virtual = Callbacks.getVirtual2,

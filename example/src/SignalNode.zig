@@ -22,6 +22,7 @@ pub fn create(allocator: *Allocator) !*Self {
 }
 
 pub fn destroy(self: *Self, allocator: *Allocator) void {
+    self.base.destroy();
     allocator.destroy(self);
 }
 

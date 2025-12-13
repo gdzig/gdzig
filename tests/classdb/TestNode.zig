@@ -12,8 +12,8 @@ pub fn create() !*TestNode {
     return self;
 }
 
-pub fn destroy(instance: *TestNode) void {
-    testing.allocator.destroy(instance);
+pub fn destroy(self: *TestNode) void {
+    testing.allocator.destroy(self);
 }
 
 pub fn increment(self: *TestNode) void {

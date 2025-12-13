@@ -39,6 +39,7 @@ pub fn create(allocator: *Allocator) !*ExampleNode {
 
 pub fn destroy(self: *ExampleNode, allocator: *Allocator) void {
     std.log.info("destroy {s}", .{@typeName(ExampleNode)});
+    self.base.destroy();
     allocator.destroy(self);
 }
 
@@ -59,8 +60,7 @@ pub fn _process(self: *ExampleNode, _: f64) void {
 
 fn clearScene(self: *ExampleNode) void {
     if (self.example_node) |n| {
-        godot.destroy(n);
-        //n.queue_free(); //ok
+        n.queueFree();
     }
 }
 
@@ -72,7 +72,7 @@ pub fn onItemFocused(self: *ExampleNode, idx: i64) void {
     self.clearScene();
     switch (idx) {
         inline 0...Examples.len - 1 => |i| {
-            const n = godot.create(Examples[i].T) catch unreachable;
+            const n = Examples[i].T.create(&self.allocator) catch unreachable;
             self.example_node = .upcast(n);
             self.panel.addChild(self.example_node.?, .{});
             self.panel.grabFocus();
@@ -83,7 +83,9 @@ pub fn onItemFocused(self: *ExampleNode, idx: i64) void {
 
 pub fn _enterTree(self: *ExampleNode) void {
     // test T -> variant -> T
-    const obj: *ExampleNode = godot.create(ExampleNode) catch unreachable;
+    const obj = ExampleNode.create(&self.allocator) catch unreachable;
+    defer obj.destroy(&self.allocator);
+
     const variant: Variant = Variant.init(obj);
     const result = variant.as(*ExampleNode).?;
     _ = result;
@@ -112,7 +114,7 @@ pub fn _enterTree(self: *ExampleNode) void {
     }
 
     var timer = self.base.getTree().?.createTimer(1.0, .{}).?;
-    defer _ = timer.unreference();
+    defer if (timer.unreference()) timer.destroy();
 
     godot.connect(timer, SceneTreeTimer.TimeoutSignal, .fromClosure(self, &onTimeout));
     godot.connect(sp, HSplitContainer.ResizedSignal, .fromClosure(self, &onResized));
@@ -128,14 +130,19 @@ pub fn _enterTree(self: *ExampleNode) void {
     self.base.addChild(.upcast(sp), .{});
 
     const vprt = self.base.getViewport().?;
+
     const tex = vprt.getTexture().?;
+    defer if (tex.unreference()) tex.destroy();
+
     const img = tex.getImage().?;
+    defer if (img.unreference()) img.destroy();
+
     const data = img.getData();
     _ = data;
 }
 
 pub fn _exitTree(self: *ExampleNode) void {
-    _ = self;
+    self.clearScene();
 }
 
 pub fn _notification(self: *ExampleNode, what: i32, _: bool) void {
