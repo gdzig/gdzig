@@ -1,15 +1,16 @@
 .{
     .name = .godot,
-    .fingerprint = 0x74a61aa48e9841ab,
     .version = "0.0.0-dev",
+    .fingerprint = 0x74a61aa48e9841ab,
+    .minimum_zig_version = "0.15.1",
+
     .dependencies = .{
         .case = .{
             .url = "https://github.com/travisstaloch/case/archive/refs/tags/0.15.1.tar.gz",
             .hash = "case-0.0.1-chGYqx_EAADaGJjmoln5M1iMBDTrMdd8to5wdEVpfXm4",
         },
-        .godot_cpp = .{
-            .url = "https://github.com/godotengine/godot-cpp/archive/refs/tags/godot-4.4.1-stable.tar.gz",
-            .hash = "N-V-__8AANvNeAD_SV1i3OCIDHR74eH7M2BTkpa3UyVKTHph",
+        .godot = .{
+            .path = "../godot-binaries",
         },
         .bbcodez = .{
             .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
@@ -24,15 +25,15 @@
             .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
         },
     },
-    .minimum_zig_version = "0.15.1",
 
     .paths = .{
         "LICENSE",
         "README.md",
         "gdzig",
         "gdzig_bindgen",
+        "gdzig_test",
+        "tests",
         "build.zig",
         "build.zig.zon",
-        "vendor",
     },
 }

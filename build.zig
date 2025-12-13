@@ -1,57 +1,47 @@
+const test_versions = &.{
+    // "4.1",
+    // "4.2",
+    // "4.3",
+    // "4.4",
+    "4.5",
+};
+const default_version = test_versions[test_versions.len - 1];
+
 pub fn build(b: *Build) void {
+    //
+    // Options
+    //
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-    const godot_path = b.option([]const u8, "godot", "Path to Godot engine binary, used when 'headers' are 'GENERATED' [default: `godot`]") orelse "godot";
+    const version = b.option([]const u8, "godot", "Which version of Godot to generate bindings for [default: `" ++ default_version ++ "`]") orelse default_version;
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
-    const headers_input = b.option([]const u8, "headers", "Where to source Godot header files. [options: GENERATED, VENDORED, DEPENDENCY, <dir_path>] [default: GENERATED]") orelse "GENERATED";
 
-    const headers_normalized = std.ascii.allocLowerString(b.allocator, headers_input) catch unreachable;
+    const fetch_godot = b.option(bool, "fetch-godot", "Download Godot binaries for integration tests") orelse false;
+
+    //
+    // Steps
+    //
+
+    const build_bindgen_step = b.step("build-bindgen", "Build the gdzig_bindgen executable");
+    const run_bindgen_step = b.step("run-bindgen", "Run bindgen to generate builtin/class code");
+
+    const check_step = b.step("check", "Check the build without installing artifacts");
+    const docs_step = b.step("docs", "Install docs into zig-out/docs");
+    const test_step = b.step("test", "Run unit tests");
+    const test_integration_step = b.step("test-integration", "Run integration tests");
 
     //
     // Dependencies
     //
 
-    const dep_bbcodez = b.dependency("bbcodez", .{});
-    const dep_case = b.dependency("case", .{});
-    const dep_oopz = b.dependency("oopz", .{});
-    const dep_temp = b.dependency("temp", .{});
+    const bbcodez = b.dependency("bbcodez", .{});
+    const case = b.dependency("case", .{});
+    const oopz = b.dependency("oopz", .{});
+    const temp = b.dependency("temp", .{});
 
-    //
-    // Headers
-    //
-
-    const headers_files = b.addWriteFiles();
-    const headers_source: Build.LazyPath = blk: {
-        if (std.mem.eql(u8, headers_normalized, "dependency"))
-            break :blk b.dependency("godot_cpp", .{}).path("gdextension");
-
-        if (std.mem.eql(u8, headers_normalized, "vendored"))
-            break :blk b.path("vendor");
-
-        if (std.mem.eql(u8, headers_normalized, "generated") or headers_normalized.len == 0) {
-            const tmp = b.addWriteFiles();
-            const out = tmp.getDirectory();
-            const dump = b.addSystemCommand(&.{
-                godot_path,
-                "--dump-extension-api-with-docs",
-                "--dump-gdextension-interface",
-                "--headless",
-            });
-            dump.setCwd(out);
-            _ = dump.captureStdOut();
-            _ = dump.captureStdErr();
-            headers_files.step.dependOn(&dump.step);
-            break :blk out;
-        }
-
-        break :blk b.path(headers_normalized);
-    };
-
-    const headers_root = headers_files.getDirectory();
-    _ = headers_files.addCopyFile(headers_source.path(b, "extension_api.json"), "extension_api.json");
-    const headers_header = headers_files.addCopyFile(headers_source.path(b, "gdextension_interface.h"), "gdextension_interface.h");
+    const headers = godot.headers(b, version);
 
     //
     // GDExtension
@@ -61,7 +51,7 @@ pub fn build(b: *Build) void {
         .link_libc = true,
         .optimize = optimize,
         .target = target,
-        .root_source_file = headers_header,
+        .root_source_file = headers.path(b, "gdextension_interface.h"),
     });
 
     const gdextension_mod = b.createModule(.{
@@ -78,6 +68,7 @@ pub fn build(b: *Build) void {
     const bindgen_options = b.addOptions();
     bindgen_options.addOption([]const u8, "architecture", architecture);
     bindgen_options.addOption([]const u8, "precision", precision);
+    bindgen_options.addOptionPath("headers", headers);
 
     const bindgen_mod = b.addModule("gdzig_bindgen", .{
         .target = target,
@@ -85,11 +76,11 @@ pub fn build(b: *Build) void {
         .root_source_file = b.path("gdzig_bindgen/main.zig"),
         .link_libc = true,
         .imports = &.{
-            .{ .name = "bbcodez", .module = dep_bbcodez.module("bbcodez") },
+            .{ .name = "bbcodez", .module = bbcodez.module("bbcodez") },
             .{ .name = "build_options", .module = bindgen_options.createModule() },
-            .{ .name = "case", .module = dep_case.module("case") },
+            .{ .name = "case", .module = case.module("case") },
             .{ .name = "gdextension", .module = gdextension_mod },
-            .{ .name = "temp", .module = dep_temp.module("temp") },
+            .{ .name = "temp", .module = temp.module("temp") },
         },
     });
 
@@ -111,7 +102,7 @@ pub fn build(b: *Build) void {
 
     const bindings_run = b.addRunArtifact(bindgen_exe);
     bindings_run.expectExitCode(0);
-    bindings_run.addDirectoryArg(headers_root);
+    bindings_run.addDirectoryArg(headers);
     bindings_run.addDirectoryArg(bindings_mixins);
 
     const bindings_output = bindings_run.addOutputDirectoryArg("bindings");
@@ -145,9 +136,9 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "build_options", .module = gdzig_options.createModule() },
-            .{ .name = "case", .module = dep_case.module("case") },
+            .{ .name = "case", .module = case.module("case") },
             .{ .name = "gdextension", .module = gdextension_mod },
-            .{ .name = "oopz", .module = dep_oopz.module("oopz") },
+            .{ .name = "oopz", .module = oopz.module("oopz") },
         },
     });
 
@@ -167,17 +158,25 @@ pub fn build(b: *Build) void {
     const tests_bindgen_run = b.addRunArtifact(tests_bindgen);
     const tests_gdzig_run = b.addRunArtifact(tests_gdzig);
 
-    const tests_integration_run = gdzig_test.addTestCases(b, .{
-        .root_dir = b.path("tests"),
-        .godot = godot_path,
-        .gdzig = gdzig_mod,
-        .target = target,
-        .optimize = optimize,
-    });
+    if (fetch_godot) {
+        inline for (test_versions) |test_version| {
+            if (godot.executable(b, b.graph.host, test_version)) |godot_exe| {
+                const tests = gdzig_test.addTestCases(b, .{
+                    .root_dir = b.path("tests"),
+                    .godot_exe = godot_exe,
+                    .gdzig = gdzig_mod,
+                    .target = target,
+                    .optimize = optimize,
+                });
+                test_integration_step.dependOn(&tests.step);
+            }
+        }
+    }
 
     //
     // Docs
     //
+
     const docs_install = b.addInstallDirectory(.{
         .source_dir = gdzig_lib.getEmittedDocs(),
         .install_dir = .prefix,
@@ -185,21 +184,15 @@ pub fn build(b: *Build) void {
     });
 
     //
-    // Steps
+    // Step dependencies
     //
 
-    b.step("build-bindgen", "Build the gdzig_bindgen executable").dependOn(&bindgen_install.step);
-    b.step("run-bindgen", "Run bindgen to generate builtin/class code").dependOn(&bindings_install.step);
-    b.step("docs", "Install docs into zig-out/docs").dependOn(&docs_install.step);
-    b.step("check", "Check the build without installing artifacts").dependOn(&gdzig_lib.step);
-
-    const test_step = b.step("test", "Run tests");
+    build_bindgen_step.dependOn(&bindgen_install.step);
+    run_bindgen_step.dependOn(&bindings_install.step);
+    docs_step.dependOn(&docs_install.step);
+    check_step.dependOn(&gdzig_lib.step);
     test_step.dependOn(&tests_bindgen_run.step);
     test_step.dependOn(&tests_gdzig_run.step);
-    test_step.dependOn(&tests_integration_run.step);
-
-    const test_integration_step = b.step("test-integration", "Run integration tests");
-    test_integration_step.dependOn(&tests_integration_run.step);
 
     //
     // Default build
@@ -212,9 +205,16 @@ pub fn build(b: *Build) void {
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
+    b.installDirectory(.{
+        .source_dir = headers,
+        .install_dir = .prefix,
+        .install_subdir = "vendor",
+    });
 }
 
 const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 const gdzig_test = @import("gdzig_test/build.zig");
+
+const godot = @import("godot");

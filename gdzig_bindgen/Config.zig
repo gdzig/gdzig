@@ -1,4 +1,5 @@
 const std = @import("std");
+const build_options = @import("build_options");
 const fs = std.fs;
 const Dir = std.fs.Dir;
 
@@ -75,12 +76,16 @@ pub fn deinit(self: *Config) void {
 }
 
 pub fn testConfig(output: Dir) !Config {
-    var cwd = std.fs.cwd();
+    var headers = std.fs.openDirAbsolute(build_options.headers, .{}) catch |err| {
+        std.debug.print("Failed to open headers dir: {s}\n", .{@errorName(err)});
+        return err;
+    };
+    defer headers.close();
 
     return Config{
         .arch = .float,
-        .extension_api = try cwd.openFile("vendor/extension_api.json", .{}),
-        .gdextension_interface = try cwd.openFile("vendor/gdextension_interface.h", .{}),
+        .extension_api = try headers.openFile("extension_api.json", .{}),
+        .gdextension_interface = try headers.openFile("gdextension_interface.h", .{}),
         .input = output,
         .output = output,
         .precision = .@"32",

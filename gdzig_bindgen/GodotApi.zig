@@ -316,16 +316,16 @@ pub fn parseFromReader(arena: *ArenaAllocator, reader: *Reader) !Parsed(GodotApi
     return try std.json.parseFromTokenSource(GodotApi, arena.allocator(), &json_reader, .{});
 }
 
-test "json convertion" {
+test "json conversion" {
+    const build_options = @import("build_options");
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const cwd = std.fs.cwd();
+    var headers = try std.fs.openDirAbsolute(build_options.headers, .{});
+    defer headers.close();
 
-    var vendor = try cwd.openDir("./vendor/", .{});
-    defer vendor.close();
-
-    const extension_api = try vendor.openFile("extension_api.json", .{});
+    const extension_api = try headers.openFile("extension_api.json", .{});
 
     var buf: [4096]u8 = undefined;
     var reader = extension_api.reader(&buf);

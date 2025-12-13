@@ -1,7 +1,7 @@
 pub fn addTestCases(b: *Build, opts: struct {
     root_dir: Build.LazyPath,
     gdzig: *Build.Module,
-    godot: []const u8,
+    godot_exe: ?Build.LazyPath = null,
     target: ?Build.ResolvedTarget = null,
     optimize: ?OptimizeMode = null,
 }) *Build.Step.Run {
@@ -22,7 +22,9 @@ pub fn addTestCases(b: *Build, opts: struct {
     });
 
     const run = b.addRunArtifact(runner);
-    run.addArg(b.fmt("--godot={s}", .{opts.godot}));
+    if (opts.godot_exe) |exe| {
+        run.addPrefixedFileArg("--godot=", exe);
+    }
 
     for (tests) |t| {
         run.addArg("--test");
