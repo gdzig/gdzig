@@ -5,7 +5,7 @@
 /// @see FileAccess::store_buffer()
 ///
 /// **Since Godot 4.1**
-pub inline fn writeBuf(self: *FileAccess, buf: []const u8) void {
+pub inline fn writeBuf(self: *Self, buf: []const u8) void {
     raw.fileAccessStoreBuffer(
         self.ptr(),
         @ptrCast(buf.ptr),
@@ -20,7 +20,7 @@ pub inline fn writeBuf(self: *FileAccess, buf: []const u8) void {
 /// Returns a sub-slice of the buffer containing the read data.
 ///
 /// **Since Godot 4.1**
-pub inline fn readBuf(self: *const FileAccess, buf: []u8) []u8 {
+pub inline fn readBuf(self: *const Self, buf: []u8) []u8 {
     const len = @as(usize, @intCast(raw.fileAccessGetBuffer(
         self.constPtr(),
         @ptrCast(buf.ptr),
@@ -34,4 +34,4 @@ pub inline fn readBuf(self: *const FileAccess, buf: []u8) []u8 {
 const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
-const FileAccess = @import("./file_access.zig").FileAccess;
+const Self = @import("./file_access.zig").FileAccess;

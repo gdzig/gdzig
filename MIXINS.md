@@ -5,6 +5,7 @@ This document describes how the mixin system works in gdzig's code generator.
 ## Overview
 
 Mixins allow extending generated Godot bindings with custom Zig code. They provide a way to add:
+
 - Additional helper functions
 - Convenience constants
 - Idiomatic Zig APIs
@@ -43,10 +44,22 @@ const raw: *Interface = &@import("../gdzig.zig").raw;
 
 ### Key Components
 
-1. **Public declarations** - Any `pub const` or `pub fn` declarations
-2. **Doc comments** - Standard Zig `///` doc comments
-3. **Mixin stop marker** - `// @mixin stop` indicates where to stop copying
-4. **Imports** - Required imports come after the stop marker
+1. **Mixin start marker** (optional) - `// @mixin start` indicates where to start copying
+2. **Public declarations** - Any `pub const` or `pub fn` declarations
+3. **Doc comments** - Standard Zig `///` doc comments
+4. **Mixin stop marker** - `// @mixin stop` indicates where to stop copying
+5. **Imports** - Required imports come after the stop marker
+
+### Generated Constants
+
+For class mixins, two constants are generated before the mixin content:
+
+- `Self` - Alias for `@This()`, the class type
+- `self_name` - String literal of the Godot API class name (e.g., `"Node2D"`)
+
+## Class Mixin Inheritance
+
+Class mixins are inherited by child classes. When generating a class, mixins from all parent classes are included in order from root to leaf. For example, `Sprite2D` includes mixins from `Object`, `Node`, `CanvasItem`, `Node2D`, then `Sprite2D`.
 
 ## Location Conventions
 
@@ -178,6 +191,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { Mi
 During code generation (`codegen.generate()`):
 
 1. **Skip mixin items** when generating code:
+
    ```zig
    // Example from codegen.zig:97, 106, 117
    for (builtin.constants.values()) |*constant| {
@@ -203,7 +217,9 @@ During code generation (`codegen.generate()`):
    - **Enums**: Inside enum definition
    - **Flags**: Inside packed struct definition
 
-### The `// @mixin stop` Marker
+### The `// @mixin start` and `// @mixin stop` Markers
+
+The `// @mixin start` marker is optional. If present, copying starts from the line after it. If absent, copying starts from the beginning of the file.
 
 The `// @mixin stop` comment serves two purposes:
 
@@ -344,6 +360,7 @@ pub const identity: Transform2D = .initXAxisYAxisOrigin(
 ```
 
 This constant overrides any `identity()` constructor from the API, allowing:
+
 ```zig
 const t = Transform2D.identity; // ✓ Comptime-friendly constant
 // vs
@@ -351,11 +368,13 @@ const t = Transform2D.identity(); // ✗ Constructor (skipped in codegen)
 ```
 
 **Benefits:**
+
 - **Comptime compatibility**: Constants can be used at compile time, unlike function calls
 - **Zero-cost abstractions**: No runtime overhead from function calls
 - **Cleaner syntax**: More idiomatic Zig code
 
 **Implementation** (gdzig_bindgen/Context/Builtin.zig:187-194):
+
 ```zig
 .simple_var_decl, .aligned_var_decl, .global_var_decl => if (try Constant.fromMixin(allocator, ast, index)) |constant| {
     try self.constants.put(allocator, constant.name_api, constant);
@@ -379,6 +398,7 @@ const t = Transform2D.identity(); // ✗ Constructor (skipped in codegen)
 ## Statistics
 
 As of the current codebase:
+
 - **23 builtin mixin files**
 - **3 class mixin files**
 - All mixin files use the `// @mixin stop` convention

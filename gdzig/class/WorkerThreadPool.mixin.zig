@@ -10,7 +10,7 @@
 ///
 /// **Since Godot 4.1**
 pub inline fn addNativeGroupTask(
-    self: *WorkerThreadPool,
+    self: *Self,
     comptime func: *const Task(void),
     elements: i32,
     tasks: i32,
@@ -34,7 +34,7 @@ pub inline fn addNativeGroupTask(
 ///
 /// **Since Godot 4.1**
 pub inline fn addNativeGroupTaskWithUserdata(
-    self: *WorkerThreadPool,
+    self: *Self,
     comptime Userdata: type,
     comptime func: *const Task(Userdata),
     userdata: *Userdata,
@@ -62,7 +62,7 @@ pub inline fn addNativeGroupTaskWithUserdata(
 ///
 /// **Since Godot 4.1**
 pub inline fn addNativeTask(
-    self: *WorkerThreadPool,
+    self: *Self,
     comptime func: *const Task(void),
     high_priority: bool,
     description: ?*const String,
@@ -80,7 +80,7 @@ pub inline fn addNativeTask(
 ///
 /// **Since Godot 4.1**
 pub inline fn addNativeTaskWithUserdata(
-    self: *WorkerThreadPool,
+    self: *Self,
     comptime Userdata: type,
     comptime func: *const Task(Userdata),
     userdata: *Userdata,
@@ -143,4 +143,4 @@ const raw: *Interface = &@import("../gdzig.zig").raw;
 const builtin = @import("../builtin.zig");
 const String = builtin.String;
 const Interface = @import("../Interface.zig");
-const WorkerThreadPool = @import("./worker_thread_pool.zig").WorkerThreadPool;
+const Self = @import("./worker_thread_pool.zig").WorkerThreadPool;

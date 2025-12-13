@@ -405,46 +405,6 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     //     try writeClassProperty(w, class.name, property);
     // }
 
-    // Cast helper
-    try w.printLine(
-        \\/// Upcasts a child type to a `{0s}`.
-        \\///
-        \\/// This is a zero cost, compile time operation.
-        \\pub fn upcast(value: anytype) *{0s} {{
-        \\    return oopz.upcast(*{0s}, value);
-        \\}}
-        \\
-        \\/// Downcasts a parent type to a `{0s}`.
-        \\///
-        \\/// This operation will fail at compile time if {0s} does not inherit from `@TypeOf(value)`. However,
-        \\/// since there is no guarantee that `value` is a `{0s}` at runtime, this function has a runtime cost
-        \\/// and may return `null`.
-        \\pub fn downcast(value: anytype) ?*{0s} {{
-        \\    const T = comptime sw: switch (@typeInfo(@TypeOf(value))) {{
-        \\        .optional => |info| continue :sw @typeInfo(info.child),
-        \\        .pointer => |info| break :sw info.child,
-        \\        else => @compileError("downcasted value should be a pointer, found '" ++ @typeName(@TypeOf(value)) ++ "'"),
-        \\    }};
-        \\    comptime oopz.assertIsA(T, {0s});
-        \\    const tag = raw.classdbGetClassTag(@ptrCast(&StringName.fromComptimeLatin1("{1s}")));
-        \\    const result = raw.objectCastTo(@ptrCast(value), tag);
-        \\    if (result) |p| {{
-        \\        if (oopz.isOpaqueClass(T)) {{
-        \\            return @ptrCast(@alignCast(p));
-        \\        }} else {{
-        \\            const object: *anyopaque = raw.objectGetInstanceBinding(p, raw.library, null) orelse return null;
-        \\            return @ptrCast(@alignCast(object));
-        \\        }}
-        \\    }} else {{
-        \\        return null;
-        \\    }}
-        \\}}
-        \\
-    , .{
-        class.name,
-        class.name_api,
-    });
-
     // Virtual dispatch
     try writeClassVirtualDispatch(w, class, ctx);
     try w.writeLine("");
@@ -461,22 +421,15 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
         try w.writeLine("");
     }
 
-    // Helpers
+    // Self alias and name for mixins
     try w.printLine(
-        \\/// Returns an opaque pointer to the {0s}.
-        \\pub fn ptr(self: *{0s}) *anyopaque {{
-        \\    return @ptrCast(self);
-        \\}}
+        \\const Self = @This();
+        \\const self_name = "{0s}";
         \\
-        \\/// Returns a constant opaque pointer to the {0s}.
-        \\pub fn constPtr(self: *const {0s}) *const anyopaque {{
-        \\    return @ptrCast(self);
-        \\}}
-        \\
-    , .{class.name});
+    , .{class.name_api});
 
-    // Mixin
-    try writeMixin(w, "class/{s}.mixin.zig", .{class.name}, ctx);
+    // Mixins (include parent class mixins)
+    try writeClassMixins(w, class, ctx);
 
     // Declaration end
     w.indent -= 1;
@@ -1009,6 +962,18 @@ fn writeImports(w: *CodeWriter, root: []const u8, imports: *const Context.Import
             // TODO: native structures?
         }
     }
+}
+
+/// Writes mixins for a class and all its parent classes.
+/// Parent mixins are written first (from root to leaf), so child classes
+/// can override or extend parent mixin functionality.
+fn writeClassMixins(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
+    // Recurse to parent first (writes from root to leaf)
+    if (class.getBasePtr(ctx)) |parent| {
+        try writeClassMixins(w, parent, ctx);
+    }
+    // Then write this class's mixin
+    try writeMixin(w, "class/{s}.mixin.zig", .{class.name}, ctx);
 }
 
 fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {

@@ -3,7 +3,7 @@
 /// - **buf**: A slice containing the buffer data.
 ///
 /// **Since Godot 4.1**
-pub inline fn openBuf(self: *XMLParser, buf: []const u8) void {
+pub inline fn openBuf(self: *Self, buf: []const u8) void {
     raw.xmlParserOpenBuffer(self.ptr(), @ptrCast(buf.ptr), buf.len);
 }
 
@@ -12,4 +12,4 @@ pub inline fn openBuf(self: *XMLParser, buf: []const u8) void {
 const raw: *Interface = &@import("../gdzig.zig").raw;
 
 const Interface = @import("../Interface.zig");
-const XMLParser = @import("./xmlparser.zig").XMLParser;
+const Self = @import("./xmlparser.zig").XMLParser;
