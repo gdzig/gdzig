@@ -275,7 +275,7 @@ fn makeClassCallbacks(comptime T: type) struct {
             _ = userdata;
             const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
             var buf: [256]u8 = undefined;
-            const name_str = string.stringNameToAscii(name.*, buf[0..]);
+            const name_str = String.fromStringName(name.*).toLatin1Buf(buf[0..]);
             const result = UserVTable.get(name_str);
             return @ptrCast(result);
         }
@@ -567,7 +567,6 @@ const builtin = @import("builtin");
 const c = @import("gdextension");
 const gdzig = @import("gdzig");
 const meta = gdzig.meta;
-const string = gdzig.string;
 const object = gdzig.object;
 const classdb = gdzig.class.ClassDB;
 const ClassInfo4 = gdzig.class.ClassDB.ClassInfo4;

@@ -12,7 +12,7 @@
 //!
 //! For lower level access to the GDExtension APIs:
 //!
-//! - `interface` - A static instance of an `Interface`, populated at startup with pointers to the GDExtension header functions
+//! - `raw` - Function pointers to the raw C GDExtension API, loaded at runtime from Godot
 //! - `c` - Raw C bindings to gdextension headers and types
 //!
 //! We also provide a framework around the generated code that helps you write your extension:
@@ -20,7 +20,6 @@
 //! - `heap` - Work with Godot's allocator
 //! - `meta` - Type introspection and class hierarchy
 //! - `object` - Object lifecycle and class inheritance
-//! - `string` - String handling utilities and conversions
 //! - `support` - Method binding and constructor utilities
 //!
 
@@ -43,7 +42,6 @@ pub const registerMethod = register.registerMethod;
 pub const registerSignal = register.registerSignal;
 pub const InitializationLevel = register.InitializationLevel;
 
-pub const string = @import("string.zig");
 pub const support = @import("support.zig");
 
 /// The C FFI GDExtension API, initialized during extension initialization.

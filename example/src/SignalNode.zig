@@ -67,7 +67,7 @@ pub fn _exitTree(self: *Self) void {
 
 pub fn onSignal1(_: *Self, name: String, position: Vector3) void {
     var buf: [256]u8 = undefined;
-    const n = godot.string.stringToAscii(name, &buf);
+    const n = name.toLatin1Buf(&buf);
     std.debug.print("signal1 received : name = {s} position={any}\n", .{ n, position });
 }
 
