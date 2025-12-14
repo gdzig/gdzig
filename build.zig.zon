@@ -22,7 +22,7 @@
             .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
         },
         .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions#a02e7446dd16972bcc04f9e16c26c92f8e437c83",
+            .url = "git+https://github.com/gdzig/godot-versions.git#a02e7446dd16972bcc04f9e16c26c92f8e437c83",
             .hash = "godot-0.0.0-Nast2sFTgQYbz3AHO-jNhB0Znyhm4uML3c5S3e77nj4C",
         },
     },
