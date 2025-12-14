@@ -171,6 +171,7 @@ pub fn build(b: *Build) void {
                 test_integration_step.dependOn(&tests.step);
             }
         }
+        test_step.dependOn(test_integration_step);
     }
 
     //
