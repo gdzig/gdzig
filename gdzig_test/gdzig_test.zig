@@ -72,7 +72,7 @@ pub var allocator_instance: std.heap.GeneralPurposeAllocator(.{
     .stack_trace_frames = if (std.debug.sys_can_stack_trace) 10 else 0,
     .resize_stack_traces = true,
 }) = .{
-    .backing_allocator = godot.heap.engine_allocator,
+    .backing_allocator = godot.engine_allocator,
 };
 pub const backend_can_print = std.testing.backend_can_print;
 pub const checkAllAllocationFailures = std.testing.checkAllAllocationFailures;

@@ -1,82 +1,3 @@
-/// Downcast a value to a child type in the class hierarchy. Has some compile time checks, but returns null at runtime if the cast fails.
-///
-/// Expects pointer types, e.g `*Node` or `*MyClass`, not `Node` or `MyClass`.
-pub fn downcast(comptime T: type, value: anytype) blk: {
-    const U = @TypeOf(value);
-
-    if (!isClassPtr(T)) {
-        @compileError("downcast expects a class pointer type as the target type, found '" ++ @typeName(T) ++ "'");
-    }
-    if (!isClassPtr(U)) {
-        @compileError("downcast expects a class pointer type as the source value, found '" ++ @typeName(U) ++ "'");
-    }
-
-    assertIsA(Child(U), Child(T));
-
-    break :blk ?*Child(T);
-} {
-    const U = @TypeOf(value);
-
-    if (@typeInfo(U) == .optional and value == null) {
-        return null;
-    }
-
-    const name: StringName = .fromComptimeLatin1(meta.typeShortName(Child(T)));
-    const tag = raw.classdbGetClassTag(@ptrCast(&name));
-    const result = raw.objectCastTo(@ptrCast(value), tag);
-
-    if (result) |ptr| {
-        if (isOpaqueClassPtr(T)) {
-            return @ptrCast(@alignCast(ptr));
-        } else {
-            const obj: *anyopaque = raw.objectGetInstanceBinding(ptr, raw.library, null) orelse return null;
-            return @ptrCast(@alignCast(obj));
-        }
-    } else {
-        return null;
-    }
-}
-
-/// Returns true if a type is a reference counted type.
-///
-/// Expects a class type, e.g. `Node` or `MyClass`, not `*Node` or `*MyClass`.
-pub fn isRefCounted(comptime T: type) bool {
-    return isA(RefCounted, T);
-}
-
-/// Returns true if a type is a pointer to a reference counted type.
-///
-/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
-pub fn isRefCountedPtr(comptime T: type) bool {
-    return isA(RefCounted, Child(T));
-}
-
-/// Upcasts a pointer to an object type.
-///
-/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
-pub fn asObject(value: anytype) *Object {
-    return upcast(*Object, value);
-}
-
-/// Upcasts a pointer to a reference counted type.
-///
-/// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
-pub fn asRefCounted(value: anytype) RefCounted {
-    return upcast(*RefCounted, value);
-}
-
-fn assertCanInitialize(comptime T: type) void {
-    comptime {
-        if (@hasDecl(T, "init")) return;
-        for (@typeInfo(T).@"struct".fields) |field| {
-            if (std.mem.eql(u8, "base", field.name)) continue;
-            if (field.default_value_ptr == null) {
-                @compileError("The type '" ++ meta.typeShortName(T) ++ "' should either have an 'fn init(base: *" ++ meta.typeShortName(meta.BaseOf(T)) ++ ") " ++ meta.typeShortName(T) ++ "' function, or a default value for the field '" ++ field.name ++ "', but it has neither.");
-            }
-        }
-    }
-}
-
 /// Comptime vtable for virtual method dispatch using StaticStringMap.
 /// method_names is an array of Zig method names (camelCase with _ prefix).
 /// The VTable computes snake_case keys at comptime for O(1) lookup.
@@ -110,8 +31,8 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
         }
 
         fn findMethod(comptime method_name: []const u8) c.GDExtensionClassCallVirtual {
-            @setEvalBranchQuota(20000);
-            inline for (selfAndAncestorsOf(T)) |Owner| {
+            @setEvalBranchQuota(100_000);
+            inline for (class.selfAndAncestorsOf(T)) |Owner| {
                 if (@hasDecl(Owner, method_name)) {
                     const method = @field(Owner, method_name);
                     const FnType = @TypeOf(method);
@@ -268,41 +189,6 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
     };
 }
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-const c = @import("gdextension");
-
-const gdzig = @import("gdzig");
-const raw = &gdzig.raw;
-const meta = gdzig.meta;
-const Child = gdzig.meta.RecursiveChild;
-const Callable = gdzig.builtin.Callable;
-const String = gdzig.builtin.String;
-const StringName = gdzig.builtin.StringName;
-const Variant = gdzig.builtin.Variant;
-const Object = gdzig.class.Object;
-const RefCounted = gdzig.class.RefCounted;
-const PropertyHint = gdzig.global.PropertyHint;
-const PropertyUsageFlags = gdzig.global.PropertyUsageFlags;
-
-const oopz = @import("oopz");
-pub const assertIsA = oopz.assertIsA;
-pub const assertIsAny = oopz.assertIsAny;
-pub const isClass = oopz.isClass;
-pub const isOpaqueClass = oopz.isOpaqueClass;
-pub const isStructClass = oopz.isStructClass;
-pub const isClassPtr = oopz.isClassPtr;
-pub const isOpaqueClassPtr = oopz.isOpaqueClassPtr;
-pub const isStructClassPtr = oopz.isStructClassPtr;
-pub const BaseOf = oopz.BaseOf;
-pub const depthOf = oopz.depthOf;
-pub const ancestorsOf = oopz.ancestorsOf;
-pub const selfAndAncestorsOf = oopz.selfAndAncestorsOf;
-pub const isA = oopz.isA;
-pub const isAny = oopz.isAny;
-pub const upcast = oopz.upcast;
-
 test "VTable snake_case conversion" {
     const TestVTable = VTable(struct {
         pub fn _enterTree(_: *@This()) void {}
@@ -346,3 +232,9 @@ test "VTable extend combines method names" {
     try std.testing.expect(Derived.has("_process")); // from base method_names
     try std.testing.expect(Derived.has("_enter_tree")); // new in derived
 }
+
+const std = @import("std");
+
+const c = @import("gdextension");
+const gdzig = @import("gdzig");
+const class = gdzig.class;

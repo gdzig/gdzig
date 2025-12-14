@@ -535,7 +535,7 @@ fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *
         try w.writeLine("});");
     } else {
         // Root Object class - define the base VTable
-        try w.printLine("pub const VTable = gdzig.object.VTable({s}, .{{", .{class.name});
+        try w.printLine("pub const VTable = gdzig.class.VTable({s}, .{{", .{class.name});
 
         w.indent += 1;
         for (class.functions.values()) |*function| {
@@ -987,12 +987,6 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Con
     for (globals.items) |name| {
         try w.printLine("const {0s} = gdzig.global.{0s};", .{name});
     }
-
-    // oopz last
-    try w.writeLine(
-        \\
-        \\const oopz = @import("oopz");
-    );
 }
 
 /// Writes mixins for a class and all its parent classes.

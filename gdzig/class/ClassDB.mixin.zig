@@ -248,7 +248,7 @@ fn wrapCreate(comptime T: type, comptime ClassUserdata: type, comptime callback:
                 const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 break :blk callback(ud) catch return null;
             } else callback() catch return null;
-            return @ptrCast(object_module.asObject(inst));
+            return @ptrCast(Object.upcast(inst));
         }
     }.wrapped;
 }
@@ -271,7 +271,7 @@ fn wrapCreate2(comptime T: type, comptime ClassUserdata: type, comptime callback
                 const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
                 break :blk callback(ud, notify) catch return null;
             } else callback(notify) catch return null;
-            return @ptrCast(object_module.asObject(inst));
+            return @ptrCast(Object.upcast(inst));
         }
     }.wrapped;
 }
@@ -1260,10 +1260,8 @@ pub inline fn unregisterClass(class_name: *const StringName) void {
     );
 }
 
-// Imports needed inside the mixin (before @mixin stop)
 const Allocator = std.mem.Allocator;
 const Child = std.meta.Child;
-const object_module = gdzig.object;
 const CallError = gdzig.CallError;
 const PropertyError = gdzig.PropertyError;
 const MethodFlags = gdzig.global.MethodFlags;

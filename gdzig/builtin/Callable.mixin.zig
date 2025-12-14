@@ -23,7 +23,7 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
     var method_string_name: StringName = .fromComptimeLatin1(method_name.?);
     defer method_string_name.deinit();
 
-    const obj = oopz.upcast(*Object, p_instance);
+    const obj = gdzig.class.upcast(*Object, p_instance);
 
     if (!obj.hasMethod(method_string_name)) {
         std.debug.panic("Method '{s}' is not registered on type '{s}'. Did you forget to call godot.registerMethod?", .{ method_name.?, @typeName(T) });
@@ -41,5 +41,3 @@ const gdzig = @import("gdzig");
 const Callable = gdzig.builtin.Callable;
 const StringName = gdzig.builtin.StringName;
 const Object = gdzig.class.Object;
-
-const oopz = @import("oopz");

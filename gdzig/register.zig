@@ -73,7 +73,7 @@ pub const InitializationLevel = enum(c_int) {
 
 pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
     const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
-    const base_name = StringName.fromComptimeLatin1(meta.typeShortName(object.BaseOf(T)));
+    const base_name = StringName.fromComptimeLatin1(meta.typeShortName(class.BaseOf(T)));
     const callbacks = comptime makeClassCallbacks(T);
 
     if (gdzig.version.gte(.@"4.4")) {
@@ -202,7 +202,7 @@ fn makeClassCallbacks(comptime T: type) struct {
         }
     }
 
-    const Base = object.BaseOf(T);
+    const Base = class.BaseOf(T);
 
     const Callbacks = struct {
         /// Wraps `create` to bind the instance.
@@ -514,10 +514,10 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
         }
 
         fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
-            if (comptime object.isRefCountedPtr(ArgType) and object.isOpaqueClassPtr(ArgType)) {
+            if (comptime class.isRefCountedPtr(ArgType) and class.isOpaqueClassPtr(ArgType)) {
                 const obj = raw.refGetObject(@ptrCast(p_arg));
                 return @ptrCast(obj.?);
-            } else if (comptime object.isOpaqueClassPtr(ArgType)) {
+            } else if (comptime class.isOpaqueClassPtr(ArgType)) {
                 return @ptrCast(@constCast(p_arg));
             } else {
                 return @as(*const ArgType, @ptrCast(@alignCast(p_arg))).*;
@@ -566,12 +566,12 @@ const builtin = @import("builtin");
 
 const c = @import("gdextension");
 const gdzig = @import("gdzig");
-const meta = gdzig.meta;
-const object = gdzig.object;
+const meta = @import("meta.zig");
+const string = gdzig.string;
+const class = gdzig.class;
 const classdb = gdzig.class.ClassDB;
 const ClassInfo4 = gdzig.class.ClassDB.ClassInfo4;
 const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
 const Object = gdzig.class.Object;
-const oopz = @import("oopz");

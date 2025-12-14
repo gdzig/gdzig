@@ -1,48 +1,33 @@
-//! These modules are generated directly from the Godot Engine's API documentation:
+//! Higher level bindings generated from the Godot Engine's extension API:
 //!
 //! - `builtin` - Core Godot value types: String, Vector2/3/4, Array, Dictionary, Color
-//! - `class` - Godot class hierarchy: Object, Node, RefCounted, and all the related engine classes
+//! - `class` - Godot class hierarchy and OOP utilities for working with classes
 //! - `global` - Global scope enumerations, flag structs, and constants
-//!
-//! Godot also exposes a suite of utility functions that we generate bindings for:
-//!
-//! - `general` - General-purpose utility functions like logging and more
-//! - `math` - Mathematical utilities and constants from Godot's Math class
+//! - `general` - General-purpose utility functions like logging
+//! - `math` - Mathematical utilities and constants
 //! - `random` - Random number generation utilities
 //!
-//! For lower level access to the GDExtension APIs:
+//! Lower level access to the GDExtension APIs:
 //!
-//! - `raw` - Function pointers to the raw C GDExtension API, loaded at runtime from Godot
-//! - `c` - Raw C bindings to gdextension headers and types
-//!
-//! We also provide a framework around the generated code that helps you write your extension:
-//!
-//! - `heap` - Work with Godot's allocator
-//! - `meta` - Type introspection and class hierarchy
-//! - `object` - Object lifecycle and class inheritance
-//! - `support` - Method binding and constructor utilities
+//! - `raw` - Runtime function pointers loaded from Godot
+//! - `c` - C type definitions from `gdextension_interface.h`
 //!
 
 pub const c = @import("gdextension");
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
+pub const engine_allocator = @import("heap.zig").engine_allocator;
 pub const general = @import("general.zig");
 pub const global = @import("global.zig");
-pub const heap = @import("heap.zig");
 pub const Interface = @import("Interface.zig");
 pub const math = @import("math.zig");
-pub const meta = @import("meta.zig");
-pub const object = @import("object.zig");
 pub const random = @import("random.zig");
-
-pub const register = @import("register.zig");
+const register = @import("register.zig");
 pub const registerClass = register.registerClass;
 pub const registerExtension = register.registerExtension;
 pub const registerMethod = register.registerMethod;
 pub const registerSignal = register.registerSignal;
 pub const InitializationLevel = register.InitializationLevel;
-
-pub const support = @import("support.zig");
 
 /// The C FFI GDExtension API, initialized during extension initialization.
 pub var raw: Interface = undefined;

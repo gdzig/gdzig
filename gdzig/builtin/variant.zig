@@ -25,7 +25,7 @@ pub const Variant = extern struct {
 
         var result: Variant = undefined;
         if (tag == .object) {
-            variantFromType(@ptrCast(&result), @ptrCast(@constCast(&oopz.upcast(*Object, value))));
+            variantFromType(@ptrCast(&result), @ptrCast(@constCast(&class.upcast(*Object, value))));
         } else switch (@typeInfo(T)) {
             .pointer => variantFromType(@ptrCast(&result), @ptrCast(@constCast(value))),
             .comptime_int => {
@@ -73,10 +73,10 @@ pub const Variant = extern struct {
         } else {
             var object: ?*Object = null;
             variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
-            if (oopz.isOpaqueClassPtr(T)) {
+            if (class.isOpaqueClassPtr(T)) {
                 return @ptrCast(@alignCast(object));
             } else {
-                const Base = oopz.BaseOf(Child(T));
+                const Base = class.BaseOf(Child(T));
                 const base: *Base = @ptrCast(object);
                 return base.asInstance(Child(T));
             }
@@ -181,7 +181,7 @@ pub const Variant = extern struct {
                 inline else => switch (@typeInfo(T)) {
                     .@"enum" => .int,
                     .@"struct" => |info| if (info.backing_integer != null) .int else null,
-                    .pointer => |p| if (oopz.isClassPtr(T)) .object else forType(p.child),
+                    .pointer => |p| if (class.isClassPtr(T)) .object else forType(p.child),
                     else => null,
                 },
             };
@@ -400,7 +400,6 @@ const Vector3i = gdzig.builtin.Vector3i;
 const Vector4 = gdzig.builtin.Vector4;
 const Vector4i = gdzig.builtin.Vector4i;
 const Object = gdzig.class.Object;
+const class = gdzig.class;
 
 const precision = @import("build_options").precision;
-
-const oopz = @import("oopz");

@@ -11,7 +11,7 @@ pub fn destroy(self: *Self) void {
 
 /// Upcasts a child type to this type.
 pub fn upcast(value: anytype) *Self {
-    return oopz.upcast(*Self, value);
+    return class.upcast(*Self, value);
 }
 
 /// Downcasts a parent type to this type.
@@ -25,11 +25,11 @@ pub fn downcast(value: anytype) ?*Self {
         .pointer => |info| break :sw info.child,
         else => @compileError("downcasted value should be a pointer, found '" ++ @typeName(@TypeOf(value)) ++ "'"),
     };
-    comptime oopz.assertIsA(T, Self);
+    comptime class.assertIsA(T, Self);
     const tag = raw.classdbGetClassTag(@ptrCast(&StringName.fromComptimeLatin1(self_name)));
     const result = raw.objectCastTo(@ptrCast(value), tag);
     if (result) |p| {
-        if (oopz.isOpaqueClass(T)) {
+        if (class.isOpaqueClass(T)) {
             return @ptrCast(@alignCast(p));
         } else {
             const object: *anyopaque = raw.objectGetInstanceBinding(p, raw.library, null) orelse return null;
@@ -52,12 +52,12 @@ pub fn constPtr(self: *const Self) *const anyopaque {
 
 /// Bind an instance of an extension class to this engine class.
 pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
-    comptime std.debug.assert(oopz.BaseOf(T) == Self);
-    comptime std.debug.assert(oopz.isStructClass(T));
+    comptime std.debug.assert(class.BaseOf(T) == Self);
+    comptime std.debug.assert(class.isStructClass(T));
 
     const token = comptime typeToken(T);
 
-    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromComptimeLatin1(gdzig.meta.typeShortName(T))), @ptrCast(instance_));
+    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromComptimeLatin1(meta.typeShortName(T))), @ptrCast(instance_));
     raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
         const callbacks = c.GDExtensionInstanceBindingCallbacks{
             .create_callback = create_callback,
@@ -78,8 +78,8 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
 }
 
 pub fn asInstance(self: *Self, comptime T: type) ?*T {
-    comptime std.debug.assert(oopz.BaseOf(T) == Self);
-    comptime std.debug.assert(oopz.isStructClass(T));
+    comptime std.debug.assert(class.BaseOf(T) == Self);
+    comptime std.debug.assert(class.isStructClass(T));
 
     const token = comptime typeToken(T);
 
@@ -99,21 +99,21 @@ fn typeToken(comptime T: type) *anyopaque {
 
 /// Connects a signal to a callable.
 pub fn connect(self: *Self, comptime S: type, callable: Callable) ConnectError!void {
-    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig.meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
     const result = self.connectRaw(signal_name, callable, .{});
     if (result != .ok) return ConnectError.AlreadyConnected;
 }
 
 /// Disconnects a signal from a callable.
 pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
-    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig.meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
     self.disconnectRaw(signal_name, callable);
 }
 
 /// Emits a signal.
 pub fn emit(self: *Self, signal: anytype) EmitError!void {
     const S = @TypeOf(signal);
-    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig.meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
     const fields = @typeInfo(S).@"struct".fields;
     var args: std.meta.Tuple(&typeInfoToTypes(fields)) = undefined;
     inline for (fields, 0..) |field, i| {
@@ -141,8 +141,11 @@ fn typeInfoToTypes(comptime fields: []const std.builtin.Type.StructField) [field
 }
 
 const ConnectError = gdzig.ConnectError;
-const DestroyMeta = gdzig.register.DestroyMeta;
 const EmitError = gdzig.EmitError;
+const class = gdzig.class;
+const meta = @import("../meta.zig");
+
+const DestroyMeta = @import("../register.zig").DestroyMeta;
 
 // @mixin stop
 
@@ -159,5 +162,3 @@ const Callable = gdzig.builtin.Callable;
 const Object = gdzig.class.Object;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
-
-const oopz = @import("oopz");
