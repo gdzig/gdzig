@@ -14,11 +14,9 @@ pub inline fn ref(self: *Array, from: *const Array) void {
 ///
 /// **Since Godot 4.1**
 pub inline fn setTyped(self: *Array, comptime T: type, script: ?*const Variant) void {
-    const typeName = @import("../gdzig.zig").typeName;
-
     const tag = Variant.Tag.forType(T);
-    const name = if (tag == .object) typeName(T).constPtr() else null;
-    raw.arraySetTyped(self.ptr(), @intFromEnum(tag), name, if (script) |s| s.constPtr() else null);
+    const name: StringName = .fromComptimeLatin1(@import("../meta.zig").typeShortName(T));
+    raw.arraySetTyped(self.ptr(), @intFromEnum(tag), if (tag == .object) name.constPtr() else null, if (script) |s| s.constPtr() else null);
 }
 
 /// Gets a pointer to a Variant in an Array.

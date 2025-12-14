@@ -21,8 +21,8 @@ pub fn downcast(comptime T: type, value: anytype) blk: {
         return null;
     }
 
-    const name = typeName(Child(T));
-    const tag = godot.interface.classdbGetClassTag(@ptrCast(name));
+    const name: StringName = .fromComptimeLatin1(meta.typeShortName(Child(T)));
+    const tag = godot.interface.classdbGetClassTag(@ptrCast(&name));
     const result = godot.interface.objectCastTo(@ptrCast(value), tag);
 
     if (result) |ptr| {
@@ -294,7 +294,6 @@ const c = godot.c;
 const meta = godot.meta;
 const PropertyHint = godot.global.PropertyHint;
 const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const typeName = meta.typeName;
 const Object = godot.class.Object;
 const RefCounted = godot.class.RefCounted;
 const Callable = godot.builtin.Callable;

@@ -19,8 +19,8 @@ pub inline fn bindClassMethod(
 ) ClassMethod {
     const callback = struct {
         fn callback(string_name: godot.builtin.StringName) ClassMethod {
-            const class_name = godot.meta.typeName(T);
-            return godot.interface.classdbGetMethodBind(@ptrCast(class_name), @ptrCast(@constCast(&string_name)), hash).?;
+            const class_name: godot.builtin.StringName = .fromComptimeLatin1(godot.meta.typeShortName(T));
+            return godot.interface.classdbGetMethodBind(@ptrCast(&class_name), @ptrCast(@constCast(&string_name)), hash).?;
         }
     }.callback;
 

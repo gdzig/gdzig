@@ -57,7 +57,7 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
 
     const token = comptime typeToken(T);
 
-    raw.objectSetInstance(@ptrCast(self), @ptrCast(typeName(T)), @ptrCast(instance_));
+    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromComptimeLatin1(gdzig_meta.typeShortName(T))), @ptrCast(instance_));
     raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
         const callbacks = c.GDExtensionInstanceBindingCallbacks{
             .create_callback = create_callback,
@@ -141,7 +141,6 @@ const DestroyMeta = @import("../register.zig").DestroyMeta;
 const std = @import("std");
 
 const godot = @import("../gdzig.zig");
-const typeName = godot.meta.typeName;
 const Callable = godot.builtin.Callable;
 const Object = @import("object.zig").Object;
 const Variant = godot.builtin.Variant;

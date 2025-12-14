@@ -13,20 +13,20 @@ pub inline fn setTyped(
     key_script: ?*const Variant,
     value_script: ?*const Variant,
 ) void {
-    const typeName = @import("../gdzig.zig").typeName;
+    const meta = @import("../meta.zig");
 
     const key_tag = Variant.Tag.forType(K);
     const value_tag = Variant.Tag.forType(V);
-    const key_class_name = typeName(K);
-    const value_class_name = typeName(V);
+    const key_class_name: StringName = .fromComptimeLatin1(meta.typeShortName(K));
+    const value_class_name: StringName = .fromComptimeLatin1(meta.typeShortName(V));
 
     raw.dictionarySetTyped(
         self.ptr(),
         @intFromEnum(key_tag),
-        key_class_name.constPtr(),
+        if (key_tag == .object) key_class_name.constPtr() else null,
         if (key_script) |s| s.constPtr() else null,
         @intFromEnum(value_tag),
-        value_class_name.constPtr(),
+        if (value_tag == .object) value_class_name.constPtr() else null,
         if (value_script) |s| s.constPtr() else null,
     );
 }

@@ -28,4 +28,3 @@ const case = @import("case");
 
 const godot = @import("gdzig.zig");
 const StringName = godot.builtin.StringName;
-pub const typeName = godot.typeName;

@@ -374,7 +374,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
             try w.printLine(
                 \\/// Allocates an empty {0s}.
                 \\pub fn init() *{0s} {{
-                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
+                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);
                 \\}}
                 \\
             , .{class.name});
@@ -382,7 +382,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
             try w.printLine(
                 \\/// Allocates an empty {0s}.
                 \\pub fn init() {0s} {{
-                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
+                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);
                 \\}}
                 \\
             , .{class.name});
@@ -438,7 +438,6 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     // Imports
     try w.writeLine(
         \\const oopz = @import("oopz");
-        \\const typeName = @import("../gdzig.zig").typeName;
         \\const gdzig_object = @import("../object.zig");
     );
     try writeImports(w, "..", &class.imports, ctx);
@@ -469,11 +468,11 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
     try writeFunctionHeader(w, function, ctx);
 
     if (class.is_singleton) {
-        try w.printLine(
-            \\if (instance == null) {{
-            \\    instance = @ptrCast(raw.globalGetSingleton(@ptrCast(typeName({0s}))).?);
-            \\}}
-        , .{class.name});
+        try w.writeLine(
+            \\if (instance == null) {
+            \\    instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);
+            \\}
+        );
     }
 
     if (function.is_vararg) {
@@ -482,7 +481,7 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
 
     try w.printLine(
         \\if ({0s}_ptr == null) {{
-        \\    {0s}_ptr = raw.classdbGetMethodBind(@ptrCast(typeName({2s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {3d});
+        \\    {0s}_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("{2s}")), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {3d});
         \\}}
     , .{
         function.name,
@@ -1107,7 +1106,6 @@ fn writeInterface(ctx: *Context) !void {
         \\const builtin = @import("builtin.zig");
         \\const class = @import("class.zig");
         \\const global = @import("global.zig");
-        \\const typeName = @import("gdzig.zig").typeName;
     );
 
     try writer.flush();
