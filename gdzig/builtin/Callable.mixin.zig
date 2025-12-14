@@ -24,6 +24,11 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
     defer method_string_name.deinit();
 
     const obj = oopz.upcast(*Object, p_instance);
+
+    if (!obj.hasMethod(method_string_name)) {
+        std.debug.panic("Method '{s}' is not registered on type '{s}'. Did you forget to call godot.registerMethod?", .{ method_name.?, @typeName(T) });
+    }
+
     return .initObjectMethod(obj, method_string_name);
 }
 // @mixin stop

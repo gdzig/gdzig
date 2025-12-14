@@ -142,6 +142,8 @@ pub const ConnectError = error{
 
 pub const EmitError = error{
     InvalidSignal,
+    SignalsBlocked,
+    MethodNotFound,
 };
 
 const std = @import("std");

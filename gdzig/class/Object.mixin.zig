@@ -119,8 +119,17 @@ pub fn emit(self: *Self, signal: anytype) EmitError!void {
     inline for (fields, 0..) |field, i| {
         args[i] = @field(signal, field.name);
     }
-    const result = self.emitRaw(signal_name, args);
-    if (result != .ok) return EmitError.InvalidSignal;
+    switch (self.emitRaw(signal_name, args)) {
+        .ok => {},
+        .err_unavailable => {
+            // Godot does not distinguish between "not a signal I handle" and "no one is listening to this signal"
+            if (self.hasSignal(signal_name)) return;
+            return EmitError.InvalidSignal;
+        },
+        .err_cant_acquire_resource => return EmitError.SignalsBlocked,
+        .err_method_not_found => return EmitError.MethodNotFound,
+        else => unreachable,
+    }
 }
 
 fn typeInfoToTypes(comptime fields: []const std.builtin.Type.StructField) [fields.len]type {

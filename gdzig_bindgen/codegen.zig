@@ -370,23 +370,13 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Constructor
     if (class.is_instantiable) {
-        if (class.base) |_| {
-            try w.printLine(
-                \\/// Allocates an empty {0s}.
-                \\pub fn init() *{0s} {{
-                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
-                \\}}
-                \\
-            , .{class.name});
-        } else {
-            try w.printLine(
-                \\/// Allocates an empty {0s}.
-                \\pub fn init() {0s} {{
-                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
-                \\}}
-                \\
-            , .{class.name});
-        }
+        try w.printLine(
+            \\/// Allocates an empty {0s}.
+            \\pub fn init() *{0s} {{
+            \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(typeName({0s}))).?);
+            \\}}
+            \\
+        , .{class.name});
     }
 
     // Functions
