@@ -53,6 +53,9 @@ pub const init: Transform3D = .identity;
 
 // @mixin stop
 
-const Transform3D = @import("./transform3_d.zig").Transform3D;
-const Basis = @import("./basis.zig").Basis;
-const Vector3 = @import("./vector3.zig").Vector3;
+const Self = gdzig.builtin.Transform3D;
+
+const gdzig = @import("gdzig");
+const Basis = gdzig.builtin.Basis;
+const Transform3D = gdzig.builtin.Transform3D;
+const Vector3 = gdzig.builtin.Vector3;

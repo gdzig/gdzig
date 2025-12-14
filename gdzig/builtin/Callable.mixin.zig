@@ -33,10 +33,13 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
 }
 // @mixin stop
 
+const Self = gdzig.builtin.Callable;
+
 const std = @import("std");
 
-const oopz = @import("oopz");
+const gdzig = @import("gdzig");
+const Callable = gdzig.builtin.Callable;
+const StringName = gdzig.builtin.StringName;
+const Object = gdzig.class.Object;
 
-const Object = @import("../class/object.zig").Object;
-const Callable = @import("callable.zig").Callable;
-const StringName = @import("string_name.zig").StringName;
+const oopz = @import("oopz");

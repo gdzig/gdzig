@@ -18,11 +18,11 @@ pub inline fn indexConst(self: *const PackedColorArray, index_: usize) *const Co
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.builtin.PackedColorArray;
 
-const typeName = @import("../gdzig.zig").typeName;
-const Interface = @import("../Interface.zig");
-const Color = @import("./color.zig").Color;
-const PackedColorArray = @import("./packed_color_array.zig").PackedColorArray;
-const StringName = @import("./string_name.zig").StringName;
-const Variant = @import("./variant.zig").Variant;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Color = gdzig.builtin.Color;
+const PackedColorArray = gdzig.builtin.PackedColorArray;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;

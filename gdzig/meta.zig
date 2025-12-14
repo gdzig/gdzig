@@ -24,7 +24,5 @@ pub fn signalName(comptime S: type) [:0]const u8 {
 }
 
 const std = @import("std");
-const case = @import("case");
 
-const godot = @import("gdzig.zig");
-const StringName = godot.builtin.StringName;
+const case = @import("case");

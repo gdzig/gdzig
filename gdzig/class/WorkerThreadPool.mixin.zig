@@ -138,9 +138,8 @@ fn wrapTask(comptime Userdata: type, comptime original: *const Task(Userdata)) f
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.class.WorkerThreadPool;
 
-const builtin = @import("../builtin.zig");
-const String = builtin.String;
-const Interface = @import("../Interface.zig");
-const Self = @import("./worker_thread_pool.zig").WorkerThreadPool;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const String = gdzig.builtin.String;

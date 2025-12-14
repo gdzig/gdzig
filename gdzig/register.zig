@@ -19,8 +19,8 @@ pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void 
             p_library: c.GDExtensionClassLibraryPtr,
             r_initialization: [*c]c.GDExtensionInitialization,
         ) callconv(.c) c.GDExtensionBool {
-            godot.raw = .init(p_get_proc_address.?, p_library.?);
-            godot.raw.getGodotVersion(@ptrCast(&godot.version));
+            raw.* = .init(p_get_proc_address.?, p_library.?);
+            raw.getGodotVersion(@ptrCast(&gdzig.version));
 
             const self = if (@typeInfo(return_type) == .error_union)
                 T.create() catch return @intFromBool(false)
@@ -76,7 +76,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
     const base_name = StringName.fromComptimeLatin1(meta.typeShortName(object.BaseOf(T)));
     const callbacks = comptime makeClassCallbacks(T);
 
-    if (godot.version.gte(.@"4.4")) {
+    if (gdzig.version.gte(.@"4.4")) {
         classdb.registerClass4(T, ClassUserdataOf(T), void, &class_name, &base_name, .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -84,7 +84,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
             .is_exposed = info.is_exposed,
             .is_runtime = info.is_runtime,
         }, callbacks.v4);
-    } else if (godot.version.gte(.@"4.3")) {
+    } else if (gdzig.version.gte(.@"4.3")) {
         classdb.registerClass3(T, ClassUserdataOf(T), void, &class_name, &base_name, .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -92,14 +92,14 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
             .is_exposed = info.is_exposed,
             .is_runtime = info.is_runtime,
         }, callbacks.v3);
-    } else if (godot.version.gte(.@"4.2")) {
+    } else if (gdzig.version.gte(.@"4.2")) {
         classdb.registerClass2(T, ClassUserdataOf(T), void, &class_name, &base_name, .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
             .is_abstract = info.is_abstract,
             .is_exposed = info.is_exposed,
         }, callbacks.v2);
-    } else if (godot.version.gte(.@"4.1")) {
+    } else if (gdzig.version.gte(.@"4.1")) {
         classdb.registerClass1(T, ClassUserdataOf(T), &class_name, &base_name, .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -132,7 +132,7 @@ const PropertyListMeta = struct {
     var gpa: if (builtin.is_test) void else DebugAllocator(.{}) = if (builtin.is_test) {} else .init;
     var pool: MemoryPool(PropertyListMeta) = .init(gpa.allocator());
 
-    const callbacks: godot.c.GDExtensionInstanceBindingCallbacks = .{
+    const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
         .free_callback = &free,
     };
@@ -163,7 +163,7 @@ pub const DestroyMeta = struct {
     var gpa: if (builtin.is_test) void else DebugAllocator(.{}) = if (builtin.is_test) {} else .init;
     var pool: MemoryPool(DestroyMeta) = .init(gpa.allocator());
 
-    pub const callbacks: godot.c.GDExtensionInstanceBindingCallbacks = .{
+    pub const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
         .free_callback = &free,
     };
@@ -177,7 +177,7 @@ pub const DestroyMeta = struct {
     }
 
     pub fn get(obj: *Object) ?*DestroyMeta {
-        const raw_ptr = godot.raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&callbacks)), &callbacks);
+        const raw_ptr = raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&callbacks)), &callbacks);
         return @ptrCast(@alignCast(raw_ptr));
     }
 
@@ -260,11 +260,11 @@ fn makeClassCallbacks(comptime T: type) struct {
             // it does not cover the unlikely edge case where users are sending notifications
             // that are reversed unexpectedly.
             const reversed = switch (what) {
-                godot.class.Object.NOTIFICATION_PREDELETE,
-                godot.class.Node.NOTIFICATION_EXIT_TREE,
-                godot.class.CanvasItem.NOTIFICATION_EXIT_CANVAS,
-                godot.class.Node3D.NOTIFICATION_EXIT_WORLD,
-                godot.class.Control.NOTIFICATION_FOCUS_EXIT,
+                gdzig.class.Object.NOTIFICATION_PREDELETE,
+                gdzig.class.Node.NOTIFICATION_EXIT_TREE,
+                gdzig.class.CanvasItem.NOTIFICATION_EXIT_CANVAS,
+                gdzig.class.Node3D.NOTIFICATION_EXIT_WORLD,
+                gdzig.class.Control.NOTIFICATION_FOCUS_EXIT,
                 => true,
                 else => false,
             };
@@ -275,7 +275,7 @@ fn makeClassCallbacks(comptime T: type) struct {
             _ = userdata;
             const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
             var buf: [256]u8 = undefined;
-            const name_str = godot.string.stringNameToAscii(name.*, buf[0..]);
+            const name_str = string.stringNameToAscii(name.*, buf[0..]);
             const result = UserVTable.get(name_str);
             return @ptrCast(result);
         }
@@ -294,7 +294,7 @@ fn makeClassCallbacks(comptime T: type) struct {
             errdefer destroyPropertyList1(self, list.ptr);
 
             const obj = Object.upcast(self);
-            const raw_ptr = godot.raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&PropertyListMeta.callbacks)), &PropertyListMeta.callbacks);
+            const raw_ptr = raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&PropertyListMeta.callbacks)), &PropertyListMeta.callbacks);
             const ptr: *PropertyListMeta = @ptrCast(@alignCast(raw_ptr orelse return error.OutOfMemory));
             ptr.len = list.len;
 
@@ -307,7 +307,7 @@ fn makeClassCallbacks(comptime T: type) struct {
         /// @until 4.3
         fn destroyPropertyList1(self: *T, list: [*]const classdb.PropertyInfo) void {
             const obj = Object.upcast(self);
-            const raw_ptr = godot.raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&PropertyListMeta.callbacks)), &PropertyListMeta.callbacks);
+            const raw_ptr = raw.objectGetInstanceBinding(obj, @ptrCast(@constCast(&PropertyListMeta.callbacks)), &PropertyListMeta.callbacks);
             const ptr: *PropertyListMeta = @ptrCast(@alignCast(raw_ptr orelse @panic("Failed to get property list metadata")));
             T._destroyPropertyList(self, list[0..ptr.len]);
         }
@@ -480,7 +480,7 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
     const Callbacks = struct {
         const method = @field(T, name_str);
 
-        fn call(instance: *T, args: []const *const Variant) godot.CallError!Variant {
+        fn call(instance: *T, args: []const *const Variant) gdzig.CallError!Variant {
             var call_args: std.meta.ArgsTuple(MethodType) = undefined;
             call_args[0] = instance;
             inline for (1..Args.len) |i| {
@@ -515,7 +515,7 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
 
         fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
             if (comptime object.isRefCountedPtr(ArgType) and object.isOpaqueClassPtr(ArgType)) {
-                const obj = godot.raw.refGetObject(@ptrCast(p_arg));
+                const obj = raw.refGetObject(@ptrCast(p_arg));
                 return @ptrCast(obj.?);
             } else if (comptime object.isOpaqueClassPtr(ArgType)) {
                 return @ptrCast(@constCast(p_arg));
@@ -554,24 +554,25 @@ pub fn registerSignal(comptime T: type, comptime S: type) void {
     classdb.registerSignal(&class_name, &signal_name, &arg_info);
 }
 
+const raw = &gdzig.raw;
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const DebugAllocator = std.heap.DebugAllocator;
 const DeclEnum = std.meta.DeclEnum;
 const MemoryPool = std.heap.MemoryPool;
 const assert = std.debug.assert;
-
 const builtin = @import("builtin");
 
 const c = @import("gdextension");
+const gdzig = @import("gdzig");
+const meta = gdzig.meta;
+const string = gdzig.string;
+const object = gdzig.object;
+const classdb = gdzig.class.ClassDB;
+const ClassInfo4 = gdzig.class.ClassDB.ClassInfo4;
+const String = gdzig.builtin.String;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;
+const Object = gdzig.class.Object;
 const oopz = @import("oopz");
-
-const godot = @import("gdzig.zig");
-const classdb = godot.class.ClassDB;
-const ClassInfo4 = godot.class.ClassDB.ClassInfo4;
-const meta = godot.meta;
-const object = godot.object;
-const Object = godot.class.Object;
-const StringName = godot.builtin.StringName;
-const String = godot.builtin.String;
-const Variant = godot.builtin.Variant;

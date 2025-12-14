@@ -1261,25 +1261,25 @@ pub inline fn unregisterClass(class_name: *const StringName) void {
 }
 
 // Imports needed inside the mixin (before @mixin stop)
-const godot = @import("../gdzig.zig");
-const object_module = godot.object;
 const Allocator = std.mem.Allocator;
 const Child = std.meta.Child;
-const CallError = godot.CallError;
-const PropertyError = godot.PropertyError;
-const RID = @import("../builtin.zig").RID;
-const MethodFlags = @import("../global.zig").MethodFlags;
-const PropertyHint = @import("../global.zig").PropertyHint;
-const PropertyUsageFlags = @import("../global.zig").PropertyUsageFlags;
+const object_module = gdzig.object;
+const CallError = gdzig.CallError;
+const PropertyError = gdzig.PropertyError;
+const MethodFlags = gdzig.global.MethodFlags;
+const PropertyHint = gdzig.global.PropertyHint;
+const PropertyUsageFlags = gdzig.global.PropertyUsageFlags;
+const RID = gdzig.builtin.RID;
 
 // @mixin stop
 
 const std = @import("std");
 
 const c = @import("gdextension");
-const raw = &@import("../gdzig.zig").raw;
 
-const Object = @import("../class.zig").Object;
-const String = @import("../builtin.zig").String;
-const StringName = @import("../builtin.zig").StringName;
-const Variant = @import("../builtin.zig").Variant;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Object = gdzig.class.Object;
+const String = gdzig.builtin.String;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;

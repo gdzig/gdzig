@@ -4,10 +4,11 @@ pub fn stringNameToAscii(strname: StringName, buf: []u8) []const u8 {
 }
 
 pub fn stringToAscii(str: String, buf: []u8) []const u8 {
-    const sz = godot.raw.stringToLatin1Chars(@ptrCast(&str), &buf[0], @intCast(buf.len));
+    const sz = raw.stringToLatin1Chars(@ptrCast(&str), &buf[0], @intCast(buf.len));
     return buf[0..@intCast(sz)];
 }
 
-const godot = @import("./gdzig.zig");
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const String = gdzig.builtin.String;
+const StringName = gdzig.builtin.StringName;

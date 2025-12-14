@@ -22,14 +22,14 @@ pub fn downcast(comptime T: type, value: anytype) blk: {
     }
 
     const name: StringName = .fromComptimeLatin1(meta.typeShortName(Child(T)));
-    const tag = godot.raw.classdbGetClassTag(@ptrCast(&name));
-    const result = godot.raw.objectCastTo(@ptrCast(value), tag);
+    const tag = raw.classdbGetClassTag(@ptrCast(&name));
+    const result = raw.objectCastTo(@ptrCast(value), tag);
 
     if (result) |ptr| {
         if (isOpaqueClassPtr(T)) {
             return @ptrCast(@alignCast(ptr));
         } else {
-            const obj: *anyopaque = godot.raw.objectGetInstanceBinding(ptr, godot.raw.library, null) orelse return null;
+            const obj: *anyopaque = raw.objectGetInstanceBinding(ptr, raw.library, null) orelse return null;
             return @ptrCast(@alignCast(obj));
         }
     } else {
@@ -83,7 +83,7 @@ fn assertCanInitialize(comptime T: type) void {
 pub fn VTable(comptime T: type, comptime method_names: anytype) type {
     return struct {
         // Zig calling convention for user implementation
-        const CallVirtual = godot.class.ClassDB.CallVirtual(T);
+        const CallVirtual = gdzig.class.ClassDB.CallVirtual(T);
         // C calling convention wrapper for Godot
         const CCallVirtual = fn (self: *T, args: [*]const *const anyopaque, ret: *anyopaque) callconv(.c) void;
         const implemented_count = countImplemented();
@@ -271,6 +271,21 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const c = @import("gdextension");
+
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const meta = gdzig.meta;
+const Child = gdzig.meta.RecursiveChild;
+const Callable = gdzig.builtin.Callable;
+const String = gdzig.builtin.String;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;
+const Object = gdzig.class.Object;
+const RefCounted = gdzig.class.RefCounted;
+const PropertyHint = gdzig.global.PropertyHint;
+const PropertyUsageFlags = gdzig.global.PropertyUsageFlags;
+
 const oopz = @import("oopz");
 pub const assertIsA = oopz.assertIsA;
 pub const assertIsAny = oopz.assertIsAny;
@@ -287,19 +302,6 @@ pub const selfAndAncestorsOf = oopz.selfAndAncestorsOf;
 pub const isA = oopz.isA;
 pub const isAny = oopz.isAny;
 pub const upcast = oopz.upcast;
-
-const godot = @import("gdzig.zig");
-const Child = godot.meta.RecursiveChild;
-const c = godot.c;
-const meta = godot.meta;
-const PropertyHint = godot.global.PropertyHint;
-const PropertyUsageFlags = godot.global.PropertyUsageFlags;
-const Object = godot.class.Object;
-const RefCounted = godot.class.RefCounted;
-const Callable = godot.builtin.Callable;
-const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
-const Variant = godot.builtin.Variant;
 
 test "VTable snake_case conversion" {
     const TestVTable = VTable(struct {

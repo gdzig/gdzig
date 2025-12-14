@@ -299,11 +299,12 @@ pub inline fn indexConst(self: *const String, index_: usize) *const u32 {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.builtin.String;
 
 const std = @import("std");
 
 const c = @import("gdextension");
 
-const Interface = @import("../Interface.zig");
-const String = @import("./string.zig").String;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const String = gdzig.builtin.String;

@@ -62,4 +62,7 @@ pub const init: Basis = .identity;
 
 // @mixin stop
 
-const Basis = @import("./basis.zig").Basis;
+const Self = gdzig.builtin.Basis;
+
+const gdzig = @import("gdzig");
+const Basis = gdzig.builtin.Basis;

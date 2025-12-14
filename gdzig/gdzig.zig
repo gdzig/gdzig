@@ -36,12 +36,12 @@ pub const meta = @import("meta.zig");
 pub const object = @import("object.zig");
 pub const random = @import("random.zig");
 
-const register = @import("register.zig");
-pub const InitializationLevel = register.InitializationLevel;
+pub const register = @import("register.zig");
 pub const registerClass = register.registerClass;
 pub const registerExtension = register.registerExtension;
 pub const registerMethod = register.registerMethod;
 pub const registerSignal = register.registerSignal;
+pub const InitializationLevel = register.InitializationLevel;
 
 pub const string = @import("string.zig");
 pub const support = @import("support.zig");

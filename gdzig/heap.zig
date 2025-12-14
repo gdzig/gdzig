@@ -85,10 +85,9 @@ fn free(_: *anyopaque, memory: []u8, alignment: Alignment, ret_addr: usize) void
     }
 }
 
-const raw: *Interface = &@import("./gdzig.zig").raw;
-
 const std = @import("std");
 const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;
 
-const Interface = @import("./Interface.zig");
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;

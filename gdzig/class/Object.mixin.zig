@@ -57,7 +57,7 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
 
     const token = comptime typeToken(T);
 
-    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromComptimeLatin1(gdzig_meta.typeShortName(T))), @ptrCast(instance_));
+    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromComptimeLatin1(gdzig.meta.typeShortName(T))), @ptrCast(instance_));
     raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
         const callbacks = c.GDExtensionInstanceBindingCallbacks{
             .create_callback = create_callback,
@@ -99,21 +99,21 @@ fn typeToken(comptime T: type) *anyopaque {
 
 /// Connects a signal to a callable.
 pub fn connect(self: *Self, comptime S: type, callable: Callable) ConnectError!void {
-    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig_meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig.meta.signalName(S));
     const result = self.connectRaw(signal_name, callable, .{});
     if (result != .ok) return ConnectError.AlreadyConnected;
 }
 
 /// Disconnects a signal from a callable.
 pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
-    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig_meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig.meta.signalName(S));
     self.disconnectRaw(signal_name, callable);
 }
 
 /// Emits a signal.
 pub fn emit(self: *Self, signal: anytype) EmitError!void {
     const S = @TypeOf(signal);
-    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig_meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig.meta.signalName(S));
     const fields = @typeInfo(S).@"struct".fields;
     var args: std.meta.Tuple(&typeInfoToTypes(fields)) = undefined;
     inline for (fields, 0..) |field, i| {
@@ -140,25 +140,24 @@ fn typeInfoToTypes(comptime fields: []const std.builtin.Type.StructField) [field
     return types;
 }
 
-const gdzig_meta = @import("../meta.zig");
-const ConnectError = @import("../gdzig.zig").ConnectError;
-const EmitError = @import("../gdzig.zig").EmitError;
-const DestroyMeta = @import("../register.zig").DestroyMeta;
+const ConnectError = gdzig.ConnectError;
+const DestroyMeta = gdzig.register.DestroyMeta;
+const EmitError = gdzig.EmitError;
 
 // @mixin stop
 
+const Self = gdzig.class.Object;
+const self_name = "Object";
+
 const std = @import("std");
-
-const godot = @import("../gdzig.zig");
-const Callable = godot.builtin.Callable;
-const Object = @import("object.zig").Object;
-const Variant = godot.builtin.Variant;
-
-const oopz = @import("oopz");
-const raw = &godot.raw;
-const StringName = @import("../builtin.zig").StringName;
 
 const c = @import("gdextension");
 
-const Self = @import("./object.zig").Object;
-const self_name = "Object";
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Callable = gdzig.builtin.Callable;
+const Object = gdzig.class.Object;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;
+
+const oopz = @import("oopz");

@@ -62,9 +62,10 @@ pub inline fn fromNullTerminatedUtf8(str: [:0]const u8) StringName {
 
 // @mixin stop
 
+const Self = gdzig.builtin.StringName;
+
 const std = @import("std");
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
-
-const Interface = @import("../Interface.zig");
-const StringName = @import("./string_name.zig").StringName;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const StringName = gdzig.builtin.StringName;

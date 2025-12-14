@@ -3,4 +3,7 @@ pub const init: AABB = .initPositionSize(.zero, .zero);
 
 // @mixin stop
 
-const AABB = @import("./aabb.zig").AABB;
+const Self = gdzig.builtin.AABB;
+
+const gdzig = @import("gdzig");
+const AABB = gdzig.builtin.AABB;

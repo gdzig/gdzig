@@ -13,12 +13,12 @@ pub inline fn setTyped(
     key_script: ?*const Variant,
     value_script: ?*const Variant,
 ) void {
-    const meta = @import("../meta.zig");
+    const gdzig_meta = @import("gdzig").meta;
 
     const key_tag = Variant.Tag.forType(K);
     const value_tag = Variant.Tag.forType(V);
-    const key_class_name: StringName = .fromComptimeLatin1(meta.typeShortName(K));
-    const value_class_name: StringName = .fromComptimeLatin1(meta.typeShortName(V));
+    const key_class_name: StringName = .fromComptimeLatin1(gdzig_meta.typeShortName(K));
+    const value_class_name: StringName = .fromComptimeLatin1(gdzig_meta.typeShortName(V));
 
     raw.dictionarySetTyped(
         self.ptr(),
@@ -51,11 +51,11 @@ pub inline fn indexConst(self: *const Dictionary, key: *const Variant) *const Va
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.builtin.Dictionary;
 
-const builtin = @import("../builtin.zig");
-const Array = builtin.Array;
-const Dictionary = builtin.Dictionary;
-const StringName = builtin.StringName;
-const Variant = builtin.Variant;
-const Interface = @import("../Interface.zig");
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Array = gdzig.builtin.Array;
+const Dictionary = gdzig.builtin.Dictionary;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;

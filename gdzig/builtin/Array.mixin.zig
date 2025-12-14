@@ -15,7 +15,7 @@ pub inline fn ref(self: *Array, from: *const Array) void {
 /// **Since Godot 4.1**
 pub inline fn setTyped(self: *Array, comptime T: type, script: ?*const Variant) void {
     const tag = Variant.Tag.forType(T);
-    const name: StringName = .fromComptimeLatin1(@import("../meta.zig").typeShortName(T));
+    const name: StringName = .fromComptimeLatin1(@import("gdzig").meta.typeShortName(T));
     raw.arraySetTyped(self.ptr(), @intFromEnum(tag), if (tag == .object) name.constPtr() else null, if (script) |s| s.constPtr() else null);
 }
 
@@ -39,9 +39,10 @@ pub inline fn indexConst(self: *const Array, index_: usize) *const Variant {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.builtin.Array;
 
-const Interface = @import("../Interface.zig");
-const Array = @import("./array.zig").Array;
-const StringName = @import("./string_name.zig").StringName;
-const Variant = @import("./variant.zig").Variant;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Array = gdzig.builtin.Array;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;

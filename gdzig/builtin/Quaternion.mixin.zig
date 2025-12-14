@@ -5,4 +5,7 @@ pub const init: Quaternion = .identity;
 
 // @mixin stop
 
-const Quaternion = @import("./quaternion.zig").Quaternion;
+const Self = gdzig.builtin.Quaternion;
+
+const gdzig = @import("gdzig");
+const Quaternion = gdzig.builtin.Quaternion;

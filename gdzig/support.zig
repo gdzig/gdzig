@@ -4,8 +4,8 @@ pub inline fn bindBuiltinMethod(
     comptime hash: comptime_int,
 ) BuiltinMethod {
     const callback = struct {
-        fn callback(string_name: godot.builtin.StringName) BuiltinMethod {
-            return godot.raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType(T)), @ptrCast(&string_name), hash).?;
+        fn callback(string_name: StringName) BuiltinMethod {
+            return raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType(T)), @ptrCast(&string_name), hash).?;
         }
     }.callback;
 
@@ -18,9 +18,9 @@ pub inline fn bindClassMethod(
     comptime hash: comptime_int,
 ) ClassMethod {
     const callback = struct {
-        fn callback(string_name: godot.builtin.StringName) ClassMethod {
-            const class_name: godot.builtin.StringName = .fromComptimeLatin1(godot.meta.typeShortName(T));
-            return godot.raw.classdbGetMethodBind(@ptrCast(&class_name), @ptrCast(@constCast(&string_name)), hash).?;
+        fn callback(string_name: StringName) ClassMethod {
+            const class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
+            return raw.classdbGetMethodBind(@ptrCast(&class_name), @ptrCast(@constCast(&string_name)), hash).?;
         }
     }.callback;
 
@@ -33,7 +33,7 @@ pub inline fn bindConstructor(
 ) Constructor {
     const callback = struct {
         fn callback() Constructor {
-            return godot.raw.variantGetPtrConstructor(@intFromEnum(Variant.Tag.forType(T)), index).?;
+            return raw.variantGetPtrConstructor(@intFromEnum(Variant.Tag.forType(T)), index).?;
         }
     }.callback;
 
@@ -45,7 +45,7 @@ pub inline fn bindDestructor(
 ) Destructor {
     const callback = struct {
         fn callback() Destructor {
-            return godot.raw.variantGetPtrDestructor(@intFromEnum(Variant.Tag.forType(T))).?;
+            return raw.variantGetPtrDestructor(@intFromEnum(Variant.Tag.forType(T))).?;
         }
     }.callback;
 
@@ -57,8 +57,8 @@ pub inline fn bindFunction(
     comptime hash: comptime_int,
 ) Function {
     const callback = struct {
-        fn callback(string_name: godot.builtin.StringName) Function {
-            return godot.raw.variantGetPtrUtilityFunction(@ptrCast(@constCast(&string_name)), hash).?;
+        fn callback(string_name: StringName) Function {
+            return raw.variantGetPtrUtilityFunction(@ptrCast(@constCast(&string_name)), hash).?;
         }
     }.callback;
 
@@ -68,7 +68,7 @@ pub inline fn bindFunction(
 pub inline fn bindVariantOperator(comptime op: Variant.Operator, comptime lhs: Variant.Tag, comptime rhs: ?Variant.Tag) VariantOperatorEvaluator {
     const callback = struct {
         fn callback() VariantOperatorEvaluator {
-            return godot.raw.variantGetPtrOperatorEvaluator(
+            return raw.variantGetPtrOperatorEvaluator(
                 @intFromEnum(op),
                 @intFromEnum(lhs),
                 if (rhs) |tag| @intFromEnum(tag) else null,
@@ -93,7 +93,7 @@ inline fn bind(
 
     if (Binding.function == null) {
         if (name) |name_| {
-            Binding.function = callback(godot.builtin.StringName.fromComptimeLatin1(name_));
+            Binding.function = callback(StringName.fromComptimeLatin1(name_));
         } else {
             Binding.function = callback();
         }
@@ -127,7 +127,7 @@ pub fn MethodBinderT(comptime MethodType: type) type {
                 args[0] = @ptrCast(@alignCast(p_instance));
                 inline for (0..ArgCount - 1) |i| {
                     if (i < p_argument_count) {
-                        godot.raw.variantNewCopy(@ptrCast(&variants[i]), @ptrCast(p_args[i]));
+                        raw.variantNewCopy(@ptrCast(&variants[i]), @ptrCast(p_args[i]));
                     }
 
                     args[i + 1] = variants[i].as(ArgsTuple[i + 1].type).?;
@@ -143,7 +143,7 @@ pub fn MethodBinderT(comptime MethodType: type) type {
         fn ptrToArg(comptime T: type, p_arg: c.GDExtensionConstTypePtr) T {
             // TODO: I think this does not increment refcount on user-defined RefCounted types
             if (comptime object.isRefCountedPtr(T) and object.isOpaqueClassPtr(T)) {
-                const obj = godot.raw.refGetObject(p_arg);
+                const obj = raw.refGetObject(p_arg);
                 return @ptrCast(obj.?);
             } else if (comptime object.isOpaqueClassPtr(T)) {
                 return @ptrCast(@constCast(p_arg.?));
@@ -186,8 +186,11 @@ const VariantOperatorEvaluator = Child(c.GDExtensionPtrOperatorEvaluator);
 const std = @import("std");
 const Child = std.meta.Child;
 
-const godot = @import("gdzig.zig");
-const StringName = godot.builtin.StringName;
-const Variant = godot.builtin.Variant;
-const c = godot.c;
-const object = @import("object.zig");
+const c = @import("gdextension");
+
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const meta = gdzig.meta;
+const object = gdzig.object;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;

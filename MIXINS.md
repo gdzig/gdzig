@@ -37,9 +37,9 @@ pub fn fromUtf8(cstr: []const u8) !String {
 
 // @mixin stop
 
-const Transform2D = @import("./transform2_d.zig").Transform2D;
-const Interface = @import("../Interface.zig");
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Transform2D = gdzig.builtin.Transform2D;
 ```
 
 ### Key Components
@@ -273,7 +273,8 @@ pub fn initXAxisYAxisOriginComponents(xx: f32, xy: f32, yx: f32, yy: f32, ox: f3
 
 // @mixin stop
 
-const Transform2D = @import("./transform2_d.zig").Transform2D;
+const gdzig = @import("gdzig");
+const Transform2D = gdzig.builtin.Transform2D;
 ```
 
 ### Example 2: Functions Only (Array)
@@ -297,18 +298,17 @@ pub inline fn ref(self: *Array, from: *const Array) void {
 ///
 /// **Since Godot 4.1**
 pub inline fn setTyped(self: *Array, comptime T: type, script: ?*const Variant) void {
-    const typeName = @import("../gdzig.zig").typeName;
     const tag = Variant.Tag.forType(T);
-    const name = if (tag == .object) typeName(T).constPtr() else null;
+    const name = if (tag == .object) gdzig.typeName(T).constPtr() else null;
     raw.arraySetTyped(self.ptr(), @intFromEnum(tag), name, if (script) |s| s.constPtr() else null);
 }
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
-const Interface = @import("../Interface.zig");
-const Array = @import("./array.zig").Array;
-const Variant = @import("./variant.zig").Variant;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Array = gdzig.builtin.Array;
+const Variant = gdzig.builtin.Variant;
 ```
 
 ### Example 3: Class Mixin (Image)
@@ -336,9 +336,9 @@ pub inline fn constSlice(self: *const Image) []const u8 {
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
-const Interface = @import("../Interface.zig");
-const Image = @import("./image.zig").Image;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const Image = gdzig.class.Image;
 ```
 
 ## Overriding Generated Code

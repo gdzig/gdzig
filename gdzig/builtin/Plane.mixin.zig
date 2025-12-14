@@ -3,4 +3,7 @@ pub const init: Plane = .initABCD(0, 0, 0, 0);
 
 // @mixin stop
 
-const Plane = @import("./plane.zig").Plane;
+const Self = gdzig.builtin.Plane;
+
+const gdzig = @import("gdzig");
+const Plane = gdzig.builtin.Plane;

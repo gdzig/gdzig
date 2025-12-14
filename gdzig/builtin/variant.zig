@@ -356,51 +356,51 @@ test "forType comptime" {
     }
 }
 
-const raw = &@import("../gdzig.zig").raw;
-
 const std = @import("std");
 const Atomic = std.atomic.Value;
 const Child = std.meta.Child;
 const mem = std.mem;
 const testing = std.testing;
-const precision = @import("build_options").precision;
 
 const c = @import("gdextension");
-const oopz = @import("oopz");
 
-const builtin = @import("../builtin.zig");
-const AABB = builtin.AABB;
-const Array = builtin.Array;
-const Basis = builtin.Basis;
-const Callable = builtin.Callable;
-const Color = builtin.Color;
-const Dictionary = builtin.Dictionary;
-const NodePath = builtin.NodePath;
-const PackedByteArray = builtin.PackedByteArray;
-const PackedColorArray = builtin.PackedColorArray;
-const PackedFloat32Array = builtin.PackedFloat32Array;
-const PackedFloat64Array = builtin.PackedFloat64Array;
-const PackedInt32Array = builtin.PackedInt32Array;
-const PackedInt64Array = builtin.PackedInt64Array;
-const PackedStringArray = builtin.PackedStringArray;
-const PackedVector2Array = builtin.PackedVector2Array;
-const PackedVector3Array = builtin.PackedVector3Array;
-const Plane = builtin.Plane;
-const Projection = builtin.Projection;
-const Quaternion = builtin.Quaternion;
-const Rect2 = builtin.Rect2;
-const Rect2i = builtin.Rect2i;
-const RID = builtin.RID;
-const Signal = builtin.Signal;
-const String = builtin.String;
-const StringName = builtin.StringName;
-const Transform2D = builtin.Transform2D;
-const Transform3D = builtin.Transform3D;
-const Vector2 = builtin.Vector2;
-const Vector2i = builtin.Vector2i;
-const Vector3 = builtin.Vector3;
-const Vector3i = builtin.Vector3i;
-const Vector4 = builtin.Vector4;
-const Vector4i = builtin.Vector4i;
-const class = @import("../class.zig");
-const Object = class.Object;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const AABB = gdzig.builtin.AABB;
+const Array = gdzig.builtin.Array;
+const Basis = gdzig.builtin.Basis;
+const Callable = gdzig.builtin.Callable;
+const Color = gdzig.builtin.Color;
+const Dictionary = gdzig.builtin.Dictionary;
+const NodePath = gdzig.builtin.NodePath;
+const PackedByteArray = gdzig.builtin.PackedByteArray;
+const PackedColorArray = gdzig.builtin.PackedColorArray;
+const PackedFloat32Array = gdzig.builtin.PackedFloat32Array;
+const PackedFloat64Array = gdzig.builtin.PackedFloat64Array;
+const PackedInt32Array = gdzig.builtin.PackedInt32Array;
+const PackedInt64Array = gdzig.builtin.PackedInt64Array;
+const PackedStringArray = gdzig.builtin.PackedStringArray;
+const PackedVector2Array = gdzig.builtin.PackedVector2Array;
+const PackedVector3Array = gdzig.builtin.PackedVector3Array;
+const Plane = gdzig.builtin.Plane;
+const Projection = gdzig.builtin.Projection;
+const Quaternion = gdzig.builtin.Quaternion;
+const Rect2 = gdzig.builtin.Rect2;
+const Rect2i = gdzig.builtin.Rect2i;
+const RID = gdzig.builtin.RID;
+const Signal = gdzig.builtin.Signal;
+const String = gdzig.builtin.String;
+const StringName = gdzig.builtin.StringName;
+const Transform2D = gdzig.builtin.Transform2D;
+const Transform3D = gdzig.builtin.Transform3D;
+const Vector2 = gdzig.builtin.Vector2;
+const Vector2i = gdzig.builtin.Vector2i;
+const Vector3 = gdzig.builtin.Vector3;
+const Vector3i = gdzig.builtin.Vector3i;
+const Vector4 = gdzig.builtin.Vector4;
+const Vector4i = gdzig.builtin.Vector4i;
+const Object = gdzig.class.Object;
+
+const precision = @import("build_options").precision;
+
+const oopz = @import("oopz");

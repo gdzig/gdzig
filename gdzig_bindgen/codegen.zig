@@ -160,11 +160,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     try w.writeLine("};");
 
     // Imports
-    try w.writeAll(
-        \\const oopz = @import("oopz");
-        \\
-    );
-    try writeImports(w, "..", &builtin.imports, ctx);
+    try writeImports(w, &builtin.imports, ctx);
 }
 
 fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor: *const Context.Function, ctx: *const Context) !void {
@@ -426,11 +422,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     try w.writeLine("};");
 
     // Imports
-    try w.writeLine(
-        \\const oopz = @import("oopz");
-        \\const gdzig_object = @import("../object.zig");
-    );
-    try writeImports(w, "..", &class.imports, ctx);
+    try writeImports(w, &class.imports, ctx);
 }
 
 fn writeSignal(w: *CodeWriter, signal: *const Context.Signal) !void {
@@ -539,7 +531,7 @@ fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *
         try w.writeLine("});");
     } else {
         // Root Object class - define the base VTable
-        try w.printLine("pub const VTable = gdzig_object.VTable({s}, .{{", .{class.name});
+        try w.printLine("pub const VTable = gdzig.object.VTable({s}, .{{", .{class.name});
 
         w.indent += 1;
         for (class.functions.values()) |*function| {
@@ -921,36 +913,80 @@ fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function) !void 
     try w.writeLine("}");
 }
 
-fn writeImports(w: *CodeWriter, root: []const u8, imports: *const Context.Imports, ctx: *const Context) !void {
-    try w.printLine(
+fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Context) !void {
+    // std first
+    try w.writeLine(
+        \\
         \\const std = @import("std");
         \\
+    );
+
+    // c (gdextension)
+    try w.writeLine(
         \\const c = @import("gdextension");
         \\
-        \\const raw = &@import("{0s}/gdzig.zig").raw;
-        \\
-    , .{root});
+    );
+
+    // gdzig with all aliases
+    try w.writeLine(
+        \\const gdzig = @import("gdzig");
+        \\const raw = &gdzig.raw;
+    );
+
+    // Collect imports into separate lists for sorting
+    var builtins: std.ArrayList([]const u8) = .empty;
+    var classes: std.ArrayList([]const u8) = .empty;
+    var globals: std.ArrayList([]const u8) = .empty;
+    const allocator = ctx.arena.allocator();
 
     var iter = imports.iterator();
     while (iter.next()) |import| {
         if (util.isBuiltinType(import.*)) continue;
 
         if (std.mem.eql(u8, import.*, "Variant")) {
-            try w.printLine("const Variant = @import(\"{0s}/builtin/variant.zig\").Variant;", .{root});
+            try builtins.append(allocator, import.*);
         } else if (ctx.builtins.contains(import.*)) {
-            try w.printLine("const {1s} = @import(\"{0s}/builtin.zig\").{1s};", .{ root, import.* });
+            try builtins.append(allocator, import.*);
         } else if (ctx.classes.contains(import.*)) {
-            try w.printLine("const {1s} = @import(\"{0s}/class.zig\").{1s};", .{ root, import.* });
+            try classes.append(allocator, import.*);
         } else if (ctx.enums.contains(import.*)) {
-            try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
+            try globals.append(allocator, import.*);
         } else if (ctx.flags.contains(import.*)) {
-            try w.printLine("const {1s} = @import(\"{0s}/global.zig\").{1s};", .{ root, import.* });
+            try globals.append(allocator, import.*);
         } else if (ctx.interface.typedefs.contains(import.*)) {
-            try w.printLine("const {0s} = @import(\"gdextension\").{0s};", .{import.*});
+            // TODO: handle gdextension typedefs
         } else {
             // TODO: native structures?
         }
     }
+
+    // Sort each list alphabetically
+    const sortFn = struct {
+        fn cmp(_: void, a: []const u8, b: []const u8) bool {
+            return std.mem.order(u8, a, b) == .lt;
+        }
+    }.cmp;
+
+    std.mem.sort([]const u8, builtins.items, {}, sortFn);
+    std.mem.sort([]const u8, classes.items, {}, sortFn);
+    std.mem.sort([]const u8, globals.items, {}, sortFn);
+
+    // Write sorted imports (builtins, classes, globals all together under gdzig)
+    for (builtins.items) |name| {
+        try w.printLine("const {0s} = gdzig.builtin.{0s};", .{name});
+    }
+    for (classes.items) |name| {
+        try w.printLine("const {0s} = gdzig.class.{0s};", .{name});
+    }
+    for (globals.items) |name| {
+        try w.printLine("const {0s} = gdzig.global.{0s};", .{name});
+    }
+
+    // oopz last
+    try w.writeLine(
+        \\
+        \\const oopz = @import("oopz");
+    );
 }
 
 /// Writes mixins for a class and all its parent classes.
@@ -1128,7 +1164,7 @@ fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Contex
 
         try writeModuleFunction(w, function, ctx);
     }
-    try writeImports(w, ".", &module.imports, ctx);
+    try writeImports(w, &module.imports, ctx);
 }
 
 fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {

@@ -20,4 +20,7 @@ pub const init: Projection = .identity;
 
 // @mixin stop
 
-const Projection = @import("./projection.zig").Projection;
+const Self = gdzig.builtin.Projection;
+
+const gdzig = @import("gdzig");
+const Projection = gdzig.builtin.Projection;

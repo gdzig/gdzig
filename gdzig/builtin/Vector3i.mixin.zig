@@ -3,4 +3,7 @@ pub const init: Vector3i = .zero;
 
 // @mixin stop
 
-const Vector3i = @import("./vector3i.zig").Vector3i;
+const Self = gdzig.builtin.Vector3i;
+
+const gdzig = @import("gdzig");
+const Vector3i = gdzig.builtin.Vector3i;

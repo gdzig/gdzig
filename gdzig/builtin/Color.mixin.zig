@@ -5,4 +5,7 @@ pub const init: Color = .black;
 
 // @mixin stop
 
-const Color = @import("./color.zig").Color;
+const Self = gdzig.builtin.Color;
+
+const gdzig = @import("gdzig");
+const Color = gdzig.builtin.Color;

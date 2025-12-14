@@ -58,4 +58,7 @@ pub const init: Transform2D = .identity;
 
 // @mixin stop
 
-const Transform2D = @import("./transform2_d.zig").Transform2D;
+const Self = gdzig.builtin.Transform2D;
+
+const gdzig = @import("gdzig");
+const Transform2D = gdzig.builtin.Transform2D;

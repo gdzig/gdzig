@@ -18,11 +18,11 @@ pub inline fn indexConst(self: *const PackedVector4Array, index_: usize) *const 
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.builtin.PackedVector4Array;
 
-const typeName = @import("../gdzig.zig").typeName;
-const Interface = @import("../Interface.zig");
-const PackedVector4Array = @import("./packed_vector4_array.zig").PackedVector4Array;
-const StringName = @import("./string_name.zig").StringName;
-const Variant = @import("./variant.zig").Variant;
-const Vector4 = @import("./vector4.zig").Vector4;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const PackedVector4Array = gdzig.builtin.PackedVector4Array;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;
+const Vector4 = gdzig.builtin.Vector4;

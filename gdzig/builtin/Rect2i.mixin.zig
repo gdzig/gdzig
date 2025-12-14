@@ -16,4 +16,7 @@ pub fn initXYWidthHeight(p_x: i64, p_y: i64, p_width: i64, p_height: i64) Rect2i
 
 // @mixin stop
 
-const Rect2i = @import("./rect2i.zig").Rect2i;
+const Self = gdzig.builtin.Rect2i;
+
+const gdzig = @import("gdzig");
+const Rect2i = gdzig.builtin.Rect2i;

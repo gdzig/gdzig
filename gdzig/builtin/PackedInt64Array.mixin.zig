@@ -18,10 +18,10 @@ pub inline fn indexConst(self: *const PackedInt64Array, index_: usize) *const i6
 
 // @mixin stop
 
-const raw: *Interface = &@import("../gdzig.zig").raw;
+const Self = gdzig.builtin.PackedInt64Array;
 
-const typeName = @import("../gdzig.zig").typeName;
-const Interface = @import("../Interface.zig");
-const PackedInt64Array = @import("./packed_int64_array.zig").PackedInt64Array;
-const StringName = @import("./string_name.zig").StringName;
-const Variant = @import("./variant.zig").Variant;
+const gdzig = @import("gdzig");
+const raw = &gdzig.raw;
+const PackedInt64Array = gdzig.builtin.PackedInt64Array;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;

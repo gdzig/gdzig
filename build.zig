@@ -141,6 +141,7 @@ pub fn build(b: *Build) void {
             .{ .name = "oopz", .module = oopz.module("oopz") },
         },
     });
+    gdzig_mod.addImport("gdzig", gdzig_mod);
 
     const gdzig_lib = b.addLibrary(.{
         .name = "gdzig",
