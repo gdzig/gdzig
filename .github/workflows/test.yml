@@ -1,0 +1,55 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Quick test for PRs - only latest Godot on Linux
+  test-pr:
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        godot: ["4.5"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/test-godot
+        with:
+          godot-version: ${{ matrix.godot }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
+
+  # Full matrix for push to master and manual dispatch
+  test-full:
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        # All Godot versions on Linux, latest on macOS/Windows
+        os: [ubuntu-latest]
+        godot: ["4.1", "4.2", "4.3", "4.4", "4.5"]
+        include:
+          # Add macOS and Windows for latest Godot only
+          - os: macos-latest
+            godot: "4.5"
+          - os: windows-latest
+            godot: "4.5"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/test-godot
+        with:
+          godot-version: ${{ matrix.godot }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
