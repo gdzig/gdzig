@@ -121,10 +121,6 @@ pub fn typeName(comptime T: type) *builtin.StringName {
     return &Static.name;
 }
 
-pub fn signalName(comptime S: type) builtin.StringName {
-    return .fromComptimeLatin1(meta.signalName(S));
-}
-
 pub const CallError = error{
     InvalidMethod,
     InvalidArgument,
@@ -140,6 +136,14 @@ pub const PropertyError = error{
     IndexOutOfBounds,
 };
 
+pub const ConnectError = error{
+    AlreadyConnected,
+};
+
+pub const EmitError = error{
+    InvalidSignal,
+};
+
 const std = @import("std");
 
 pub const c = @import("gdextension");
@@ -153,7 +157,6 @@ pub const Interface = @import("Interface.zig");
 pub const math = @import("math.zig");
 pub const meta = @import("meta.zig");
 pub const object = @import("object.zig");
-pub const connect = object.connect;
 pub const random = @import("random.zig");
 
 const register = @import("register.zig");

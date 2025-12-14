@@ -100,7 +100,18 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         // Skip 'destroy' on RefCounted classes - provided by mixin instead
         if (self.is_refcounted and std.mem.eql(u8, method.name, "destroy")) continue;
 
-        try self.functions.put(allocator, method.name, try Function.fromClass(allocator, self.name_api, self.has_singleton, method, ctx));
+        var function = try Function.fromClass(allocator, self.name_api, self.has_singleton, method, ctx);
+
+        // Rename signal methods - mixin provides idiomatic wrappers
+        if (std.mem.eql(u8, function.name_api, "connect")) {
+            function.name = "connectRaw";
+        } else if (std.mem.eql(u8, function.name_api, "disconnect")) {
+            function.name = "disconnectRaw";
+        } else if (std.mem.eql(u8, function.name_api, "emit_signal")) {
+            function.name = "emitRaw";
+        }
+
+        try self.functions.put(allocator, function.name_api, function);
     }
 
     // Inherited methods
@@ -123,11 +134,16 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
                 inherited.self = .singleton;
             }
 
-            try self.functions.put(
-                allocator,
-                inherited.name_api,
-                inherited,
-            );
+            // Rename signal methods - mixin provides idiomatic wrappers
+            if (std.mem.eql(u8, inherited.name_api, "connect")) {
+                inherited.name = "connectRaw";
+            } else if (std.mem.eql(u8, inherited.name_api, "disconnect")) {
+                inherited.name = "disconnectRaw";
+            } else if (std.mem.eql(u8, inherited.name_api, "emit_signal")) {
+                inherited.name = "emitRaw";
+            }
+
+            try self.functions.put(allocator, inherited.name_api, inherited);
         }
     }
 

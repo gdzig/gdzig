@@ -34,8 +34,8 @@ pub fn _enterTree(self: *GuiNode) void {
     toggle_btn.setSize(.initXY(100, 50), .{});
     toggle_btn.setText(.fromLatin1("Toggle Me"));
 
-    godot.connect(toggle_btn, Button.ToggledSignal, .fromClosure(self, &onToggled));
-    godot.connect(normal_btn, Button.PressedSignal, .fromClosure(self, &onPressed));
+    toggle_btn.connect(Button.ToggledSignal, .fromClosure(self, &onToggled)) catch {};
+    normal_btn.connect(Button.PressedSignal, .fromClosure(self, &onPressed)) catch {};
 
     var res_name: String = .fromLatin1("res://textures/logo.png");
     defer res_name.deinit();

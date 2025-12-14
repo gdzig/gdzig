@@ -97,6 +97,43 @@ fn typeToken(comptime T: type) *anyopaque {
     }.token);
 }
 
+/// Connects a signal to a callable.
+pub fn connect(self: *Self, comptime S: type, callable: Callable) ConnectError!void {
+    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig_meta.signalName(S));
+    const result = self.connectRaw(signal_name, callable, .{});
+    if (result != .ok) return ConnectError.AlreadyConnected;
+}
+
+/// Disconnects a signal from a callable.
+pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
+    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig_meta.signalName(S));
+    self.disconnectRaw(signal_name, callable);
+}
+
+/// Emits a signal.
+pub fn emit(self: *Self, signal: anytype) EmitError!void {
+    const S = @TypeOf(signal);
+    const signal_name: StringName = .fromComptimeLatin1(comptime gdzig_meta.signalName(S));
+    const fields = @typeInfo(S).@"struct".fields;
+    var args: std.meta.Tuple(&typeInfoToTypes(fields)) = undefined;
+    inline for (fields, 0..) |field, i| {
+        args[i] = @field(signal, field.name);
+    }
+    const result = self.emitRaw(signal_name, args);
+    if (result != .ok) return EmitError.InvalidSignal;
+}
+
+fn typeInfoToTypes(comptime fields: []const std.builtin.Type.StructField) [fields.len]type {
+    var types: [fields.len]type = undefined;
+    for (fields, 0..) |field, i| {
+        types[i] = field.type;
+    }
+    return types;
+}
+
+const gdzig_meta = @import("../meta.zig");
+const ConnectError = @import("../gdzig.zig").ConnectError;
+const EmitError = @import("../gdzig.zig").EmitError;
 const DestroyMeta = @import("../register.zig").DestroyMeta;
 
 // @mixin stop
@@ -105,7 +142,9 @@ const std = @import("std");
 
 const godot = @import("../gdzig.zig");
 const typeName = godot.meta.typeName;
+const Callable = godot.builtin.Callable;
 const Object = @import("object.zig").Object;
+const Variant = godot.builtin.Variant;
 
 const oopz = @import("oopz");
 const raw = &godot.raw;

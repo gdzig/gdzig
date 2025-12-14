@@ -53,12 +53,12 @@ pub fn _enterTree(self: *Self) void {
     self.color_rect.setColor(.initRGBA(1, 0, 0, 1));
     self.base.addChild(.upcast(self.color_rect), .{});
 
-    godot.connect(signal1_btn, Button.PressedSignal, .fromClosure(self, &emitSignal1));
-    godot.connect(signal2_btn, Button.PressedSignal, .fromClosure(self, &emitSignal2));
-    godot.connect(signal3_btn, Button.PressedSignal, .fromClosure(self, &emitSignal3));
-    godot.connect(self.base, Signal1, .fromClosure(self, &onSignal1));
-    godot.connect(self.base, Signal2, .fromClosure(self, &onSignal2));
-    godot.connect(self.base, Signal3, .fromClosure(self, &onSignal3));
+    signal1_btn.connect(Button.PressedSignal, .fromClosure(self, &emitSignal1)) catch {};
+    signal2_btn.connect(Button.PressedSignal, .fromClosure(self, &emitSignal2)) catch {};
+    signal3_btn.connect(Button.PressedSignal, .fromClosure(self, &emitSignal3)) catch {};
+    self.base.connect(Signal1, .fromClosure(self, &onSignal1)) catch {};
+    self.base.connect(Signal2, .fromClosure(self, &onSignal2)) catch {};
+    self.base.connect(Signal3, .fromClosure(self, &onSignal3)) catch {};
 }
 
 pub fn _exitTree(self: *Self) void {
@@ -81,13 +81,16 @@ pub fn onSignal3(self: *Self) void {
 }
 
 pub fn emitSignal1(self: *Self) void {
-    _ = self.base.emitSignal(.fromComptimeLatin1("signal1"), .{ StringName.fromComptimeLatin1("test_signal_name"), Vector3.initXYZ(123, 321, 333) });
+    self.base.emit(Signal1{
+        .name = .fromLatin1("test_signal_name"),
+        .position = .initXYZ(123, 321, 333),
+    }) catch {};
 }
 pub fn emitSignal2(self: *Self) void {
-    _ = self.base.emitSignal(.fromComptimeLatin1("signal2"), .{});
+    self.base.emit(Signal2{}) catch {};
 }
 pub fn emitSignal3(self: *Self) void {
-    _ = self.base.emitSignal(.fromComptimeLatin1("signal3"), .{});
+    self.base.emit(Signal3{}) catch {};
 }
 
 const std = @import("std");

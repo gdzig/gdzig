@@ -116,9 +116,9 @@ pub fn _enterTree(self: *ExampleNode) void {
     var timer = self.base.getTree().?.createTimer(1.0, .{}).?;
     defer if (timer.unreference()) timer.destroy();
 
-    godot.connect(timer, SceneTreeTimer.TimeoutSignal, .fromClosure(self, &onTimeout));
-    godot.connect(sp, HSplitContainer.ResizedSignal, .fromClosure(self, &onResized));
-    godot.connect(itemList, ItemList.ItemSelectedSignal, .fromClosure(self, &onItemFocused));
+    timer.connect(SceneTreeTimer.TimeoutSignal, .fromClosure(self, &onTimeout)) catch {};
+    sp.connect(HSplitContainer.ResizedSignal, .fromClosure(self, &onResized)) catch {};
+    itemList.connect(ItemList.ItemSelectedSignal, .fromClosure(self, &onItemFocused)) catch {};
 
     self.panel = PanelContainer.init();
     self.panel.setHSizeFlags(.{ .size_fill = true });

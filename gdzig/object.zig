@@ -1,9 +1,3 @@
-pub fn connect(obj: anytype, comptime S: type, callable: Callable) void {
-    // Use a static StringName - no deinit needed since it's comptime
-    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
-    _ = obj.connect(signal_name, callable, .{});
-}
-
 /// Downcast a value to a child type in the class hierarchy. Has some compile time checks, but returns null at runtime if the cast fails.
 ///
 /// Expects pointer types, e.g `*Node` or `*MyClass`, not `Node` or `MyClass`.
