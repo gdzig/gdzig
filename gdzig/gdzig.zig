@@ -24,8 +24,58 @@
 //! - `support` - Method binding and constructor utilities
 //!
 
+pub const c = @import("gdextension");
+pub const builtin = @import("builtin.zig");
+pub const class = @import("class.zig");
+pub const general = @import("general.zig");
+pub const global = @import("global.zig");
+pub const heap = @import("heap.zig");
+pub const Interface = @import("Interface.zig");
+pub const math = @import("math.zig");
+pub const meta = @import("meta.zig");
+pub const object = @import("object.zig");
+pub const random = @import("random.zig");
+
+const register = @import("register.zig");
+pub const InitializationLevel = register.InitializationLevel;
+pub const registerClass = register.registerClass;
+pub const registerExtension = register.registerExtension;
+pub const registerMethod = register.registerMethod;
+pub const registerSignal = register.registerSignal;
+
+pub const string = @import("string.zig");
+pub const support = @import("support.zig");
+
+/// The C FFI GDExtension API, initialized during extension initialization.
+pub var raw: Interface = undefined;
+
 /// The current running version of Godot, initialized during extension initialization.
 pub var version: Version = undefined;
+
+pub const CallError = error{
+    InvalidMethod,
+    InvalidArgument,
+    TooManyArguments,
+    TooFewArguments,
+    InstanceIsNull,
+    MethodNotConst,
+};
+
+pub const ConnectError = error{
+    AlreadyConnected,
+};
+
+pub const EmitError = error{
+    InvalidSignal,
+    SignalsBlocked,
+    MethodNotFound,
+};
+
+pub const PropertyError = error{
+    InvalidOperation,
+    InvalidKey,
+    IndexOutOfBounds,
+};
 
 pub const Version = extern struct {
     major: u32,
@@ -102,56 +152,4 @@ test {
     std.testing.refAllDecls(@This());
 }
 
-/// TODO: make this private once API is ready
-pub var interface: *Interface = &raw;
-pub var raw: Interface = undefined;
-
-pub const CallError = error{
-    InvalidMethod,
-    InvalidArgument,
-    TooManyArguments,
-    TooFewArguments,
-    InstanceIsNull,
-    MethodNotConst,
-};
-
-pub const PropertyError = error{
-    InvalidOperation,
-    InvalidKey,
-    IndexOutOfBounds,
-};
-
-pub const ConnectError = error{
-    AlreadyConnected,
-};
-
-pub const EmitError = error{
-    InvalidSignal,
-    SignalsBlocked,
-    MethodNotFound,
-};
-
 const std = @import("std");
-
-pub const c = @import("gdextension");
-
-pub const builtin = @import("builtin.zig");
-pub const class = @import("class.zig");
-pub const general = @import("general.zig");
-pub const global = @import("global.zig");
-pub const heap = @import("heap.zig");
-pub const Interface = @import("Interface.zig");
-pub const math = @import("math.zig");
-pub const meta = @import("meta.zig");
-pub const object = @import("object.zig");
-pub const random = @import("random.zig");
-
-const register = @import("register.zig");
-pub const InitializationLevel = register.InitializationLevel;
-pub const registerClass = register.registerClass;
-pub const registerExtension = register.registerExtension;
-pub const registerMethod = register.registerMethod;
-pub const registerSignal = register.registerSignal;
-
-pub const string = @import("string.zig");
-pub const support = @import("support.zig");

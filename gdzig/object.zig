@@ -22,14 +22,14 @@ pub fn downcast(comptime T: type, value: anytype) blk: {
     }
 
     const name: StringName = .fromComptimeLatin1(meta.typeShortName(Child(T)));
-    const tag = godot.interface.classdbGetClassTag(@ptrCast(&name));
-    const result = godot.interface.objectCastTo(@ptrCast(value), tag);
+    const tag = godot.raw.classdbGetClassTag(@ptrCast(&name));
+    const result = godot.raw.objectCastTo(@ptrCast(value), tag);
 
     if (result) |ptr| {
         if (isOpaqueClassPtr(T)) {
             return @ptrCast(@alignCast(ptr));
         } else {
-            const obj: *anyopaque = godot.interface.objectGetInstanceBinding(ptr, godot.interface.library, null) orelse return null;
+            const obj: *anyopaque = godot.raw.objectGetInstanceBinding(ptr, godot.raw.library, null) orelse return null;
             return @ptrCast(@alignCast(obj));
         }
     } else {
