@@ -105,7 +105,7 @@ pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: 
         var buf: ArrayList(u8) = .empty;
         errdefer buf.deinit(allocator);
 
-        try buf.print(allocator, "{s}{f}", .{ operator_fn_names.get(api.name).?, case_utils.fmtSliceCasePascal(api.right_type) });
+        try buf.print(allocator, "{s}{f}", .{ operator_fn_names.get(api.name).?, common.fmt(gdzig_case.type, api.right_type) });
 
         if (std.mem.endsWith(u8, buf.items, builtin_name)) {
             buf.shrinkAndFree(allocator, buf.items.len - builtin_name.len);
@@ -152,14 +152,14 @@ pub fn fromBuiltinConstructor(allocator: Allocator, builtin_name: []const u8, co
             try buf.appendSlice(allocator, "copy");
             break :blk try buf.toOwnedSlice(allocator);
         } else if (args.len > 0 and std.mem.eql(u8, "from", args[0].name)) {
-            try buf.print(allocator, "from{f}", .{case_utils.fmtSliceCasePascal(args[0].type)});
+            try buf.print(allocator, "from{f}", .{common.fmt(gdzig_case.type, args[0].type)});
             args = args[1..];
         } else {
             try buf.appendSlice(allocator, "init");
         }
 
         for (args) |arg| {
-            try buf.print(allocator, "{f}", .{case_utils.fmtSliceCasePascal(arg.name)});
+            try buf.print(allocator, "{f}", .{common.fmt(gdzig_case.type, arg.name)});
         }
 
         break :blk try buf.toOwnedSlice(allocator);
@@ -185,7 +185,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         .current_class = builtin_name,
         .verbosity = ctx.config.verbosity,
     }) else null;
-    self.name = try case.allocTo(allocator, .camel, api.name);
+    self.name = try casez.allocConvert(gdzig_case.method, allocator, api.name);
     self.name_api = api.name;
     self.hash = api.hash;
     self.self = if (api.is_static)
@@ -253,7 +253,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { Mi
 
     var function: Function = .{ .skip = true };
     function.name = try allocator.dupe(u8, fn_name);
-    function.name_api = try case.allocTo(allocator, .snake, fn_name);
+    function.name_api = try casez.allocConvert(godot_case.method, allocator, fn_name);
 
     for (proto.ast.params) |param_index| {
         const param_node = ast.nodes.get(@intFromEnum(param_index));
@@ -295,14 +295,14 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     }) else null;
     self.name = blk: {
         if (!api.is_virtual) {
-            break :blk try case.allocTo(allocator, .camel, api.name);
+            break :blk try casez.allocConvert(gdzig_case.method, allocator, api.name);
         }
 
         // Strip the underscore prefix, camelize the rest, then reapply the underscore prefix
         var buf: ArrayList(u8) = try .initCapacity(allocator, api.name.len);
         errdefer buf.deinit(allocator);
 
-        try buf.print(allocator, "_{f}", .{case_utils.fmtSliceCaseCamel(api.name[1..])});
+        try buf.print(allocator, "_{f}", .{common.fmt(gdzig_case.method, api.name[1..])});
 
         break :blk try buf.toOwnedSlice(allocator);
     };
@@ -361,7 +361,7 @@ pub fn fromClassGetter(allocator: Allocator, class_name: []const u8, name: []con
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try case.allocTo(allocator, .camel, name);
+    self.name = try casez.allocConvert(gdzig_case.method, allocator, name);
     self.name_api = name;
     self.base = class_name;
     self.self = if (is_singleton) .singleton else .{ .constant = class_name };
@@ -376,7 +376,7 @@ pub fn fromClassSetter(allocator: Allocator, class_name: []const u8, is_singleto
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try case.allocTo(allocator, .camel, name);
+    self.name = try casez.allocConvert(gdzig_case.method, allocator, name);
     self.name_api = name;
     self.base = class_name;
     self.self = if (is_singleton) .singleton else .{ .mutable = class_name };
@@ -398,7 +398,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     self.doc = if (function.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
         .verbosity = ctx.config.verbosity,
     }) else null;
-    self.name = try case.allocTo(allocator, .camel, function.name);
+    self.name = try casez.allocConvert(gdzig_case.method, allocator, function.name);
     self.name_api = function.name;
     self.hash = function.hash;
     self.self = .static;
@@ -462,8 +462,8 @@ pub const Parameter = struct {
 
     pub fn fromNameType(allocator: Allocator, api_name: []const u8, api_type: []const u8, is_meta: bool, ctx: *const Context, opt: Options) !Parameter {
         const name = switch (opt.name_style) {
-            .none => try std.fmt.allocPrint(allocator, "{f}", .{case_utils.fmtSliceCaseSnake(api_name)}),
-            .prefixed => try std.fmt.allocPrint(allocator, "p_{f}", .{case_utils.fmtSliceCaseSnake(api_name)}),
+            .none => try std.fmt.allocPrint(allocator, "{f}", .{common.fmt(gdzig_case.file, api_name)}),
+            .prefixed => try std.fmt.allocPrint(allocator, "p_{f}", .{common.fmt(gdzig_case.file, api_name)}),
         };
         errdefer allocator.free(name);
 
@@ -521,10 +521,12 @@ const Ast = std.zig.Ast;
 const Node = Ast.Node;
 const NodeIndex = Node.Index;
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
+const godot_case = common.godot_case;
 const TempDir = @import("temp").TempDir;
 
-const case_utils = @import("../case_utils.zig");
 const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;

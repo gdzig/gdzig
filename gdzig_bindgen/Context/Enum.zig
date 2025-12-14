@@ -10,9 +10,9 @@ pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Enum) !Enum {
     var self: Enum = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try allocator.dupe(u8, api.name);
+    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
     self.name_api = api.name;
-    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
 
     for (api.values) |value| {
         try self.values.put(allocator, value.name, try .init(allocator, value.description, value.name, value.value));
@@ -25,9 +25,9 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
     var self: Enum = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try allocator.dupe(u8, api.name);
+    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
     self.name_api = api.name;
-    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
 
     for (api.values) |value| {
         const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
@@ -44,9 +44,9 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     var self: Enum = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try allocator.dupe(u8, api.name);
+    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
     self.name_api = api.name;
-    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
 
     for (api.values) |value| {
         const desc = if (value.description) |d| try docs.convertDocsToMarkdown(allocator, d, ctx, .{
@@ -82,7 +82,7 @@ pub const Value = struct {
         errdefer self.deinit(allocator);
 
         self.doc = if (doc) |d| try allocator.dupe(u8, d) else null;
-        self.name = try case.allocTo(allocator, .snake, name);
+        self.name = try casez.allocConvert(gdzig_case.file, allocator, name);
         self.value = value;
 
         return self;
@@ -101,7 +101,9 @@ const Allocator = std.mem.Allocator;
 const StringHashMap = std.StringHashMapUnmanaged;
 const Context = @import("../Context.zig");
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
 
 const GodotApi = @import("../GodotApi.zig");
 const docs = @import("docs.zig");

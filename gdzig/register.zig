@@ -263,7 +263,7 @@ fn makeClassCallbacks(comptime T: type) struct {
                 gdzig.class.Object.NOTIFICATION_PREDELETE,
                 gdzig.class.Node.NOTIFICATION_EXIT_TREE,
                 gdzig.class.CanvasItem.NOTIFICATION_EXIT_CANVAS,
-                gdzig.class.Node3D.NOTIFICATION_EXIT_WORLD,
+                gdzig.class.Node3d.NOTIFICATION_EXIT_WORLD,
                 gdzig.class.Control.NOTIFICATION_FOCUS_EXIT,
                 => true,
                 else => false,
@@ -569,8 +569,8 @@ const gdzig = @import("gdzig");
 const meta = @import("meta.zig");
 const string = gdzig.string;
 const class = gdzig.class;
-const classdb = gdzig.class.ClassDB;
-const ClassInfo4 = gdzig.class.ClassDB.ClassInfo4;
+const classdb = gdzig.class.ClassDb;
+const ClassInfo4 = gdzig.class.ClassDb.ClassInfo4;
 const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;

@@ -139,7 +139,7 @@ pub const Variant = extern struct {
 
         pub fn forType(comptime T: type) Tag {
             const tag: ?Tag = comptime switch (T) {
-                AABB => .aabb,
+                Aabb => .aabb,
                 Array => .array,
                 Basis => .basis,
                 bool => .bool,
@@ -165,12 +165,12 @@ pub const Variant = extern struct {
                 Quaternion => .quaternion,
                 Rect2 => .rect2,
                 Rect2i => .rect2i,
-                RID => .rid,
+                Rid => .rid,
                 Signal => .signal,
                 String => .string,
                 StringName => .string_name,
-                Transform2D => .transform2d,
-                Transform3D => .transform3d,
+                Transform2d => .transform2d,
+                Transform3d => .transform3d,
                 Vector2 => .vector2,
                 Vector2i => .vector2i,
                 Vector3 => .vector3,
@@ -191,7 +191,7 @@ pub const Variant = extern struct {
     };
 
     pub const Data = extern union {
-        aabb: *AABB,
+        aabb: *Aabb,
         array: *Array,
         basis: *Basis,
         bool: bool,
@@ -217,12 +217,12 @@ pub const Variant = extern struct {
         quaternion: Quaternion,
         rect2: Rect2,
         rect2i: Rect2i,
-        rid: RID,
+        rid: Rid,
         signal: Signal,
         string: String,
         string_name: StringName,
-        transform2d: *Transform2D,
-        transform3d: *Transform3D,
+        transform2d: *Transform2d,
+        transform3d: *Transform3d,
         vector2: Vector2,
         vector2i: Vector2i,
         vector3: Vector3,
@@ -290,7 +290,7 @@ inline fn getVariantToTypeConstructor(comptime tag: Variant.Tag) Child(c.GDExten
 
 test "forType" {
     const pairs = .{
-        .{ .aabb, AABB },
+        .{ .aabb, Aabb },
         .{ .array, Array },
         .{ .basis, Basis },
         .{ .callable, Callable },
@@ -310,14 +310,14 @@ test "forType" {
         .{ .plane, Plane },
         .{ .projection, Projection },
         .{ .quaternion, Quaternion },
-        .{ .rid, RID },
+        .{ .rid, Rid },
         .{ .rect2, Rect2 },
         .{ .rect2i, Rect2i },
         .{ .signal, Signal },
         .{ .string, String },
         .{ .string_name, StringName },
-        .{ .transform2d, Transform2D },
-        .{ .transform3d, Transform3D },
+        .{ .transform2d, Transform2d },
+        .{ .transform3d, Transform3d },
         .{ .vector2, Vector2 },
         .{ .vector2i, Vector2i },
         .{ .vector3, Vector3 },
@@ -366,7 +366,7 @@ const c = @import("gdextension");
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
-const AABB = gdzig.builtin.AABB;
+const Aabb = gdzig.builtin.Aabb;
 const Array = gdzig.builtin.Array;
 const Basis = gdzig.builtin.Basis;
 const Callable = gdzig.builtin.Callable;
@@ -387,12 +387,12 @@ const Projection = gdzig.builtin.Projection;
 const Quaternion = gdzig.builtin.Quaternion;
 const Rect2 = gdzig.builtin.Rect2;
 const Rect2i = gdzig.builtin.Rect2i;
-const RID = gdzig.builtin.RID;
+const Rid = gdzig.builtin.Rid;
 const Signal = gdzig.builtin.Signal;
 const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
-const Transform2D = gdzig.builtin.Transform2D;
-const Transform3D = gdzig.builtin.Transform3D;
+const Transform2d = gdzig.builtin.Transform2d;
+const Transform3d = gdzig.builtin.Transform3d;
 const Vector2 = gdzig.builtin.Vector2;
 const Vector2i = gdzig.builtin.Vector2i;
 const Vector3 = gdzig.builtin.Vector3;

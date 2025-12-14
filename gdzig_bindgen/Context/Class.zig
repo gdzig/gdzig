@@ -58,21 +58,17 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         null;
 
     // Name
-    self.name = blk: {
-        // TODO: case conversion
-        // break try case.allocTo(allocator, .pascal, api.name);
-        break :blk try allocator.dupe(u8, api.name);
-    };
+    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
     self.name_api = api.name;
+    self.imports.skip = try allocator.dupe(u8, api.name);
 
-    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
 
     // Base
-    self.base = if (api.inherits) |inherits| blk: {
-        // TODO: case conversion
-        // break try case.allocTo(allocator, .pascal, api.name);
-        break :blk try allocator.dupe(u8, inherits);
-    } else null;
+    self.base = if (api.inherits) |inherits|
+        try casez.allocConvert(gdzig_case.type, allocator, inherits)
+    else
+        null;
     self.base_api = api.inherits;
 
     // Meta
@@ -222,7 +218,7 @@ pub fn deinit(self: *Class, allocator: Allocator) void {
 }
 
 pub fn getBasePtr(self: *const Class, ctx: *const Context) ?*Class {
-    return if (self.base) |base| ctx.classes.getPtr(base) else null;
+    return if (self.base_api) |base_api| ctx.classes.getPtr(base_api) else null;
 }
 
 pub fn getNearestSingleton(self: *const Class, ctx: *const Context) ?*const Class {
@@ -238,7 +234,9 @@ const Allocator = std.mem.Allocator;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const ArrayList = std.ArrayListUnmanaged;
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;

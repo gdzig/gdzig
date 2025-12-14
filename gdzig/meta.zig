@@ -12,10 +12,12 @@ pub fn signalName(comptime S: type) [:0]const u8 {
     if (comptime std.mem.endsWith(u8, signal_type, "Signal")) {
         signal_type = comptime signal_type[0 .. signal_type.len - "Signal".len];
     }
-    const signal_type_snake = comptime case.comptimeTo(.snake, signal_type) catch unreachable;
+    const signal_type_snake = comptime casez.comptimeConvert(godot_case.signal, signal_type);
     return comptime std.fmt.comptimePrint("{s}", .{signal_type_snake});
 }
 
 const std = @import("std");
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const godot_case = common.godot_case;

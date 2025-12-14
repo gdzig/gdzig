@@ -16,7 +16,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
     errdefer self.deinit(allocator);
 
     self.name = name: {
-        const name = try case.allocTo(allocator, .snake, api.name);
+        const name = try casez.allocConvert(gdzig_case.file, allocator, api.name);
         if (builtin.methods.contains(name)) {
             const n = try std.fmt.allocPrint(allocator, "{s}_", .{name});
             std.debug.assert(!builtin.methods.contains(n));
@@ -104,7 +104,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?Constant {
 
     const name_token = var_decl.ast.mut_token + 1;
     const name = ast.tokenSlice(name_token);
-    const name_api = try case.allocTo(allocator, .constant, name);
+    const name_api = try casez.allocConvert(gdzig_case.constant, allocator, name);
 
     return .{
         .skip = true,
@@ -144,7 +144,9 @@ const Ast = std.zig.Ast;
 const NodeIndex = Ast.Node.Index;
 const build_options = @import("build_options");
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
 
 const Context = @import("../Context.zig");
 const Type = Context.Type;

@@ -574,7 +574,7 @@ fn wrapUnreference(comptime T: type, comptime callback: Unreference(T)) Child(c.
 // @ref GDExtensionClassGetRID
 // @since 4.1 (removed in 4.4)
 pub fn GetRID(comptime T: type) type {
-    return fn (self: *T) RID;
+    return fn (self: *T) Rid;
 }
 
 // @ref GDExtensionClassGetRID
@@ -1267,7 +1267,7 @@ const PropertyError = gdzig.PropertyError;
 const MethodFlags = gdzig.global.MethodFlags;
 const PropertyHint = gdzig.global.PropertyHint;
 const PropertyUsageFlags = gdzig.global.PropertyUsageFlags;
-const RID = gdzig.builtin.RID;
+const Rid = gdzig.builtin.Rid;
 
 // @mixin stop
 

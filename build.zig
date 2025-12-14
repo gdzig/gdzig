@@ -37,7 +37,7 @@ pub fn build(b: *Build) void {
     //
 
     const bbcodez = b.dependency("bbcodez", .{});
-    const case = b.dependency("case", .{});
+    const casez = b.dependency("casez", .{});
     const oopz = b.dependency("oopz", .{});
     const temp = b.dependency("temp", .{});
 
@@ -62,6 +62,19 @@ pub fn build(b: *Build) void {
     });
 
     //
+    // Common
+    //
+
+    const gdzig_common_mod = b.addModule("common", .{
+        .root_source_file = b.path("gdzig_common/gdzig_common.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "casez", .module = casez.module("casez") },
+        },
+    });
+
+    //
     // Bindgen
     //
 
@@ -78,8 +91,9 @@ pub fn build(b: *Build) void {
         .imports = &.{
             .{ .name = "bbcodez", .module = bbcodez.module("bbcodez") },
             .{ .name = "build_options", .module = bindgen_options.createModule() },
-            .{ .name = "case", .module = case.module("case") },
+            .{ .name = "casez", .module = casez.module("casez") },
             .{ .name = "gdextension", .module = gdextension_mod },
+            .{ .name = "common", .module = gdzig_common_mod },
             .{ .name = "temp", .module = temp.module("temp") },
         },
     });
@@ -136,8 +150,9 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "build_options", .module = gdzig_options.createModule() },
-            .{ .name = "case", .module = case.module("case") },
+            .{ .name = "casez", .module = casez.module("casez") },
             .{ .name = "gdextension", .module = gdextension_mod },
+            .{ .name = "common", .module = gdzig_common_mod },
             .{ .name = "oopz", .module = oopz.module("oopz") },
         },
     });

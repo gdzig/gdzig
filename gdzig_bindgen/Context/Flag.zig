@@ -13,9 +13,9 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     var self: Flag = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try allocator.dupe(u8, api.name);
+    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
     self.name_api = api.name;
-    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
 
     var default: i64 = 0;
     var position: u8 = 0;
@@ -91,7 +91,7 @@ pub const Field = struct {
         }) else null;
         errdefer allocator.free(doc orelse "");
 
-        const name = try case.allocTo(allocator, .snake, api.name);
+        const name = try casez.allocConvert(gdzig_case.file, allocator, api.name);
         errdefer allocator.free(name);
 
         return Field{
@@ -121,7 +121,7 @@ pub const Const = struct {
         }) else null;
         errdefer allocator.free(doc orelse "");
 
-        const name = try case.allocTo(allocator, .snake, api.name);
+        const name = try casez.allocConvert(gdzig_case.file, allocator, api.name);
         errdefer allocator.free(name);
 
         return Const{
@@ -144,7 +144,9 @@ const Allocator = std.mem.Allocator;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Context = @import("../Context.zig");
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
 
 const GodotApi = @import("../GodotApi.zig");
 const docs = @import("docs.zig");

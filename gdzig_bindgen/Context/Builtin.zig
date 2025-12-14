@@ -24,12 +24,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
     const size_config = ctx.builtin_sizes.get(api.name).?;
 
-    self.name = blk: {
-        // TODO: case conversion
-        // break try case.allocTo(allocator, .pascal, api.name);
-        break :blk try allocator.dupe(u8, api.name);
-    };
-    self.module = try case.allocTo(allocator, .snake, self.name);
+    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
+    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
     self.name_api = api.name;
     self.size = size_config.size;
     self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
@@ -38,7 +34,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     self.has_destructor = api.has_destructor;
 
     for (api.constructors) |constructor| {
-        const function = try Function.fromBuiltinConstructor(allocator, self.name, constructor, ctx);
+        const function = try Function.fromBuiltinConstructor(allocator, self.name_api, constructor, ctx);
         try self.constructors.put(allocator, function.name, function);
     }
 
@@ -135,7 +131,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 }
 
 pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs.Dir) !void {
-    const mixin_file_path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name});
+    const mixin_file_path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name_api});
     defer allocator.free(mixin_file_path);
 
     const file = input_dir.openFile(mixin_file_path, .{}) catch |err| {
@@ -245,7 +241,9 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Ast = std.zig.Ast;
 const Node = Ast.Node;
 
-const case = @import("case");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;

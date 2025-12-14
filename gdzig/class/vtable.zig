@@ -13,8 +13,8 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
             var idx: usize = 0;
             for (method_names) |method_name| {
                 if (findMethod(method_name)) |wrapper| {
-                    // Convert camelCase method name to snake_case for lookup key
-                    kvs[idx] = .{ toSnakeCase(method_name), wrapper };
+                    // Convert _camelCase method name to _snake_case for lookup key
+                    kvs[idx] = .{ casez.comptimeConvert(godot_case.virtual_method, method_name), wrapper };
                     idx += 1;
                 }
             }
@@ -80,60 +80,6 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                 }
             }
             return null;
-        }
-
-        /// Convert _camelCase to _snake_case at comptime.
-        /// Handles acronyms: consecutive uppercase letters are grouped,
-        /// but the last one starts a new word if followed by lowercase.
-        /// e.g., "_enterTree" -> "_enter_tree"
-        ///       "_getHTTPResponse" -> "_get_http_response"
-        ///       "_parseURLString" -> "_parse_url_string"
-        ///       "_getID" -> "_get_id"
-        fn toSnakeCase(comptime input: []const u8) []const u8 {
-            return comptime &SnakeCaseConverter(input).value;
-        }
-
-        fn SnakeCaseConverter(comptime input: []const u8) type {
-            const len = snakeCaseLen(input);
-            return struct {
-                const value: [len]u8 = blk: {
-                    var result: [len]u8 = undefined;
-                    var j: usize = 0;
-                    for (0..input.len) |i| {
-                        const ch = input[i];
-                        if (ch >= 'A' and ch <= 'Z') {
-                            const prev_lower = i > 0 and input[i - 1] >= 'a' and input[i - 1] <= 'z';
-                            const next_lower = i + 1 < input.len and input[i + 1] >= 'a' and input[i + 1] <= 'z';
-                            const prev_upper = i > 0 and input[i - 1] >= 'A' and input[i - 1] <= 'Z';
-                            if (prev_lower or (prev_upper and next_lower)) {
-                                result[j] = '_';
-                                j += 1;
-                            }
-                            result[j] = ch - 'A' + 'a';
-                        } else {
-                            result[j] = ch;
-                        }
-                        j += 1;
-                    }
-                    break :blk result;
-                };
-            };
-        }
-
-        fn snakeCaseLen(comptime input: []const u8) usize {
-            var extra: usize = 0;
-            for (0..input.len) |i| {
-                const ch = input[i];
-                if (ch >= 'A' and ch <= 'Z') {
-                    const prev_lower = i > 0 and input[i - 1] >= 'a' and input[i - 1] <= 'z';
-                    const next_lower = i + 1 < input.len and input[i + 1] >= 'a' and input[i + 1] <= 'z';
-                    const prev_upper = i > 0 and input[i - 1] >= 'A' and input[i - 1] <= 'Z';
-                    if (prev_lower or (prev_upper and next_lower)) {
-                        extra += 1;
-                    }
-                }
-            }
-            return input.len + extra;
         }
 
         pub fn has(name: []const u8) bool {
@@ -236,5 +182,8 @@ test "VTable extend combines method names" {
 const std = @import("std");
 
 const c = @import("gdextension");
+const casez = @import("casez");
 const gdzig = @import("gdzig");
+const common = @import("common");
+const godot_case = common.godot_case;
 const class = gdzig.class;

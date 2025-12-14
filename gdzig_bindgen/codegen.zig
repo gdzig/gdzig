@@ -90,7 +90,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     } else if (builtin.fields.count() > 0) {
         for (builtin.fields.values()) |*field| {
             if (field.offset != null) {
-                try writeField(w, field);
+                try writeField(w, field, ctx);
             }
         }
     }
@@ -99,7 +99,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     for (builtin.constants.values()) |*constant| {
         if (constant.skip) continue;
 
-        try writeConstant(w, constant);
+        try writeConstant(w, constant, ctx);
     }
 
     if (builtin.constants.count() > 0) {
@@ -191,7 +191,7 @@ fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor
             builtin_name,
         });
     }
-    try writeFunctionFooter(w, constructor);
+    try writeFunctionFooter(w, constructor, ctx);
     if (!constructor.can_init_directly) {
         try w.printLine(
             \\var {0s}_ptr: c.GDExtensionPtrConstructor = null;
@@ -234,7 +234,7 @@ fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const C
             .value => "@ptrCast(@constCast(&self))",
         },
     });
-    try writeFunctionFooter(w, method);
+    try writeFunctionFooter(w, method, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrBuiltInMethod = null;
     , .{method.name});
@@ -251,7 +251,7 @@ fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *con
     w.indent += 1;
     if (operator.parameters.getPtr("rhs")) |rhs| {
         try w.writeAll(" @intFromEnum(Variant.Tag.forType(");
-        try writeTypeAtField(w, &rhs.type);
+        try writeTypeAtField(w, &rhs.type, ctx);
         try w.writeAll("))");
     } else {
         try w.writeAll(" null");
@@ -275,7 +275,7 @@ fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *con
     w.indent -= 1;
     try w.writeLine(");");
 
-    try writeFunctionFooter(w, operator);
+    try writeFunctionFooter(w, operator, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrOperatorEvaluator = null;
     , .{operator.name});
@@ -356,7 +356,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     for (class.constants.values()) |*constant| {
         if (constant.skip) continue;
 
-        try writeConstant(w, constant);
+        try writeConstant(w, constant, ctx);
     }
     if (class.constants.count() > 0) {
         try w.writeLine("");
@@ -364,7 +364,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Signals
     for (class.signals.values()) |*signal| {
-        try writeSignal(w, signal);
+        try writeSignal(w, signal, ctx);
         try w.writeLine("");
     }
 
@@ -429,7 +429,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     try writeImports(w, &class.imports, ctx);
 }
 
-fn writeSignal(w: *CodeWriter, signal: *const Context.Signal) !void {
+fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, ctx: *const Context) !void {
     try writeDocBlock(w, signal.doc);
     try w.print("pub const {s} = struct {{", .{signal.struct_name});
 
@@ -442,7 +442,7 @@ fn writeSignal(w: *CodeWriter, signal: *const Context.Signal) !void {
             }
             try w.print("{s}: ", .{param.name});
             try w.writeAll("?");
-            try writeTypeAtOptionalParameterField(w, &param.type);
+            try writeTypeAtOptionalParameterField(w, &param.type, ctx);
             try w.writeAll(" = null");
             is_first = false;
         }
@@ -496,7 +496,7 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
         });
     }
 
-    try writeFunctionFooter(w, function);
+    try writeFunctionFooter(w, function, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionMethodBindPtr = null;
     , .{function.name});
@@ -552,10 +552,10 @@ fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *
     // the method implementations, so we only need to list the method names.
 }
 
-fn writeConstant(w: *CodeWriter, constant: *const Context.Constant) !void {
+fn writeConstant(w: *CodeWriter, constant: *const Context.Constant, ctx: *const Context) !void {
     try writeDocBlock(w, constant.doc);
     try w.print("pub const {s}: ", .{constant.name});
-    try writeTypeAtField(w, &constant.type);
+    try writeTypeAtField(w, &constant.type, ctx);
     try w.printLine(" = {s};", .{constant.value});
 }
 
@@ -647,10 +647,10 @@ fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) 
     try w.writeLine("};");
 }
 
-fn writeField(w: *CodeWriter, field: *const Context.Field) !void {
+fn writeField(w: *CodeWriter, field: *const Context.Field, ctx: *const Context) !void {
     try writeDocBlock(w, field.doc);
     try w.print("{s}: ", .{field.name});
-    try writeTypeAtField(w, &field.type);
+    try writeTypeAtField(w, &field.type, ctx);
     try w.writeLine(
         \\,
         \\
@@ -701,16 +701,20 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
     // Self parameter
     switch (function.self) {
         .static, .singleton => {},
-        .constant => |self| {
-            try w.print("self: *const {0s}", .{self});
+        .constant => |api_name| {
+            // Look up the converted name for the self type
+            const name = if (ctx.classes.get(api_name)) |c| c.name else if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.print("self: *const {0s}", .{name});
             is_first = false;
         },
-        .mutable => |self| {
-            try w.print("self: *{0s}", .{self});
+        .mutable => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.print("self: *{0s}", .{name});
             is_first = false;
         },
-        .value => |self| {
-            try w.print("self: {0s}", .{self});
+        .value => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.print("self: {0s}", .{name});
             is_first = false;
         },
     }
@@ -726,7 +730,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             try w.writeAll(", ");
         }
         try w.print("{s}: ", .{param.name});
-        try writeTypeAtParameter(w, &param.type);
+        try writeTypeAtParameter(w, &param.type, ctx);
         is_first = false;
     }
 
@@ -756,13 +760,13 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             if (param.needsRuntimeInit(ctx)) {
                 // Use nullable type with null default for runtime-init params
                 try w.writeAll("?");
-                try writeTypeAtOptionalParameterField(w, &param.type);
+                try writeTypeAtOptionalParameterField(w, &param.type, ctx);
                 try w.writeAll(" = null");
             } else {
                 if (param.default.?.isNullable()) {
                     try w.writeAll("?");
                 }
-                try writeTypeAtOptionalParameterField(w, &param.type);
+                try writeTypeAtOptionalParameterField(w, &param.type, ctx);
                 try w.writeAll(" = ");
                 try writeValue(w, param.default.?, ctx);
             }
@@ -774,7 +778,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
 
     // Return type
     try w.writeAll(") ");
-    try writeTypeAtReturn(w, &function.return_type);
+    try writeTypeAtReturn(w, &function.return_type, ctx);
     try w.writeLine(" {");
     w.indent += 1;
 
@@ -838,7 +842,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             if (function.return_type == .class) {
                 try w.writeLine("?*anyopaque = null;");
             } else {
-                try writeTypeAtReturn(w, &function.return_type);
+                try writeTypeAtReturn(w, &function.return_type, ctx);
                 const return_type_initializer = function.return_type.getDefaultInitializer(ctx);
 
                 if (function.can_init_directly) {
@@ -847,7 +851,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
                     try w.printLine(" = {s};", .{return_type_initializer.?});
                 } else {
                     try w.writeAll(" = std.mem.zeroes(");
-                    try writeTypeAtReturn(w, &function.return_type);
+                    try writeTypeAtReturn(w, &function.return_type, ctx);
                     try w.writeLine(");");
                 }
             }
@@ -883,7 +887,7 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
     }
 }
 
-fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function) !void {
+fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
     switch (function.return_type) {
         // Class functions need to cast an object pointer
         .class => {
@@ -905,7 +909,7 @@ fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function) !void 
         // Vararg and operator functions cast to the return type, fixed arity return directly.
         else => if (function.is_vararg) {
             try w.writeAll("return result.as(");
-            try writeTypeAtReturn(w, &function.return_type);
+            try writeTypeAtReturn(w, &function.return_type, ctx);
             try w.writeLine(").?;");
         } else {
             try w.writeLine(
@@ -949,6 +953,11 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Con
     while (iter.next()) |import| {
         if (util.isBuiltinType(import.*)) continue;
 
+        // Skip the current type being defined (via imports.skip)
+        if (imports.skip) |skip| {
+            if (std.mem.eql(u8, import.*, skip)) continue;
+        }
+
         if (std.mem.eql(u8, import.*, "Variant")) {
             try builtins.append(allocator, import.*);
         } else if (ctx.builtins.contains(import.*)) {
@@ -978,13 +987,17 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Con
     std.mem.sort([]const u8, globals.items, {}, sortFn);
 
     // Write sorted imports (builtins, classes, globals all together under gdzig)
-    for (builtins.items) |name| {
+    // Note: import lists contain API names, but we need to use converted names
+    for (builtins.items) |api_name| {
+        const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
         try w.printLine("const {0s} = gdzig.builtin.{0s};", .{name});
     }
-    for (classes.items) |name| {
+    for (classes.items) |api_name| {
+        const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
         try w.printLine("const {0s} = gdzig.class.{0s};", .{name});
     }
-    for (globals.items) |name| {
+    for (globals.items) |api_name| {
+        const name = if (ctx.enums.get(api_name)) |e| e.name else if (ctx.flags.get(api_name)) |f| f.name else api_name;
         try w.printLine("const {0s} = gdzig.global.{0s};", .{name});
     }
 }
@@ -997,8 +1010,8 @@ fn writeClassMixins(w: *CodeWriter, class: *const Context.Class, ctx: *const Con
     if (class.getBasePtr(ctx)) |parent| {
         try writeClassMixins(w, parent, ctx);
     }
-    // Then write this class's mixin
-    try writeMixin(w, "class/{s}.mixin.zig", .{class.name}, ctx);
+    // Then write this class's mixin (mixin files use API names)
+    try writeMixin(w, "class/{s}.mixin.zig", .{class.name_api}, ctx);
 }
 
 fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {
@@ -1183,85 +1196,170 @@ fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *
         function.hash.?,
         if (function.return_type != .void) "@ptrCast(&result)" else "null",
     });
-    try writeFunctionFooter(w, function);
+    try writeFunctionFooter(w, function, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrUtilityFunction = null;
         \\
     , .{function.name});
 }
 
-fn writeTypeAtField(w: *CodeWriter, @"type": *const Context.Type) !void {
+/// Converts a possibly qualified type name (e.g., "AStarGrid2D.CellShape") to use converted class prefixes.
+/// For qualified names, splits on "." and converts the class prefix.
+/// For simple names, looks them up in the appropriate ctx map (enums or flags).
+fn convertQualifiedName(api_name: []const u8, ctx: *const Context, comptime map_type: enum { enums, flags }) []const u8 {
+    // Check if it's a qualified name (contains a dot)
+    if (std.mem.indexOf(u8, api_name, ".")) |dot_idx| {
+        const class_api_name = api_name[0..dot_idx];
+        const enum_name = api_name[dot_idx..]; // includes the dot
+        // Look up the class to get its converted name
+        if (ctx.classes.get(class_api_name)) |class| {
+            // Return converted class name + original enum/flag suffix
+            // We need to allocate, but can use the arena
+            return std.fmt.allocPrint(ctx.arena.allocator(), "{s}{s}", .{ class.name, enum_name }) catch api_name;
+        }
+        // Fallback to original if class not found
+        return api_name;
+    }
+
+    // Not qualified, look up in the appropriate map
+    return switch (map_type) {
+        .enums => if (ctx.enums.get(api_name)) |e| e.name else api_name,
+        .flags => if (ctx.flags.get(api_name)) |f| f.name else api_name,
+    };
+}
+
+fn writeTypeAtField(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
-        .class => |name| try w.print("*{0s}", .{name}),
+        .class => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            try w.print("*{0s}", .{name});
+        },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try writeTypeAtField(w, child, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
         .@"union" => @panic("cannot format a union types in a struct field position"),
         .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
+        .basic => |api_name| {
+            const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.writeAll(name);
+        },
+        .@"enum" => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .enums);
+            try w.writeAll(name);
+        },
+        .flag => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .flags);
+            try w.writeAll(name);
+        },
         inline else => |s| try w.writeAll(s),
     }
 }
 
-fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type) !void {
+fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
-        .class => |name| try w.print("?*{0s}", .{name}),
+        .class => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            try w.print("?*{0s}", .{name});
+        },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try writeTypeAtField(w, child, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
         .@"union" => @panic("cannot format a union type in a return position"),
         .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
+        .basic => |api_name| {
+            const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.writeAll(name);
+        },
+        .@"enum" => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .enums);
+            try w.writeAll(name);
+        },
+        .flag => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .flags);
+            try w.writeAll(name);
+        },
         inline else => |s| try w.writeAll(s),
     }
 }
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type) !void {
+fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
-        .class => |name| try w.print("*{0s}", .{name}),
+        .class => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            try w.print("*{0s}", .{name});
+        },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try writeTypeAtField(w, child, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
         .@"union" => @panic("cannot format a union type in a function parameter position"),
         .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
+        .basic => |api_name| {
+            const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.writeAll(name);
+        },
+        .@"enum" => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .enums);
+            try w.writeAll(name);
+        },
+        .flag => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .flags);
+            try w.writeAll(name);
+        },
         inline else => |s| try w.writeAll(s),
     }
 }
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Type) !void {
+fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
-        .class => |name| try w.print("*{0s}", .{name}),
+        .class => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            try w.print("*{0s}", .{name});
+        },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child);
+            try writeTypeAtField(w, child, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
         .@"union" => @panic("cannot format a union type in a function parameter position"),
         .variant => try w.writeAll("Variant"),
         .void => try w.writeAll("void"),
+        .basic => |api_name| {
+            const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.writeAll(name);
+        },
+        .@"enum" => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .enums);
+            try w.writeAll(name);
+        },
+        .flag => |api_name| {
+            const name = convertQualifiedName(api_name, ctx, .flags);
+            try w.writeAll(name);
+        },
         inline else => |s| try w.writeAll(s),
     }
 }

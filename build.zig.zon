@@ -5,9 +5,9 @@
     .minimum_zig_version = "0.15.1",
 
     .dependencies = .{
-        .case = .{
-            .url = "https://github.com/travisstaloch/case/archive/refs/tags/0.15.1.tar.gz",
-            .hash = "case-0.0.1-chGYqx_EAADaGJjmoln5M1iMBDTrMdd8to5wdEVpfXm4",
+        .casez = .{
+            .url = "git+https://github.com/gdzig/casez#68a5b99e6f444e6b0c02dac85a78670cd78e662a",
+            .hash = "casez-0.0.1-aTb4GvmJAAATBmfc8v9i5pgEkxTG3xmvrtapczWATNE-",
         },
         .bbcodez = .{
             .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",

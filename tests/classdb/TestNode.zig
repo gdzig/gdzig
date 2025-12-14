@@ -213,7 +213,7 @@ fn callSetIndexedValue(instance: *TestNode, args: []const *const Variant) godot.
 }
 
 const godot = @import("gdzig");
-const ClassDB = godot.class.ClassDB;
+const ClassDB = godot.class.ClassDb;
 const Node = godot.class.Node;
 const String = godot.builtin.String;
 const StringName = godot.builtin.StringName;

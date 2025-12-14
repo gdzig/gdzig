@@ -34,8 +34,6 @@ modules: StringArrayHashMap(Module) = .empty,
 
 symbol_lookup: StringHashMap(Symbol) = .empty,
 
-const func_case: case.Case = .camel;
-
 const base_type_map = std.StaticStringMap([]const u8).initComptime(.{
     .{ "int", "i64" },
     .{ "int8", "i8" },
@@ -85,14 +83,14 @@ pub fn rawAllocator(self: *const Context) Allocator {
 }
 
 fn collectImports(self: *Context) !void {
-    for (self.api.builtin_classes) |builtin| {
+    for (self.builtins.values()) |*builtin| {
         try self.collectBuiltinImports(builtin);
     }
     for (self.api.classes, 0..) |class, i| {
         try self.class_index.put(self.allocator(), class.name, i);
     }
-    for (self.api.classes) |class| {
-        try self.collectClassImports(self.classes.getPtr(class.name).?);
+    for (self.classes.values()) |*class| {
+        try self.collectClassImports(class);
     }
     for (self.api.utility_functions) |function| {
         try self.collectFunctionImports(function);
@@ -102,48 +100,41 @@ fn collectImports(self: *Context) !void {
     }
 }
 
-fn collectBuiltinImports(self: *Context, builtin: GodotApi.Builtin) !void {
-    if (self.builtin_imports.contains(builtin.name)) return;
+fn collectBuiltinImports(self: *Context, builtin: *Builtin) !void {
+    if (builtin.imports.skip != null) return;
+    builtin.imports.skip = builtin.name_api;
 
-    var imports: Imports = .empty;
-    imports.skip = builtin.name;
-
-    for (builtin.constants orelse &.{}) |constant| {
-        try imports.put(self.allocator(), self.correctType(constant.type, ""));
+    for (builtin.constants.values()) |constant| {
+        try self.typeImport(&builtin.imports, &constant.type);
     }
-    for (builtin.constructors) |constructor| {
-        for (constructor.arguments orelse &.{}) |argument| {
-            try imports.put(self.allocator(), self.correctType(argument.type, ""));
+    for (builtin.constructors.values()) |constructor| {
+        try self.typeImport(&builtin.imports, &constructor.return_type);
+        for (constructor.parameters.values()) |parameter| {
+            try self.typeImport(&builtin.imports, &parameter.type);
         }
     }
-    for (builtin.members orelse &.{}) |member| {
-        try imports.put(self.allocator(), self.correctType(member.type, ""));
+    for (builtin.fields.values()) |field| {
+        try self.typeImport(&builtin.imports, &field.type);
     }
-    for (builtin.methods orelse &.{}) |method| {
-        try imports.put(self.allocator(), self.correctType(method.return_type, ""));
-        for (method.arguments orelse &.{}) |argument| {
-            try imports.put(self.allocator(), self.correctType(argument.type, ""));
+    for (builtin.methods.values()) |method| {
+        try self.typeImport(&builtin.imports, &method.return_type);
+        for (method.parameters.values()) |parameter| {
+            try self.typeImport(&builtin.imports, &parameter.type);
         }
     }
-    for (builtin.operators) |operator| {
-        if (operator.right_type.len > 0) {
-            try imports.put(self.allocator(), self.correctType(operator.right_type, ""));
+    for (builtin.operators.items) |operator| {
+        try self.typeImport(&builtin.imports, &operator.return_type);
+        for (operator.parameters.values()) |parameter| {
+            try self.typeImport(&builtin.imports, &parameter.type);
         }
-        try imports.put(self.allocator(), self.correctType(operator.return_type, ""));
     }
 
-    try imports.put(self.allocator(), "StringName");
-
-    try self.builtin_imports.put(self.allocator(), builtin.name, imports);
-
-    if (self.builtins.getPtr(builtin.name)) |context_builtin| {
-        try context_builtin.imports.merge(self.allocator(), &imports);
-    }
+    try builtin.imports.put(self.allocator(), "StringName");
 }
 
 fn collectClassImports(self: *Context, class: *Class) !void {
     if (class.imports.map.count() > 0) return;
-    class.imports.skip = class.name;
+    class.imports.skip = class.name_api;
 
     for (class.functions.values()) |function| {
         try self.typeImport(&class.imports, &function.return_type);
@@ -165,7 +156,7 @@ fn collectClassImports(self: *Context, class: *Class) !void {
     // Index imports from the parent class hierarchy
     if (class.getBasePtr(self)) |base| {
         try self.collectClassImports(base);
-        try class.imports.put(self.allocator(), base.name);
+        try class.imports.put(self.allocator(), base.name_api);
         try class.imports.merge(self.allocator(), &base.imports);
     }
 }
@@ -315,7 +306,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
             try self.interface.functions.append(self.allocator(), .{
                 .docs = docs,
-                .name = try case.allocTo(self.allocator(), .camel, fn_name.?),
+                .name = try casez.allocConvert(gdzig_case.func, self.allocator(), fn_name.?),
                 .api_name = fn_name.?,
                 .ptr_type = fp_type.?,
             });
@@ -514,7 +505,7 @@ pub fn getZigFuncName(self: *Context, godot_func_name: []const u8) []const u8 {
     const result = self.func_names.getOrPut(self.allocator(), godot_func_name) catch unreachable;
 
     if (!result.found_existing) {
-        result.value_ptr.* = self.correctName(case.allocTo(self.allocator(), func_case, godot_func_name) catch unreachable);
+        result.value_ptr.* = self.correctName(casez.allocConvert(gdzig_case.func, self.allocator(), godot_func_name) catch unreachable);
     }
 
     return result.value_ptr.*;
@@ -522,8 +513,8 @@ pub fn getZigFuncName(self: *Context, godot_func_name: []const u8) []const u8 {
 
 pub fn getVariantTypeName(self: *const Context, class_name: []const u8) []const u8 {
     var buf: [256]u8 = undefined;
-    const nnn = case.bufTo(&buf, .snake, class_name) catch unreachable;
-    return std.fmt.allocPrint(self.arena.allocator(), "godot.c.GDEXTENSION_VARIANT_TYPE_{s}", .{std.ascii.upperString(&buf, nnn)}) catch unreachable;
+    const snake = casez.bufConvert(godot_case.constant, &buf, class_name) orelse unreachable;
+    return std.fmt.allocPrint(self.arena.allocator(), "godot.c.GDEXTENSION_VARIANT_TYPE_{s}", .{snake}) catch unreachable;
 }
 
 pub fn isRefCounted(self: *const Context, type_name: []const u8) bool {
@@ -549,7 +540,7 @@ fn symbolTableClasses(self: *Context, classes: anytype, module: []const u8) !voi
 
         const class_path = try std.fmt.allocPrint(self.allocator(), "{s}.{f}.{s}", .{
             module,
-            case_utils.fmtSliceCaseSnake(class.name),
+            common.fmt(gdzig_case.file, class.name),
             class.name,
         });
         try self.symbol_lookup.putNoClobber(self.allocator(), class.name, .{
@@ -570,12 +561,12 @@ fn symbolTableClasses(self: *Context, classes: anytype, module: []const u8) !voi
             const method_name = try std.fmt.allocPrint(self.allocator(), "{s}.{s}", .{ class.name, method.name });
             const method_path = try std.fmt.allocPrint(self.allocator(), "{s}.{f}", .{
                 class_path,
-                case_utils.fmtSliceCaseCamel(method.name),
+                common.fmt(gdzig_case.method, method.name),
             });
 
             const method_label = try std.fmt.allocPrint(self.allocator(), "{s}.{f}", .{
                 class.name,
-                case_utils.fmtSliceCaseCamel(method.name),
+                common.fmt(gdzig_case.method, method.name),
             });
 
             try self.symbol_lookup.putNoClobber(self.allocator(), method_name, .{
@@ -600,7 +591,7 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
 
         for (self.api.global_enums) |@"enum"| {
             const enum_path = try std.fmt.allocPrint(self.allocator(), "global.{f}.{s}", .{
-                case_utils.fmtSliceCaseSnake(@"enum".name),
+                common.fmt(gdzig_case.file, @"enum".name),
                 @"enum".name,
             });
             try self.symbol_lookup.putNoClobber(self.allocator(), @"enum".name, .{
@@ -611,7 +602,7 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
 
         for (self.api.utility_functions) |function| {
             const function_name = try std.fmt.allocPrint(self.allocator(), "{f}", .{
-                case_utils.fmtSliceCaseCamel(function.name),
+                common.fmt(gdzig_case.method, function.name),
             });
             const function_path = try std.fmt.allocPrint(self.allocator(), "general.{s}", .{
                 function_name,
@@ -642,9 +633,10 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.StringHashMapUnmanaged;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
-const case = @import("case");
-
-const case_utils = @import("case_utils.zig");
+const casez = @import("casez");
+const common = @import("common");
+const gdzig_case = common.gdzig_case;
+const godot_case = common.godot_case;
 const Config = @import("Config.zig");
 pub const Builtin = @import("Context/Builtin.zig");
 pub const Class = @import("Context/Class.zig");
