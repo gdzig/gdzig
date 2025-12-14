@@ -180,17 +180,17 @@ fn callIncrement(instance: *TestNode, _: []const *const Variant) godot.CallError
 }
 
 fn callGetCounter(instance: *TestNode, _: []const *const Variant) godot.CallError!Variant {
-    return Variant.init(instance.getCounter());
+    return Variant.init(i64, instance.getCounter());
 }
 
 fn callAddValue(instance: *TestNode, args: []const *const Variant) godot.CallError!Variant {
     if (args.len < 1) return error.TooFewArguments;
     const value = args[0].as(i64) orelse return error.InvalidArgument;
-    return Variant.init(instance.addValue(value));
+    return Variant.init(i64, instance.addValue(value));
 }
 
 fn callGetMyProperty(instance: *TestNode, _: []const *const Variant) godot.CallError!Variant {
-    return Variant.init(instance.getMyProperty());
+    return Variant.init(i64, instance.getMyProperty());
 }
 
 fn callSetMyProperty(instance: *TestNode, args: []const *const Variant) godot.CallError!Variant {
@@ -203,7 +203,7 @@ fn callSetMyProperty(instance: *TestNode, args: []const *const Variant) godot.Ca
 fn callGetIndexedValue(instance: *TestNode, args: []const *const Variant) godot.CallError!Variant {
     if (args.len < 1) return error.TooFewArguments;
     const index = args[0].as(i64) orelse return error.InvalidArgument;
-    return Variant.init(instance.getIndexedValue(index));
+    return Variant.init(i64, instance.getIndexedValue(index));
 }
 
 fn callSetIndexedValue(instance: *TestNode, args: []const *const Variant) godot.CallError!Variant {

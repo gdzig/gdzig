@@ -86,7 +86,7 @@ pub fn _enterTree(self: *ExampleNode) void {
     const obj = ExampleNode.create(&self.allocator) catch unreachable;
     defer obj.destroy(&self.allocator);
 
-    const variant: Variant = Variant.init(obj);
+    const variant: Variant = .init(*ExampleNode, obj);
     const result = variant.as(*ExampleNode).?;
     _ = result;
 
@@ -194,9 +194,9 @@ pub fn _propertyGetRevert(_: *ExampleNode, name: *const StringName) godot.Proper
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        return Variant.init(Vector3.initXYZ(42, 42, 42));
+        return .init(Vector3, .initXYZ(42, 42, 42));
     } else if (name.casecmpTo(prop2) == 0) {
-        return Variant.init(Vector3.initXYZ(24, 24, 24));
+        return .init(Vector3, .initXYZ(24, 24, 24));
     }
 
     return error.InvalidKey;
@@ -228,9 +228,9 @@ pub fn _get(self: *ExampleNode, name: *const StringName) godot.PropertyError!Var
     defer prop2.deinit();
 
     if (name.casecmpTo(prop1) == 0) {
-        return Variant.init(self.property1);
+        return .init(Vector3, self.property1);
     } else if (name.casecmpTo(prop2) == 0) {
-        return Variant.init(self.property2);
+        return .init(Vector3, self.property2);
     }
 
     return error.InvalidKey;

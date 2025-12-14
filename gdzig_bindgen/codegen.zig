@@ -817,18 +817,24 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
     if (function.is_vararg and function.operator_name == null) {
         try w.printLine("var args: [@\"...\".len + {d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
-            try w.printLine("args[{d}] = &Variant.init(&{s});", .{ i, param.name });
+            try w.print("args[{d}] = &Variant.init(", .{i});
+            try writeTypeAtParameter(w, &param.type, ctx);
+            try w.printLine(", {s});", .{param.name});
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
             if (param.needsRuntimeInit(ctx)) {
-                try w.printLine("args[{d}] = &Variant.init(&actual_{s});", .{ i, param.name });
+                try w.print("args[{d}] = &Variant.init(", .{i});
+                try writeTypeAtParameter(w, &param.type, ctx);
+                try w.printLine(", actual_{s});", .{param.name});
             } else {
-                try w.printLine("args[{d}] = &Variant.init(&opt.{s});", .{ i, param.name });
+                try w.print("args[{d}] = &Variant.init(", .{i});
+                try writeTypeAtParameter(w, &param.type, ctx);
+                try w.printLine(", opt.{s});", .{param.name});
             }
         }
         try w.printLine(
             \\inline for (0..@"...".len) |i| {{
-            \\    args[{d} + i] = &Variant.init(@"..."[i]);
+            \\    args[{d} + i] = &Variant.init(@TypeOf(@"..."[i]), @"..."[i]);
             \\}}
         , .{function.parameters.count()});
     }

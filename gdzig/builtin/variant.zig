@@ -17,9 +17,7 @@ pub const Variant = extern struct {
     tag: Tag align(8),
     data: Data align(8),
 
-    pub fn init(value: anytype) Variant {
-        const T = @TypeOf(value);
-
+    pub fn init(comptime T: type, value: T) Variant {
         const tag = comptime Tag.forType(T);
         const variantFromType = getVariantFromTypeConstructor(tag);
 
@@ -28,22 +26,16 @@ pub const Variant = extern struct {
             variantFromType(@ptrCast(&result), @ptrCast(@constCast(&class.upcast(*Object, value))));
         } else switch (@typeInfo(T)) {
             .pointer => variantFromType(@ptrCast(&result), @ptrCast(@constCast(value))),
-            .comptime_int => {
-                var i: i64 = value;
-                variantFromType(@ptrCast(&result), @ptrCast(@constCast(&i)));
+            else => {
+                var v: T = value;
+                variantFromType(@ptrCast(&result), @ptrCast(&v));
             },
-            .comptime_float => {
-                var f: f64 = value;
-                variantFromType(@ptrCast(&result), @ptrCast(@constCast(&f)));
-            },
-            else => variantFromType(@ptrCast(&result), @ptrCast(@constCast(&value))),
         }
 
         return result;
     }
 
     pub fn deinit(self: Variant) void {
-        // TODO: what happens when you deinit an extension class contained in a Variant?
         raw.variantDestroy(@ptrCast(@constCast(&self)));
     }
 
@@ -73,6 +65,7 @@ pub const Variant = extern struct {
         } else {
             var object: ?*Object = null;
             variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
+            if (object == null) return null;
             if (class.isOpaqueClassPtr(T)) {
                 return @ptrCast(@alignCast(object));
             } else {
@@ -84,11 +77,333 @@ pub const Variant = extern struct {
     }
 
     pub fn ptr(self: *Variant) *anyopaque {
-        return self.ptr();
+        return @ptrCast(&self);
     }
 
-    pub fn constPtr(self: *const Variant) *const anyopaque {
-        return self.ptr();
+    pub fn constPtr(self: Variant) *const anyopaque {
+        return @ptrCast(&self);
+    }
+
+    /// Creates a copy of this Variant.
+    pub fn clone(self: Variant) Variant {
+        var result: Variant = undefined;
+        raw.variantNewCopy(@ptrCast(&result), @ptrCast(&self));
+        return result;
+    }
+
+    /// Calls a method on this Variant.
+    pub fn call(self: *Variant, method: StringName, args: []const *const Variant) CallError!Variant {
+        var ret: Variant = undefined;
+        var err: CallResult = undefined;
+        raw.variantCall(@ptrCast(&self), @ptrCast(&method), @ptrCast(args.ptr), @intCast(args.len), @ptrCast(&ret), @ptrCast(&err));
+        try err.throw();
+        return ret;
+    }
+
+    /// Calls a static method on a Variant type.
+    pub fn callStatic(variant_tag: Tag, method: StringName, args: []const *const Variant) CallError!Variant {
+        var ret: Variant = undefined;
+        var err: CallResult = undefined;
+        raw.variantCallStatic(@intFromEnum(variant_tag), @ptrCast(&method), @ptrCast(args.ptr), @intCast(args.len), @ptrCast(&ret), @ptrCast(&err));
+        try err.throw();
+        return ret;
+    }
+
+    /// Evaluates an operator on two Variants.
+    inline fn evaluate(a: Variant, op: Operator, b: Variant) PropertyError!Variant {
+        var result: Variant = undefined;
+        var valid: u8 = 0;
+        raw.variantEvaluate(@intFromEnum(op), @ptrCast(&a), @ptrCast(&b), @ptrCast(&result), &valid);
+        if (valid == 0) return error.InvalidOperation;
+        return result;
+    }
+
+    /// Returns true if this Variant equals another.
+    pub fn eql(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .equal, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Returns true if this Variant does not equal another.
+    pub fn notEql(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .not_equal, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Returns true if this Variant is less than another.
+    pub fn lessThan(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .less, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Returns true if this Variant is less than or equal to another.
+    pub fn lessThanOrEql(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .less_equal, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Returns true if this Variant is greater than another.
+    pub fn greaterThan(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .greater, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Returns true if this Variant is greater than or equal to another.
+    pub fn greaterThanOrEql(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .greater_equal, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Adds two Variants.
+    pub fn add(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .add, other);
+    }
+
+    /// Subtracts another Variant from this one.
+    pub fn sub(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .subtract, other);
+    }
+
+    /// Multiplies two Variants.
+    pub fn mul(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .multiply, other);
+    }
+
+    /// Divides this Variant by another.
+    pub fn div(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .divide, other);
+    }
+
+    /// Returns the remainder of dividing this Variant by another.
+    pub fn mod(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .module, other);
+    }
+
+    /// Returns this Variant raised to the power of another.
+    pub fn pow(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .power, other);
+    }
+
+    /// Negates this Variant.
+    pub fn neg(self: Variant) PropertyError!Variant {
+        return evaluate(self, .negate, Variant.nil);
+    }
+
+    /// Returns the positive of this Variant (usually a no-op).
+    pub fn pos(self: Variant) PropertyError!Variant {
+        return evaluate(self, .positive, Variant.nil);
+    }
+
+    /// Shifts this Variant left by the amount in another.
+    pub fn shiftLeft(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .shift_left, other);
+    }
+
+    /// Shifts this Variant right by the amount in another.
+    pub fn shiftRight(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .shift_right, other);
+    }
+
+    /// Bitwise AND of two Variants.
+    pub fn bitAnd(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .bit_and, other);
+    }
+
+    /// Bitwise OR of two Variants.
+    pub fn bitOr(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .bit_or, other);
+    }
+
+    /// Bitwise XOR of two Variants.
+    pub fn bitXor(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .bit_xor, other);
+    }
+
+    /// Bitwise negation of this Variant.
+    pub fn bitNot(self: Variant) PropertyError!Variant {
+        return evaluate(self, .bit_negate, Variant.nil);
+    }
+
+    /// Logical AND of two Variants.
+    pub fn logicalAnd(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .@"and", other);
+    }
+
+    /// Logical OR of two Variants.
+    pub fn logicalOr(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .@"or", other);
+    }
+
+    /// Logical XOR of two Variants.
+    pub fn logicalXor(self: Variant, other: Variant) PropertyError!Variant {
+        return evaluate(self, .xor, other);
+    }
+
+    /// Logical NOT of this Variant.
+    pub fn logicalNot(self: Variant) PropertyError!Variant {
+        return evaluate(self, .not, Variant.nil);
+    }
+
+    /// Returns true if this Variant is contained in another.
+    pub fn in(self: Variant, other: Variant) bool {
+        const result = evaluate(self, .in, other) catch return false;
+        defer result.deinit();
+        return result.booleanize();
+    }
+
+    /// Gets the value of a key from this Variant.
+    pub fn get(self: Variant, key: Variant) PropertyError!Variant {
+        var result: Variant = undefined;
+        var valid: u8 = 0;
+        raw.variantGet(@ptrCast(&self), @ptrCast(&key), @ptrCast(&result), &valid);
+        if (valid == 0) return error.InvalidKey;
+        return result;
+    }
+
+    /// Sets a key on this Variant to a value.
+    pub fn set(self: *Variant, key: Variant, value: Variant) PropertyError!void {
+        var valid: u8 = 0;
+        raw.variantSet(@ptrCast(&self), @ptrCast(&key), @ptrCast(&value), &valid);
+        if (valid == 0) return error.InvalidKey;
+    }
+
+    /// Gets the value of a named property from this Variant.
+    pub fn getNamed(self: Variant, key: StringName) ?Variant {
+        var result: Variant = undefined;
+        var valid: u8 = 0;
+        raw.variantGetNamed(@ptrCast(&self), @ptrCast(&key), @ptrCast(&result), &valid);
+        if (valid == 0) return null;
+        return result;
+    }
+
+    /// Sets a named property on this Variant to a value.
+    pub fn setNamed(self: *Variant, key: StringName, value: Variant) PropertyError!void {
+        var valid: u8 = 0;
+        raw.variantSetNamed(@ptrCast(&self), @ptrCast(&key), @ptrCast(&value), &valid);
+        if (valid == 0) return error.InvalidKey;
+    }
+
+    /// Gets the value of a keyed property from this Variant.
+    pub fn getKeyed(self: Variant, key: Variant) ?Variant {
+        var result: Variant = undefined;
+        var valid: c.GDExtensionBool = 0;
+        raw.variantGetKeyed(@ptrCast(&self), @ptrCast(&key), @ptrCast(&result), &valid);
+        if (valid == 0) return null;
+        return result;
+    }
+
+    /// Sets a keyed property on this Variant to a value.
+    pub fn setKeyed(self: *Variant, key: Variant, value: Variant) PropertyError!void {
+        var valid: u8 = 0;
+        raw.variantSetKeyed(@ptrCast(&self), @ptrCast(&key), @ptrCast(&value), &valid);
+        if (valid == 0) return error.InvalidKey;
+    }
+
+    /// Gets the value at an index from this Variant.
+    pub fn getIndexed(self: Variant, index: i64) PropertyError!Variant {
+        var result: Variant = undefined;
+        var valid: u8 = 0;
+        var oob: u8 = 0;
+        raw.variantGetIndexed(@ptrCast(&self), index, @ptrCast(&result), &valid, &oob);
+        if (valid == 0) return error.InvalidOperation;
+        if (oob != 0) return error.IndexOutOfBounds;
+        return result;
+    }
+
+    /// Sets the value at an index on this Variant.
+    pub fn setIndexed(self: *Variant, index: i64, value: Variant) PropertyError!void {
+        var valid: u8 = 0;
+        var oob: u8 = 0;
+        raw.variantSetIndexed(@ptrCast(&self), index, @ptrCast(&value), &valid, &oob);
+        if (valid == 0) return error.InvalidOperation;
+        if (oob != 0) return error.IndexOutOfBounds;
+    }
+
+    /// Checks if this Variant has the given method.
+    pub fn hasMethod(self: Variant, method: StringName) bool {
+        return raw.variantHasMethod(@ptrCast(&self), @ptrCast(&method)) != 0;
+    }
+
+    /// Checks if this Variant has a key.
+    pub fn hasKey(self: Variant, key: Variant) PropertyError!bool {
+        var valid: u8 = 0;
+        const result = raw.variantHasKey(@ptrCast(&self), @ptrCast(&key), &valid);
+        if (valid == 0) return error.InvalidOperation;
+        return result != 0;
+    }
+
+    /// Gets the hash of this Variant.
+    pub fn hash(self: Variant) i64 {
+        return raw.variantHash(@ptrCast(&self));
+    }
+
+    /// Compares this Variant to another by hash.
+    pub fn hashCompare(self: Variant, other: Variant) bool {
+        return raw.variantHashCompare(@ptrCast(&self), @ptrCast(&other)) != 0;
+    }
+
+    /// Gets the recursive hash of this Variant.
+    pub fn recursiveHash(self: Variant, recursion_count: i64) i64 {
+        return raw.variantRecursiveHash(@ptrCast(&self), recursion_count);
+    }
+
+    /// Gets the object instance ID from this Variant (if it contains an Object).
+    pub fn getObjectInstanceId(self: Variant) ObjectId {
+        return @enumFromInt(raw.variantGetObjectInstanceId(@ptrCast(&self)));
+    }
+
+    /// Converts this Variant to a boolean.
+    pub fn booleanize(self: Variant) bool {
+        return raw.variantBooleanize(@ptrCast(&self)) != 0;
+    }
+
+    /// Duplicates this Variant.
+    pub fn duplicate(self: Variant, deep: bool) Variant {
+        var result: Variant = undefined;
+        raw.variantDuplicate(@ptrCast(&self), @ptrCast(&result), @intFromBool(deep));
+        return result;
+    }
+
+    /// Converts this Variant to a String.
+    pub fn stringify(self: Variant) String {
+        var result: String = undefined;
+        raw.variantStringify(@ptrCast(&self), result.ptr());
+        return result;
+    }
+
+    /// Initializes an iterator over this Variant.
+    pub fn iterInit(self: Variant) PropertyError!Variant {
+        var iter: Variant = undefined;
+        var valid: u8 = 0;
+        const has_next = raw.variantIterInit(@ptrCast(&self), @ptrCast(&iter), &valid);
+        if (valid == 0) return error.InvalidOperation;
+        // If has_next is false, return nil to indicate empty iteration
+        if (has_next == 0) return Variant.nil;
+        return iter;
+    }
+
+    /// Gets the next value for an iterator over this Variant.
+    /// Returns true if there are more elements, false if iteration is complete.
+    pub fn iterNext(self: Variant, iter: *Variant) PropertyError!bool {
+        var valid: u8 = 0;
+        const result = raw.variantIterNext(@ptrCast(&self), @ptrCast(iter), &valid);
+        if (valid == 0) return error.InvalidOperation;
+        return result != 0;
+    }
+
+    /// Gets the current value at the iterator position.
+    pub fn iterGet(self: Variant, iter: *Variant) PropertyError!Variant {
+        var result: Variant = undefined;
+        var valid: u8 = 0;
+        raw.variantIterGet(@ptrCast(&self), @ptrCast(iter), @ptrCast(&result), &valid);
+        if (valid == 0) return error.InvalidOperation;
+        return result;
     }
 
     pub const Tag = enum(u32) {
@@ -187,6 +502,35 @@ pub const Variant = extern struct {
             };
 
             return tag orelse @compileError("Cannot construct a 'Variant' from type '" ++ @typeName(T) ++ "'");
+        }
+
+        /// Gets the name of this Variant type.
+        pub fn getName(self: Tag) String {
+            var result: String = undefined;
+            raw.variantGetTypeName(@intFromEnum(self), result.ptr());
+            return result;
+        }
+
+        /// Checks if this Variant type has the given member.
+        pub fn hasMember(self: Tag, member: StringName) bool {
+            return raw.variantHasMember(@intFromEnum(self), @ptrCast(&member)) != 0;
+        }
+
+        /// Gets the value of a constant from this Variant type.
+        pub fn getConstant(self: Tag, constant_name: StringName) Variant {
+            var result: Variant = undefined;
+            raw.variantGetConstantValue(@intFromEnum(self), @ptrCast(&constant_name), @ptrCast(&result));
+            return result;
+        }
+
+        /// Checks if Variants can be converted from one type to another.
+        pub fn canConvert(from: Tag, to: Tag) bool {
+            return raw.variantCanConvert(@intFromEnum(from), @intFromEnum(to)) != 0;
+        }
+
+        /// Checks if Variants can be converted from one type to another using stricter rules.
+        pub fn canConvertStrict(from: Tag, to: Tag) bool {
+            return raw.variantCanConvertStrict(@intFromEnum(from), @intFromEnum(to)) != 0;
         }
     };
 
@@ -366,6 +710,9 @@ const c = @import("gdextension");
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
+const CallError = gdzig.CallError;
+const PropertyError = gdzig.PropertyError;
+const CallResult = gdzig.class.ClassDb.CallResult;
 const Aabb = gdzig.builtin.Aabb;
 const Array = gdzig.builtin.Array;
 const Basis = gdzig.builtin.Basis;
