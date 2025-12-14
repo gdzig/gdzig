@@ -22,8 +22,8 @@
             .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
         },
         .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions#eaf21af8d183184e1d49152a738f603fc7d6136e",
-            .hash = "godot-0.0.0-Nast2ilTgQbqQ17Wf8_F6UQtARb7ALqithXpsHFNG07c",
+            .url = "git+https://github.com/gdzig/godot-versions#fad460d2ba431782d5005f6b1565f435c49fbe1f",
+            .hash = "godot-0.0.0-Nast2iBUgQbRv5K3yKF_xVLVg2PHsYve3WxsTKgGlH31",
         },
     },
 
