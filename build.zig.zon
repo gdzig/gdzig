@@ -9,9 +9,6 @@
             .url = "https://github.com/travisstaloch/case/archive/refs/tags/0.15.1.tar.gz",
             .hash = "case-0.0.1-chGYqx_EAADaGJjmoln5M1iMBDTrMdd8to5wdEVpfXm4",
         },
-        .godot = .{
-            .path = "../godot-binaries",
-        },
         .bbcodez = .{
             .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
             .hash = "bbcodez-0.0.1-dev-YlrOBo-iAQBWdgFSZ5eINgMNAZlmrHLQ35zKSZEEqgS2",
@@ -23,6 +20,10 @@
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#a02a3eb8d0914437ecf317d36fca426fee300e72",
             .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
+        },
+        .godot = .{
+            .url = "git+https://github.com/gdzig/godot-versions#a02e7446dd16972bcc04f9e16c26c92f8e437c83",
+            .hash = "godot-0.0.0-Nast2sFTgQYbz3AHO-jNhB0Znyhm4uML3c5S3e77nj4C",
         },
     },
 
