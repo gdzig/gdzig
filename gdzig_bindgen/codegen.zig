@@ -2,7 +2,7 @@ pub fn generate(ctx: *Context) !void {
     try writeBuiltins(ctx);
     try writeClasses(ctx);
     try writeGlobals(ctx);
-    try writeInterface(ctx);
+    try writeDispatchTable(ctx);
     try writeModules(ctx);
 }
 
@@ -968,7 +968,7 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Con
             try globals.append(allocator, import.*);
         } else if (ctx.flags.contains(import.*)) {
             try globals.append(allocator, import.*);
-        } else if (ctx.interface.typedefs.contains(import.*)) {
+        } else if (ctx.dispatch_table.typedefs.contains(import.*)) {
             // TODO: handle gdextension typedefs
         } else {
             // TODO: native structures?
@@ -1059,10 +1059,10 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
     }
 }
 
-fn writeInterface(ctx: *Context) !void {
+fn writeDispatchTable(ctx: *Context) !void {
     var buf: [1024]u8 = undefined;
 
-    const file = try ctx.config.output.createFile("Interface.zig", .{});
+    const file = try ctx.config.output.createFile("DispatchTable.zig", .{});
     defer file.close();
 
     var file_writer = file.writer(&buf);
@@ -1070,7 +1070,7 @@ fn writeInterface(ctx: *Context) !void {
     var w = CodeWriter.init(writer);
 
     try w.writeLine(
-        \\const Interface = @This();
+        \\const DispatchTable = @This();
         \\
     );
     try w.writeLine(
@@ -1078,7 +1078,7 @@ fn writeInterface(ctx: *Context) !void {
         \\
     );
 
-    for (ctx.interface.functions.items) |function| {
+    for (ctx.dispatch_table.functions.items) |function| {
         try writeDocBlock(&w, function.docs);
         try w.printLine(
             \\{s}: Child(c.{s}),
@@ -1086,16 +1086,16 @@ fn writeInterface(ctx: *Context) !void {
         , .{ function.name, function.ptr_type });
     }
 
-    try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) Interface {");
+    try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
     w.indent += 1;
 
     try w.writeLine(
-        \\const self: Interface = .{
+        \\const self: DispatchTable = .{
         \\    .library = library,
     );
     w.indent += 1;
 
-    for (ctx.interface.functions.items) |function| {
+    for (ctx.dispatch_table.functions.items) |function| {
         try w.printLine(
             \\.{s} = @ptrCast(getProcAddress("{s}").?),
         , .{ function.name, function.api_name });

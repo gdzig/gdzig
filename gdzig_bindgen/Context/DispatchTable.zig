@@ -1,6 +1,6 @@
-const Interface = @This();
+const DispatchTable = @This();
 
-pub const empty: Interface = .{};
+pub const empty: DispatchTable = .{};
 
 functions: ArrayList(Function) = .empty,
 imports: Imports = .empty,

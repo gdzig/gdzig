@@ -22,9 +22,9 @@ gdzig/global/*.zig
 !gdzig/**/*.replace.zig
 gdzig/builtin.zig
 gdzig/class.zig
+gdzig/DispatchTable.zig
 gdzig/global.zig
 gdzig/general.zig
-gdzig/Interface.zig
 gdzig/math.zig
 gdzig/random.zig
 .claude/settings.local.json

@@ -19,7 +19,6 @@ pub const class = @import("class.zig");
 pub const engine_allocator = @import("heap.zig").engine_allocator;
 pub const general = @import("general.zig");
 pub const global = @import("global.zig");
-pub const Interface = @import("Interface.zig");
 pub const math = @import("math.zig");
 pub const random = @import("random.zig");
 const register = @import("register.zig");
@@ -29,8 +28,8 @@ pub const registerMethod = register.registerMethod;
 pub const registerSignal = register.registerSignal;
 pub const InitializationLevel = register.InitializationLevel;
 
-/// The C FFI GDExtension API, initialized during extension initialization.
-pub var raw: Interface = undefined;
+/// Godot function pointers, populated at load time.
+pub var raw: @import("DispatchTable.zig") = undefined;
 
 /// The current running version of Godot, initialized during extension initialization.
 pub var version: Version = undefined;

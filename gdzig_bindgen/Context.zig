@@ -29,7 +29,7 @@ builtin_sizes: StringArrayHashMap(struct { size: usize, members: StringArrayHash
 classes: StringArrayHashMap(Class) = .empty,
 enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
-interface: Interface = .empty,
+dispatch_table: DispatchTable = .empty,
 modules: StringArrayHashMap(Module) = .empty,
 
 symbol_lookup: StringHashMap(Symbol) = .empty,
@@ -96,7 +96,7 @@ fn collectImports(self: *Context) !void {
         try self.collectFunctionImports(function);
     }
     for (self.all_engine_classes.items) |class| {
-        try self.interface.imports.put(self.allocator(), class);
+        try self.dispatch_table.imports.put(self.allocator(), class);
     }
 }
 
@@ -289,7 +289,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             const start = std.mem.indexOfAny(u8, fp_type_slice, safe_ident_chars) orelse continue;
             const end = std.mem.indexOf(u8, fp_type_slice[start..], ")") orelse continue;
             fp_type = try self.allocator().dupe(u8, fp_type_slice[start..(end + start)]);
-            try self.interface.typedefs.put(self.allocator(), fp_type.?, {});
+            try self.dispatch_table.typedefs.put(self.allocator(), fp_type.?, {});
         }
 
         if (fn_name) |_| if (fp_type) |_| {
@@ -304,7 +304,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
 
             try self.func_docs.put(self.allocator(), fp_type.?, docs.?);
             try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
-            try self.interface.functions.append(self.allocator(), .{
+            try self.dispatch_table.functions.append(self.allocator(), .{
                 .docs = docs,
                 .name = try casez.allocConvert(gdzig_case.func, self.allocator(), fn_name.?),
                 .api_name = fn_name.?,
@@ -647,7 +647,7 @@ pub const Field = @import("Context/Field.zig");
 pub const Flag = @import("Context/Flag.zig");
 pub const Function = @import("Context/Function.zig");
 pub const Imports = @import("Context/Imports.zig");
-pub const Interface = @import("Context/Interface.zig");
+pub const DispatchTable = @import("Context/DispatchTable.zig");
 pub const Module = @import("Context/Module.zig");
 pub const Property = @import("Context/Property.zig");
 pub const Signal = @import("Context/Signal.zig");
