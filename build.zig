@@ -179,19 +179,16 @@ pub fn build(b: *Build) void {
     const tests_gdzig_run = b.addRunArtifact(tests_gdzig);
 
     if (fetch_godot) {
-        inline for (test_versions) |test_version| {
-            if (godot.executable(b, b.graph.host, test_version)) |godot_exe| {
-                const tests = gdzig_test.addTestCases(b, .{
-                    .root_dir = b.path("tests"),
-                    .godot_exe = godot_exe,
-                    .gdzig = gdzig_mod,
-                    .target = target,
-                    .optimize = optimize,
-                });
-                test_integration_step.dependOn(&tests.step);
-            }
+        if (godot.executable(b, b.graph.host, version)) |godot_exe| {
+            const tests = gdzig_test.addTestCases(b, .{
+                .root_dir = b.path("tests"),
+                .godot_exe = godot_exe,
+                .gdzig = gdzig_mod,
+                .target = target,
+                .optimize = optimize,
+            });
+            test_integration_step.dependOn(&tests.step);
         }
-        test_step.dependOn(test_integration_step);
     }
 
     //
@@ -214,6 +211,7 @@ pub fn build(b: *Build) void {
     check_step.dependOn(&gdzig_lib.step);
     test_step.dependOn(&tests_bindgen_run.step);
     test_step.dependOn(&tests_gdzig_run.step);
+    test_step.dependOn(test_integration_step);
 
     //
     // Default build
