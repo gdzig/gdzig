@@ -41,7 +41,10 @@ pub fn build(b: *Build) void {
     const oopz = b.dependency("oopz", .{});
     const temp = b.dependency("temp", .{});
 
-    const headers = godot.headers(b, version);
+    // Always use latest interface header (defines all function pointers)
+    const latest_headers = godot.headers(b, default_version);
+    // Use requested version for API (classes/methods available)
+    const api_headers = godot.headers(b, version);
 
     //
     // GDExtension
@@ -51,7 +54,7 @@ pub fn build(b: *Build) void {
         .link_libc = true,
         .optimize = optimize,
         .target = target,
-        .root_source_file = headers.path(b, "gdextension_interface.h"),
+        .root_source_file = latest_headers.path(b, "gdextension_interface.h"),
     });
 
     const gdextension_mod = b.createModule(.{
@@ -81,7 +84,7 @@ pub fn build(b: *Build) void {
     const bindgen_options = b.addOptions();
     bindgen_options.addOption([]const u8, "architecture", architecture);
     bindgen_options.addOption([]const u8, "precision", precision);
-    bindgen_options.addOptionPath("headers", headers);
+    bindgen_options.addOptionPath("headers", latest_headers);
 
     const bindgen_mod = b.addModule("gdzig_bindgen", .{
         .target = target,
@@ -116,7 +119,8 @@ pub fn build(b: *Build) void {
 
     const bindings_run = b.addRunArtifact(bindgen_exe);
     bindings_run.expectExitCode(0);
-    bindings_run.addDirectoryArg(headers);
+    bindings_run.addFileArg(latest_headers.path(b, "gdextension_interface.h"));
+    bindings_run.addFileArg(api_headers.path(b, "extension_api.json"));
     bindings_run.addDirectoryArg(bindings_mixins);
 
     const bindings_output = bindings_run.addOutputDirectoryArg("bindings");
@@ -223,7 +227,7 @@ pub fn build(b: *Build) void {
         .install_subdir = "docs",
     });
     b.installDirectory(.{
-        .source_dir = headers,
+        .source_dir = latest_headers,
         .install_dir = .prefix,
         .install_subdir = "vendor",
     });

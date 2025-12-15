@@ -31,8 +31,8 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len < 5) {
-        std.debug.print("Usage: bindgen <vendor_path> <mixins_root> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
+    if (args.len < 6) {
+        std.debug.print("Usage: bindgen <gdextension_interface.h> <extension_api.json> <mixins_root> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
         return;
     }
 
@@ -80,8 +80,9 @@ pub fn main() !void {
             std.debug.print("Format time: {d:.2}ms\n", .{@as(f64, @floatFromInt(format_time)) / 1_000_000.0});
             std.debug.print("Total time: {d:.2}ms\n", .{@as(f64, @floatFromInt(total_time)) / 1_000_000.0});
         }
-        std.debug.print("Output path: {s}\n", .{args[2]});
-        std.debug.print("API JSON: {s}/extension_api.json\n", .{args[1]});
+        std.debug.print("Output path: {s}\n", .{args[4]});
+        std.debug.print("Interface: {s}\n", .{args[1]});
+        std.debug.print("API JSON: {s}\n", .{args[2]});
     }
 }
 

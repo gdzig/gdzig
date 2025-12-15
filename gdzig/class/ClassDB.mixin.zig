@@ -977,7 +977,8 @@ pub inline fn registerClass2(
 ) void {
     const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
-    raw.classdbRegisterExtensionClass2(
+    const func = raw.classdbRegisterExtensionClass2 orelse @panic("classdb_register_extension_class2 requires Godot 4.2+");
+    func(
         raw.library,
         @ptrCast(class_name),
         @ptrCast(base_class_name),
@@ -1025,7 +1026,8 @@ pub inline fn registerClass3(
 ) void {
     const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
-    raw.classdbRegisterExtensionClass3(
+    const func = raw.classdbRegisterExtensionClass3 orelse @panic("classdb_register_extension_class3 requires Godot 4.3+");
+    func(
         raw.library,
         @ptrCast(class_name),
         @ptrCast(base_class_name),
@@ -1074,7 +1076,8 @@ pub inline fn registerClass4(
 ) void {
     const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
 
-    raw.classdbRegisterExtensionClass4(
+    const func = raw.classdbRegisterExtensionClass4 orelse @panic("classdb_register_extension_class4 requires Godot 4.4+");
+    func(
         raw.library,
         @ptrCast(class_name),
         @ptrCast(base_class_name),
@@ -1172,7 +1175,8 @@ pub inline fn registerProperty(class_name: *const StringName, info: *const Prope
 ///
 /// @since 4.2
 pub inline fn registerPropertyIndexed(class_name: *const StringName, info: *const PropertyInfo, setter: *const StringName, getter: *const StringName, index: i64) void {
-    raw.classdbRegisterExtensionClassPropertyIndexed(
+    const func = raw.classdbRegisterExtensionClassPropertyIndexed orelse @panic("classdb_register_extension_class_property_indexed requires Godot 4.2+");
+    func(
         raw.library,
         @ptrCast(class_name),
         @ptrCast(info),
@@ -1235,7 +1239,8 @@ pub const VirtualMethodInfo = struct {
 ///
 /// @since 4.3
 pub inline fn registerVirtualMethod(class_name: *const StringName, info: VirtualMethodInfo) void {
-    raw.classdbRegisterExtensionClassVirtualMethod(
+    const func = raw.classdbRegisterExtensionClassVirtualMethod orelse @panic("classdb_register_extension_class_virtual_method requires Godot 4.3+");
+    func(
         raw.library,
         @ptrCast(class_name),
         &c.GDExtensionClassVirtualMethodInfo{

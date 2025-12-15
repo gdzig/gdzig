@@ -31,18 +31,17 @@ pub const Verbosity = enum {
 pub fn loadFromArgs(args: [][:0]u8) !Config {
     const cwd = std.fs.cwd();
 
-    var vendor = try cwd.openDir(args[1], .{});
-    defer vendor.close();
+    // args[1]: path to gdextension_interface.h
+    // args[2]: path to extension_api.json
+    const gdextension_interface = try cwd.openFile(args[1], .{});
+    const extension_api = try cwd.openFile(args[2], .{});
 
-    const extension_api = try vendor.openFile("extension_api.json", .{});
-    const gdextension_interface = try vendor.openFile("gdextension_interface.h", .{});
+    const input = try cwd.makeOpenPath(args[3], .{});
+    const output = try cwd.makeOpenPath(args[4], .{});
 
-    const input = try std.fs.cwd().makeOpenPath(args[2], .{});
-    const output = try std.fs.cwd().makeOpenPath(args[3], .{});
-
-    const arch = std.meta.stringToEnum(Config.Arch, args[4]) orelse std.debug.panic("Invalid architecture {s}, expected {any}", .{ args[4], std.meta.tags(Config.Arch) });
-    const precision = std.meta.stringToEnum(Config.Precision, args[5]) orelse std.debug.panic("Invalid precision {s}, expected {any}", .{ args[5], std.meta.tags(Config.Precision) });
-    const verbosity = std.meta.stringToEnum(Config.Verbosity, args[6]) orelse .quiet;
+    const arch = std.meta.stringToEnum(Config.Arch, args[5]) orelse std.debug.panic("Invalid architecture {s}, expected {any}", .{ args[5], std.meta.tags(Config.Arch) });
+    const precision = std.meta.stringToEnum(Config.Precision, args[6]) orelse std.debug.panic("Invalid precision {s}, expected {any}", .{ args[6], std.meta.tags(Config.Precision) });
+    const verbosity = std.meta.stringToEnum(Config.Verbosity, args[7]) orelse .quiet;
 
     return .{
         .arch = arch,

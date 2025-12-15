@@ -1078,62 +1078,53 @@ fn writeDispatchTable(ctx: *Context) !void {
         \\
     );
 
+    // Write struct fields - required (4.1) functions are non-nullable, optional (4.2+) are nullable
     for (ctx.dispatch_table.functions.items) |function| {
         try writeDocBlock(&w, function.docs);
-        try w.printLine(
-            \\{s}: Child(c.{s}),
-            \\
-        , .{ function.name, function.ptr_type });
+        if (function.isRequired()) {
+            try w.printLine(
+                \\{s}: Child(c.{s}),
+                \\
+            , .{ function.name, function.ptr_type });
+        } else {
+            try w.printLine(
+                \\{s}: c.{s},
+                \\
+            , .{ function.name, function.ptr_type });
+        }
     }
 
+    // Write init function
     try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
     w.indent += 1;
 
     try w.writeLine(
-        \\const self: DispatchTable = .{
+        \\return .{
         \\    .library = library,
     );
     w.indent += 1;
 
     for (ctx.dispatch_table.functions.items) |function| {
-        try w.printLine(
-            \\.{s} = @ptrCast(getProcAddress("{s}").?),
-        , .{ function.name, function.api_name });
+        if (function.isRequired()) {
+            try w.printLine(
+                \\.{s} = @ptrCast(getProcAddress("{s}").?),
+            , .{ function.name, function.api_name });
+        } else {
+            try w.printLine(
+                \\.{s} = @ptrCast(getProcAddress("{s}")),
+            , .{ function.name, function.api_name });
+        }
     }
 
     w.indent -= 1;
     try w.writeLine(
         \\};
-        \\
     );
-
-    // TODO: static string map
-    // for (ctx.builtins.values()) |builtin| {
-    //     try w.printLine(
-    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(builtin.{0s})), @ptrCast("{1s}"), 1);
-    //     , .{ builtin.name, builtin.name_api });
-    // }
-    // for (ctx.classes.values()) |class| {
-    //     try w.printLine(
-    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(class.{0s})), @ptrCast("{1s}"), 1);
-    //     , .{ class.name, class.name_api });
-    // }
-    // for (ctx.enums.values()) |@"enum"| {
-    //     try w.printLine(
-    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(global.{0s})), @ptrCast("{1s}"), 1);
-    //     , .{ @"enum".name, @"enum".name_api });
-    // }
-    // for (ctx.flags.values()) |flag| {
-    //     try w.printLine(
-    //         \\self.stringNameNewWithLatin1Chars(@ptrCast(typeName(global.{0s})), @ptrCast("{1s}"), 1);
-    //     , .{ flag.name, flag.name_api });
-    // }
 
     w.indent -= 1;
     try w.writeLine(
-        \\
-        \\    return self;
         \\}
+        \\
     );
 
     try w.writeLine(

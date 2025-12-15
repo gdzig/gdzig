@@ -7,65 +7,81 @@ pub const empty: StringName = std.mem.zeroes(StringName);
 ///   You must guarantee that the buffer remains valid for the duration of the application (e.g. string literal).
 /// - You must not call a destructor for this StringName. Incrementing the initial reference once should achieve this.
 ///
-/// - **str**: A pointer to a Latin-1 encoded C string (null terminated).
-/// - **is_static**: If true, the StringName will reuse the buffer instead of copying it.
-///
-/// @return The newly created StringName.
-///
-/// **Since Godot 4.2**
+/// On Godot 4.1, falls back to creating via String (ignores `is_static`).
 pub inline fn fromLatin1(str: [:0]const u8, is_static: bool) StringName {
-    var string_name: StringName = undefined;
-    raw.stringNameNewWithLatin1Chars(string_name.ptr(), @ptrCast(str.ptr), @intFromBool(is_static));
-    return string_name;
+    if (raw.stringNameNewWithLatin1Chars) |func| {
+        var result: StringName = undefined;
+        func(result.ptr(), @ptrCast(str.ptr), @intFromBool(is_static));
+        return result;
+    }
+    return viaString(str);
 }
 
 /// Creates a StringName from a comptime Latin-1 encoded C string.
 ///
-/// Since the string is known to be static, it will be reused instead of copied.
-///
-/// - **str**: A pointer to a Latin-1 encoded C string (null terminated).
-///
-/// @return The newly created StringName.
-///
-/// **Since Godot 4.2**
+/// The string is treated as static and the result is cached per unique string.
 pub fn fromComptimeLatin1(comptime str: [:0]const u8) StringName {
-    var self: StringName = undefined;
-    raw.stringNameNewWithLatin1Chars(@ptrCast(&self), @ptrCast(str.ptr), 1);
-    return self;
+    const S = struct {
+        const key = str;
+        var value: StringName = undefined;
+        var init: bool = false;
+    };
+
+    if (S.init) return S.value;
+
+    if (raw.stringNameNewWithLatin1Chars) |func| {
+        func(@ptrCast(&S.value), @ptrCast(str.ptr), 1);
+        S.init = true;
+    } else {
+        S.value = viaString(str);
+        S.init = true;
+    }
+
+    return S.value;
 }
 
-/// Creates a StringName from a UTF-8 encoded string with the given length.
+/// Creates a StringName from a UTF-8 encoded string.
 ///
-/// - **str**: A slice of UTF-8 encoded bytes.
-///
-/// @return The newly created StringName.
-///
-/// **Since Godot 4.1**
+/// On Godot 4.1, falls back to creating via String.
 pub inline fn fromUtf8(str: []const u8) StringName {
-    var string_name: StringName = undefined;
-    raw.stringNameNewWithUtf8CharsAndLen(string_name.ptr(), @ptrCast(str.ptr), @intCast(str.len));
-    return string_name;
+    if (raw.stringNameNewWithUtf8CharsAndLen) |func| {
+        var result: StringName = undefined;
+        func(result.ptr(), @ptrCast(str.ptr), @intCast(str.len));
+        return result;
+    }
+
+    var gd_string: String = undefined;
+    raw.stringNewWithUtf8CharsAndLen(gd_string.ptr(), @ptrCast(str.ptr), @intCast(str.len));
+    defer gd_string.deinit();
+    return StringName.fromString(gd_string);
 }
 
-/// Creates a StringName from a UTF-8 encoded C string.
+/// Creates a StringName from a null-terminated UTF-8 C string.
 ///
-/// - **str**: A pointer to a C string (null terminated and UTF-8 encoded).
-///
-/// @return The newly created StringName.
-///
-/// **Since Godot 4.2**
+/// On Godot 4.1, falls back to creating via String.
 pub inline fn fromNullTerminatedUtf8(str: [:0]const u8) StringName {
-    var string_name: StringName = undefined;
-    raw.stringNameNewWithUtf8Chars(string_name.ptr(), @ptrCast(str.ptr));
-    return string_name;
+    if (raw.stringNameNewWithUtf8Chars) |func| {
+        var result: StringName = undefined;
+        func(result.ptr(), @ptrCast(str.ptr));
+        return result;
+    }
+
+    return viaString(str);
+}
+
+/// Creates a StringName via an intermediate String (4.1 fallback).
+fn viaString(str: [:0]const u8) StringName {
+    var gd_string: String = undefined;
+    raw.stringNewWithUtf8Chars(gd_string.ptr(), @ptrCast(str.ptr));
+    defer gd_string.deinit();
+    return StringName.fromString(gd_string);
 }
 
 // @mixin stop
-
-const Self = gdzig.builtin.StringName;
 
 const std = @import("std");
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
+const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;

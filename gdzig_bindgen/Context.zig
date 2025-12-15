@@ -302,6 +302,8 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 break :blk null;
             };
 
+            const since = parseSinceVersion(docs) orelse "4.1";
+
             try self.func_docs.put(self.allocator(), fp_type.?, docs.?);
             try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
             try self.dispatch_table.functions.append(self.allocator(), .{
@@ -309,6 +311,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 .name = try casez.allocConvert(gdzig_case.func, self.allocator(), fn_name.?),
                 .api_name = fn_name.?,
                 .ptr_type = fp_type.?,
+                .since = since,
             });
 
             fn_name = null;
@@ -624,6 +627,17 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
 
         logger.debug("Symbol lookup initialized. Size: {d}", .{self.symbol_lookup.size});
     }
+}
+
+fn parseSinceVersion(docs: ?[]const u8) ?[]const u8 {
+    const doc_str = docs orelse return null;
+    const since_tag = "@since ";
+    const start = std.mem.indexOf(u8, doc_str, since_tag) orelse return null;
+    const version_start = start + since_tag.len;
+    if (version_start + 3 > doc_str.len) return null;
+
+    // Return "X.Y" slice
+    return doc_str[version_start..][0..3];
 }
 
 const std = @import("std");
