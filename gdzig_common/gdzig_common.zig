@@ -1,3 +1,5 @@
+pub const GeneralPurposeAllocator = @import("GeneralPurposeAllocator.zig");
+
 pub const godot_case = struct {
     pub const constant: Config = .constant;
     pub const func: Config = .snake;

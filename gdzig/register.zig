@@ -129,17 +129,14 @@ fn ClassUserdataOf(comptime T: type) type {
 const PropertyListMeta = struct {
     len: usize = 0,
 
-    var gpa: if (builtin.is_test) void else DebugAllocator(.{}) = if (builtin.is_test) {} else .init;
-    var pool: MemoryPool(PropertyListMeta) = .init(gpa.allocator());
+    var gpa: GeneralPurposeAllocator = .init(gdzig.engine_allocator);
+    const allocator = gpa.allocator();
+    var pool: MemoryPool(PropertyListMeta) = .init(allocator);
 
     const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
         .free_callback = &free,
     };
-
-    fn allocator() Allocator {
-        return if (builtin.is_test) std.testing.allocator else gpa.allocator();
-    }
 
     fn create(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
         return @ptrCast(pool.create() catch return null);
@@ -151,7 +148,7 @@ const PropertyListMeta = struct {
 
     pub fn cleanup() void {
         pool.deinit();
-        if (!builtin.is_test) assert(gpa.deinit() == .ok);
+        assert(gpa.deinit() == .ok);
     }
 };
 
@@ -160,8 +157,9 @@ pub const DestroyMeta = struct {
     user_destroying: bool = false,
     engine_destroying: bool = false,
 
-    var gpa: if (builtin.is_test) void else DebugAllocator(.{}) = if (builtin.is_test) {} else .init;
-    var pool: MemoryPool(DestroyMeta) = .init(gpa.allocator());
+    var gpa: GeneralPurposeAllocator = .init(gdzig.engine_allocator);
+    const allocator = gpa.allocator();
+    var pool: MemoryPool(PropertyListMeta) = .init(allocator);
 
     pub const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
@@ -183,7 +181,7 @@ pub const DestroyMeta = struct {
 
     pub fn cleanup() void {
         pool.deinit();
-        if (!builtin.is_test) assert(gpa.deinit() == .ok);
+        assert(gpa.deinit() == .ok);
     }
 };
 
@@ -565,8 +563,9 @@ const assert = std.debug.assert;
 const builtin = @import("builtin");
 
 const c = @import("gdextension");
+const common = @import("common");
+const GeneralPurposeAllocator = common.GeneralPurposeAllocator;
 const gdzig = @import("gdzig");
-const meta = @import("meta.zig");
 const string = gdzig.string;
 const class = gdzig.class;
 const classdb = gdzig.class.ClassDb;
@@ -575,3 +574,5 @@ const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
 const Object = gdzig.class.Object;
+
+const meta = @import("meta.zig");
