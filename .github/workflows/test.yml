@@ -37,7 +37,7 @@ jobs:
       matrix:
         # All Godot versions on Linux, latest on macOS/Windows
         os: [ubuntu-latest]
-        godot: ["4.5"]
+        godot: ["4.1", "4.2", "4.3", "4.4", "4.5"]
         include:
           # Add macOS and Windows for latest Godot only
           - os: macos-latest
