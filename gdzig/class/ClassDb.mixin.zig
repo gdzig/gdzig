@@ -834,9 +834,9 @@ fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T
 // @since 4.1
 pub fn PtrCall(comptime T: type, comptime Userdata: type) type {
     return if (Userdata != void)
-        fn (userdata: *Userdata, instance: *T, args: [*]const *const anyopaque, ret: *anyopaque) void
+        fn (userdata: *Userdata, instance: *T, args: [*]const *const anyopaque, ret: ?*anyopaque) void
     else
-        fn (instance: *T, args: [*]const *const anyopaque, ret: *anyopaque) void;
+        fn (instance: *T, args: [*]const *const anyopaque, ret: ?*anyopaque) void;
 }
 
 // @ref GDExtensionClassMethodPtrCall

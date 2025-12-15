@@ -465,7 +465,7 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
 pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
     const name_str = @tagName(name);
     var class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
-    var method_name: StringName = .fromComptimeLatin1(name_str);
+    var method_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.method, name_str));
 
     const MethodType = @TypeOf(@field(T, name_str));
     const fn_info = @typeInfo(MethodType).@"fn";
@@ -511,11 +511,11 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
                 return Variant.nil;
             } else {
                 const result = @call(.auto, method, call_args);
-                return Variant.init(result);
+                return Variant.init(ReturnType, result);
             }
         }
 
-        fn ptrCall(instance: *T, args: [*]const *const anyopaque, ret: *anyopaque) void {
+        fn ptrCall(instance: *T, args: [*]const *const anyopaque, ret: ?*anyopaque) void {
             var call_args: std.meta.ArgsTuple(MethodType) = undefined;
             call_args[0] = instance;
             inline for (1..Args.len) |i| {
@@ -526,7 +526,9 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
                 @call(.auto, method, call_args);
             } else {
                 const result = @call(.auto, method, call_args);
-                @as(*ReturnType, @ptrCast(@alignCast(ret))).* = result;
+                if (ret) |r| {
+                    @as(*ReturnType, @ptrCast(@alignCast(r))).* = result;
+                }
             }
         }
 
@@ -544,9 +546,9 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
 
     classdb.registerMethod(T, void, &class_name, .{
         .name = &method_name,
-        .return_value_info = if (ReturnType != void) &return_value else null,
-        .argument_info = &arg_infos,
-        .argument_metadata = &arg_metas,
+        .return_value_info = if (ReturnType != void) @constCast(&return_value) else null,
+        .argument_info = @constCast(&arg_infos),
+        .argument_metadata = @constCast(&arg_metas),
     }, .{
         .call = Callbacks.call,
         .ptr_call = Callbacks.ptrCall,

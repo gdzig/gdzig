@@ -11,7 +11,8 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
         const decl_func_ptr: *const anyopaque = @ptrCast(&field);
 
         if (comptime p_func_ptr == decl_func_ptr) {
-            method_name = decl.name;
+            // Convert to snake_case to match the registered method name
+            method_name = comptime std.fmt.comptimePrint("{s}", .{casez.comptimeConvert(godot_case.method, decl.name)});
             break;
         }
     }
@@ -31,6 +32,11 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
 
     return .initObjectMethod(obj, method_string_name);
 }
+
+const casez = @import("casez");
+const common = @import("common");
+const godot_case = common.godot_case;
+
 // @mixin stop
 
 const Self = gdzig.builtin.Callable;

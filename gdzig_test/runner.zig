@@ -177,10 +177,13 @@ fn runGodotTest(allocator: std.mem.Allocator, godot_path: []const u8, test_case:
     var argv: std.ArrayListUnmanaged([]const u8) = .empty;
     defer argv.deinit(allocator);
 
-    argv.appendSlice(allocator, &.{ godot_path, "--headless", "--quiet", "--no-header", "--quit" }) catch return .{ .fail = true, .stderr = null };
+    argv.appendSlice(allocator, &.{ godot_path, "--headless", "--quiet", "--no-header", "--disable-crash-handler" }) catch return .{ .fail = true, .stderr = null };
 
     if (test_case.script) |script| {
         argv.appendSlice(allocator, &.{ "--script", script }) catch return .{ .fail = true, .stderr = null };
+    } else {
+        // Only use --quit if no script, since scripts control their own exit
+        argv.appendSlice(allocator, &.{"--quit"}) catch return .{ .fail = true, .stderr = null };
     }
 
     argv.appendSlice(allocator, &.{ "--path", test_case.project_path }) catch return .{ .fail = true, .stderr = null };
@@ -194,13 +197,10 @@ fn runGodotTest(allocator: std.mem.Allocator, godot_path: []const u8, test_case:
         return .{ .fail = true, .stderr = null };
     };
 
-    // Collect stdout and stderr
-    var stdout_list: std.ArrayListUnmanaged(u8) = .empty;
-    var stderr_list: std.ArrayListUnmanaged(u8) = .empty;
-    defer stdout_list.deinit(allocator);
-    defer stderr_list.deinit(allocator);
+    var output_list: std.ArrayListUnmanaged(u8) = .empty;
+    defer output_list.deinit(allocator);
 
-    child.collectOutput(allocator, &stdout_list, &stderr_list, 10 * 1024 * 1024) catch |e| {
+    child.collectOutput(allocator, &output_list, &output_list, 10 * 1024 * 1024) catch |e| {
         std.debug.print("failed to collect output: {s}\n", .{@errorName(e)});
         return .{ .fail = true, .stderr = null };
     };
@@ -211,8 +211,8 @@ fn runGodotTest(allocator: std.mem.Allocator, godot_path: []const u8, test_case:
     };
 
     const success = term == .Exited and term.Exited == 0;
-    const stderr = if (stderr_list.items.len > 0) stderr_list.toOwnedSlice(allocator) catch null else null;
-    return .{ .fail = !success, .stderr = if (!success) stderr else null };
+    const output = output_list.toOwnedSlice(allocator) catch null;
+    return .{ .fail = !success, .stderr = if (!success) output else null };
 }
 
 fn log(
