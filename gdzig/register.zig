@@ -91,8 +91,8 @@ pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void 
 }
 
 pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
-    const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
-    const base_name = StringName.fromComptimeLatin1(meta.typeShortName(class.BaseOf(T)));
+    const class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
+    const base_name: StringName = .fromComptimeLatin1(meta.typeShortName(class.BaseOf(T)));
     const callbacks = comptime makeClassCallbacks(T);
 
     if (gdzig.version.gte(.@"4.4")) {
@@ -464,8 +464,8 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
 
 pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
     const name_str = @tagName(name);
-    var class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
-    var method_name = StringName.fromComptimeLatin1(name_str);
+    var class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
+    var method_name: StringName = .fromComptimeLatin1(name_str);
 
     const MethodType = @TypeOf(@field(T, name_str));
     const fn_info = @typeInfo(MethodType).@"fn";
@@ -554,14 +554,14 @@ pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
 }
 
 pub fn registerSignal(comptime T: type, comptime S: type) void {
-    const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
-    const signal_name = StringName.fromComptimeLatin1(meta.signalName(S));
+    const class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
+    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
 
     const fields = @typeInfo(S).@"struct".fields;
     var arg_info: [fields.len]classdb.PropertyInfo = undefined;
     var names: [fields.len]StringName = undefined;
     inline for (fields, 0..) |field, i| {
-        names[i] = StringName.fromComptimeLatin1(field.name);
+        names[i] = .fromComptimeLatin1(field.name);
         arg_info[i] = .{
             .type = .forType(field.type),
             .name = &names[i],
@@ -582,7 +582,9 @@ const assert = std.debug.assert;
 const builtin = @import("builtin");
 
 const c = @import("gdextension");
+const casez = @import("casez");
 const common = @import("common");
+const godot_case = common.godot_case;
 const GeneralPurposeAllocator = common.GeneralPurposeAllocator;
 const gdzig = @import("gdzig");
 const string = gdzig.string;

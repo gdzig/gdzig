@@ -308,7 +308,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
             try self.dispatch_table.functions.append(self.allocator(), .{
                 .docs = docs,
-                .name = try casez.allocConvert(gdzig_case.func, self.allocator(), fn_name.?),
+                .name = try casez.allocConvert(self.allocator(), gdzig_case.func, fn_name.?),
                 .api_name = fn_name.?,
                 .ptr_type = fp_type.?,
                 .since = since,
@@ -508,7 +508,7 @@ pub fn getZigFuncName(self: *Context, godot_func_name: []const u8) []const u8 {
     const result = self.func_names.getOrPut(self.allocator(), godot_func_name) catch unreachable;
 
     if (!result.found_existing) {
-        result.value_ptr.* = self.correctName(casez.allocConvert(gdzig_case.func, self.allocator(), godot_func_name) catch unreachable);
+        result.value_ptr.* = self.correctName(casez.allocConvert(self.allocator(), gdzig_case.func, godot_func_name) catch unreachable);
     }
 
     return result.value_ptr.*;
@@ -516,7 +516,8 @@ pub fn getZigFuncName(self: *Context, godot_func_name: []const u8) []const u8 {
 
 pub fn getVariantTypeName(self: *const Context, class_name: []const u8) []const u8 {
     var buf: [256]u8 = undefined;
-    const snake = casez.bufConvert(godot_case.constant, &buf, class_name) orelse unreachable;
+    const snake = casez.bufConvert(&buf, godot_case.constant, class_name) catch
+        @panic("case conversion buffer too small");
     return std.fmt.allocPrint(self.arena.allocator(), "godot.c.GDEXTENSION_VARIANT_TYPE_{s}", .{snake}) catch unreachable;
 }
 

@@ -116,9 +116,9 @@ pub fn _enterTree(self: *ExampleNode) void {
     var timer = self.base.getTree().?.createTimer(1.0, .{}).?;
     defer if (timer.unreference()) timer.destroy();
 
-    timer.connect(SceneTreeTimer.TimeoutSignal, .fromClosure(self, &onTimeout)) catch {};
-    sp.connect(HSplitContainer.ResizedSignal, .fromClosure(self, &onResized)) catch {};
-    itemList.connect(ItemList.ItemSelectedSignal, .fromClosure(self, &onItemFocused)) catch {};
+    timer.connect(SceneTreeTimer.Timeout, .fromClosure(self, &onTimeout)) catch {};
+    sp.connect(HSplitContainer.Resized, .fromClosure(self, &onResized)) catch {};
+    itemList.connect(ItemList.ItemSelected, .fromClosure(self, &onItemFocused)) catch {};
 
     self.panel = PanelContainer.init();
     self.panel.setHSizeFlags(.{ .size_fill = true });

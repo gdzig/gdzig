@@ -99,21 +99,21 @@ fn typeToken(comptime T: type) *anyopaque {
 
 /// Connects a signal to a callable.
 pub fn connect(self: *Self, comptime S: type, callable: Callable) ConnectError!void {
-    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
     const result = self.connectRaw(signal_name, callable, .{});
     if (result != .ok) return ConnectError.AlreadyConnected;
 }
 
 /// Disconnects a signal from a callable.
 pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
-    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
     self.disconnectRaw(signal_name, callable);
 }
 
 /// Emits a signal.
 pub fn emit(self: *Self, signal: anytype) EmitError!void {
     const S = @TypeOf(signal);
-    const signal_name: StringName = .fromComptimeLatin1(comptime meta.signalName(S));
+    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
     const fields = @typeInfo(S).@"struct".fields;
     var args: std.meta.Tuple(&typeInfoToTypes(fields)) = undefined;
     inline for (fields, 0..) |field, i| {
@@ -139,6 +139,10 @@ fn typeInfoToTypes(comptime fields: []const std.builtin.Type.StructField) [field
     }
     return types;
 }
+
+const casez = @import("casez");
+const common = @import("common");
+const godot_case = common.godot_case;
 
 const ConnectError = gdzig.ConnectError;
 const EmitError = gdzig.EmitError;

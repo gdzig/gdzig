@@ -185,7 +185,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
         .current_class = builtin_name,
         .verbosity = ctx.config.verbosity,
     }) else null;
-    self.name = try casez.allocConvert(gdzig_case.method, allocator, api.name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.method, api.name);
     self.name_api = api.name;
     self.hash = api.hash;
     self.self = if (api.is_static)
@@ -253,7 +253,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { Mi
 
     var function: Function = .{ .skip = true };
     function.name = try allocator.dupe(u8, fn_name);
-    function.name_api = try casez.allocConvert(godot_case.method, allocator, fn_name);
+    function.name_api = try casez.allocConvert(allocator, godot_case.method, fn_name);
 
     for (proto.ast.params) |param_index| {
         const param_node = ast.nodes.get(@intFromEnum(param_index));
@@ -295,7 +295,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     }) else null;
     self.name = blk: {
         if (!api.is_virtual) {
-            break :blk try casez.allocConvert(gdzig_case.method, allocator, api.name);
+            break :blk try casez.allocConvert(allocator, gdzig_case.method, api.name);
         }
 
         // Strip the underscore prefix, camelize the rest, then reapply the underscore prefix
@@ -361,7 +361,7 @@ pub fn fromClassGetter(allocator: Allocator, class_name: []const u8, name: []con
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try casez.allocConvert(gdzig_case.method, allocator, name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.method, name);
     self.name_api = name;
     self.base = class_name;
     self.self = if (is_singleton) .singleton else .{ .constant = class_name };
@@ -376,7 +376,7 @@ pub fn fromClassSetter(allocator: Allocator, class_name: []const u8, is_singleto
     var self: Function = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try casez.allocConvert(gdzig_case.method, allocator, name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.method, name);
     self.name_api = name;
     self.base = class_name;
     self.self = if (is_singleton) .singleton else .{ .mutable = class_name };
@@ -398,7 +398,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     self.doc = if (function.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
         .verbosity = ctx.config.verbosity,
     }) else null;
-    self.name = try casez.allocConvert(gdzig_case.method, allocator, function.name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.method, function.name);
     self.name_api = function.name;
     self.hash = function.hash;
     self.self = .static;

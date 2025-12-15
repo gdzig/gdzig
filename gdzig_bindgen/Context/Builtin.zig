@@ -24,8 +24,8 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 
     const size_config = ctx.builtin_sizes.get(api.name).?;
 
-    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
-    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.type, api.name);
+    self.module = try casez.allocConvert(allocator, gdzig_case.file, self.name);
     self.name_api = api.name;
     self.size = size_config.size;
     self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{

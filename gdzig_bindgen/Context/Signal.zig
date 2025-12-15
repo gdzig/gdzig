@@ -15,9 +15,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, api: GodotApi.Cla
     };
     self.name_api = api.name;
 
-    self.struct_name = try std.fmt.allocPrint(allocator, "{f}Signal", .{
-        common.fmt(gdzig_case.type, api.name),
-    });
+    self.struct_name = try casez.allocConvert(allocator, gdzig_case.type, api.name);
 
     self.doc = if (api.description) |desc| try docs.convertDocsToMarkdown(allocator, desc, ctx, .{
         .current_class = class_name,
@@ -67,6 +65,7 @@ pub const Parameter = struct {
 
 const std = @import("std");
 const docs = @import("docs.zig");
+const casez = @import("casez");
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const Allocator = std.mem.Allocator;

@@ -13,9 +13,9 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     var self: Flag = .{};
     errdefer self.deinit(allocator);
 
-    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.type, api.name);
     self.name_api = api.name;
-    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
+    self.module = try casez.allocConvert(allocator, gdzig_case.file, self.name);
 
     var default: i64 = 0;
     var position: u8 = 0;
@@ -91,7 +91,7 @@ pub const Field = struct {
         }) else null;
         errdefer allocator.free(doc orelse "");
 
-        const name = try casez.allocConvert(gdzig_case.file, allocator, api.name);
+        const name = try casez.allocConvert(allocator, gdzig_case.file, api.name);
         errdefer allocator.free(name);
 
         return Field{
@@ -121,7 +121,7 @@ pub const Const = struct {
         }) else null;
         errdefer allocator.free(doc orelse "");
 
-        const name = try casez.allocConvert(gdzig_case.file, allocator, api.name);
+        const name = try casez.allocConvert(allocator, gdzig_case.file, api.name);
         errdefer allocator.free(name);
 
         return Const{

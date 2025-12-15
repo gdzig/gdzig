@@ -90,7 +90,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     } else if (builtin.fields.count() > 0) {
         for (builtin.fields.values()) |*field| {
             if (field.offset != null) {
-                try writeField(w, field, ctx);
+                try writeField(w, field, null, ctx);
             }
         }
     }
@@ -99,7 +99,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     for (builtin.constants.values()) |*constant| {
         if (constant.skip) continue;
 
-        try writeConstant(w, constant, ctx);
+        try writeConstant(w, constant, null, ctx);
     }
 
     if (builtin.constants.count() > 0) {
@@ -162,11 +162,11 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     try w.writeLine("};");
 
     // Imports
-    try writeImports(w, &builtin.imports, ctx);
+    try writeImports(w, &builtin.imports, null, ctx);
 }
 
 fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, constructor, ctx);
+    try writeFunctionHeader(w, constructor, null, ctx);
     if (constructor.can_init_directly) {
         for (constructor.parameters.values()) |param| {
             if (param.type.castFunction()) |cast_fn| {
@@ -191,7 +191,7 @@ fn writeBuiltinConstructor(w: *CodeWriter, builtin_name: []const u8, constructor
             builtin_name,
         });
     }
-    try writeFunctionFooter(w, constructor, ctx);
+    try writeFunctionFooter(w, constructor, null, ctx);
     if (!constructor.can_init_directly) {
         try w.printLine(
             \\var {0s}_ptr: c.GDExtensionPtrConstructor = null;
@@ -215,7 +215,7 @@ fn writeBuiltinDestructor(w: *CodeWriter, builtin: *const Context.Builtin) !void
 }
 
 fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, method, ctx);
+    try writeFunctionHeader(w, method, null, ctx);
     try w.printLine(
         \\if ({0s}_ptr == null) {{
         \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
@@ -234,14 +234,14 @@ fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const C
             .value => "@ptrCast(@constCast(&self))",
         },
     });
-    try writeFunctionFooter(w, method, ctx);
+    try writeFunctionFooter(w, method, null, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrBuiltInMethod = null;
     , .{method.name});
 }
 
 fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, operator, ctx);
+    try writeFunctionHeader(w, operator, null, ctx);
 
     // Lookup the method
     try w.print(
@@ -251,7 +251,7 @@ fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *con
     w.indent += 1;
     if (operator.parameters.getPtr("rhs")) |rhs| {
         try w.writeAll(" @intFromEnum(Variant.Tag.forType(");
-        try writeTypeAtField(w, &rhs.type, ctx);
+        try writeTypeAtField(w, &rhs.type, null, ctx);
         try w.writeAll("))");
     } else {
         try w.writeAll(" null");
@@ -275,7 +275,7 @@ fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *con
     w.indent -= 1;
     try w.writeLine(");");
 
-    try writeFunctionFooter(w, operator, ctx);
+    try writeFunctionFooter(w, operator, null, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrOperatorEvaluator = null;
     , .{operator.name});
@@ -356,7 +356,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     for (class.constants.values()) |*constant| {
         if (constant.skip) continue;
 
-        try writeConstant(w, constant, ctx);
+        try writeConstant(w, constant, class, ctx);
     }
     if (class.constants.count() > 0) {
         try w.writeLine("");
@@ -364,7 +364,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Signals
     for (class.signals.values()) |*signal| {
-        try writeSignal(w, signal, ctx);
+        try writeSignal(w, signal, class, ctx);
         try w.writeLine("");
     }
 
@@ -425,33 +425,32 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     w.indent -= 1;
     try w.writeLine("};");
 
-    // Imports
-    try writeImports(w, &class.imports, ctx);
+    // Imports (with collision detection for signals/enums/flags)
+    try writeImports(w, &class.imports, class, ctx);
 }
 
-fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, ctx: *const Context) !void {
+fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, class: *const Context.Class, ctx: *const Context) !void {
     try writeDocBlock(w, signal.doc);
     try w.print("pub const {s} = struct {{", .{signal.struct_name});
 
     if (signal.parameters.count() > 0) {
         try w.writeLine("");
-        var is_first = true;
-        for (signal.parameters.values()) |param| {
-            if (!is_first) {
-                try w.writeAll(", ");
-            }
-            try w.print("{s}: ", .{param.name});
-            try w.writeAll("?");
-            try writeTypeAtOptionalParameterField(w, &param.type, ctx);
-            try w.writeAll(" = null");
-            is_first = false;
-        }
     }
+
+    w.indent += 1;
+    for (signal.parameters.values()) |param| {
+        try w.print("{s}: ", .{param.name});
+        try w.writeAll("?");
+        try writeTypeAtField(w, &param.type, class, ctx);
+        try w.writeLine(" = null,");
+    }
+    w.indent -= 1;
+
     try w.writeLine("};");
 }
 
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, function, ctx);
+    try writeFunctionHeader(w, function, class, ctx);
 
     if (class.is_singleton) {
         try w.writeLine(
@@ -496,7 +495,7 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
         });
     }
 
-    try writeFunctionFooter(w, function, ctx);
+    try writeFunctionFooter(w, function, class, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionMethodBindPtr = null;
     , .{function.name});
@@ -552,10 +551,10 @@ fn writeClassVirtualDispatch(w: *CodeWriter, class: *const Context.Class, ctx: *
     // the method implementations, so we only need to list the method names.
 }
 
-fn writeConstant(w: *CodeWriter, constant: *const Context.Constant, ctx: *const Context) !void {
+fn writeConstant(w: *CodeWriter, constant: *const Context.Constant, class: ?*const Context.Class, ctx: *const Context) !void {
     try writeDocBlock(w, constant.doc);
     try w.print("pub const {s}: ", .{constant.name});
-    try writeTypeAtField(w, &constant.type, ctx);
+    try writeTypeAtField(w, &constant.type, class, ctx);
     try w.printLine(" = {s};", .{constant.value});
 }
 
@@ -647,10 +646,10 @@ fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) 
     try w.writeLine("};");
 }
 
-fn writeField(w: *CodeWriter, field: *const Context.Field, ctx: *const Context) !void {
+fn writeField(w: *CodeWriter, field: *const Context.Field, class: ?*const Context.Class, ctx: *const Context) !void {
     try writeDocBlock(w, field.doc);
     try w.print("{s}: ", .{field.name});
-    try writeTypeAtField(w, &field.type, ctx);
+    try writeTypeAtField(w, &field.type, class, ctx);
     try w.writeLine(
         \\,
         \\
@@ -685,7 +684,7 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
     try w.writeLine("};");
 }
 
-fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
     try writeDocBlock(w, function.doc);
 
     // Declaration
@@ -730,7 +729,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             try w.writeAll(", ");
         }
         try w.print("{s}: ", .{param.name});
-        try writeTypeAtParameter(w, &param.type, ctx);
+        try writeTypeAtParameter(w, &param.type, class, ctx);
         is_first = false;
     }
 
@@ -760,13 +759,13 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             if (param.needsRuntimeInit(ctx)) {
                 // Use nullable type with null default for runtime-init params
                 try w.writeAll("?");
-                try writeTypeAtOptionalParameterField(w, &param.type, ctx);
+                try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
                 try w.writeAll(" = null");
             } else {
                 if (param.default.?.isNullable()) {
                     try w.writeAll("?");
                 }
-                try writeTypeAtOptionalParameterField(w, &param.type, ctx);
+                try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
                 try w.writeAll(" = ");
                 try writeValue(w, param.default.?, ctx);
             }
@@ -778,7 +777,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
 
     // Return type
     try w.writeAll(") ");
-    try writeTypeAtReturn(w, &function.return_type, ctx);
+    try writeTypeAtReturn(w, &function.return_type, class, ctx);
     try w.writeLine(" {");
     w.indent += 1;
 
@@ -818,17 +817,17 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
         try w.printLine("var args: [@\"...\".len + {d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
             try w.print("args[{d}] = &Variant.init(", .{i});
-            try writeTypeAtParameter(w, &param.type, ctx);
+            try writeTypeAtParameter(w, &param.type, class, ctx);
             try w.printLine(", {s});", .{param.name});
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
             if (param.needsRuntimeInit(ctx)) {
                 try w.print("args[{d}] = &Variant.init(", .{i});
-                try writeTypeAtParameter(w, &param.type, ctx);
+                try writeTypeAtParameter(w, &param.type, class, ctx);
                 try w.printLine(", actual_{s});", .{param.name});
             } else {
                 try w.print("args[{d}] = &Variant.init(", .{i});
-                try writeTypeAtParameter(w, &param.type, ctx);
+                try writeTypeAtParameter(w, &param.type, class, ctx);
                 try w.printLine(", opt.{s});", .{param.name});
             }
         }
@@ -848,7 +847,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
             if (function.return_type == .class) {
                 try w.writeLine("?*anyopaque = null;");
             } else {
-                try writeTypeAtReturn(w, &function.return_type, ctx);
+                try writeTypeAtReturn(w, &function.return_type, class, ctx);
                 const return_type_initializer = function.return_type.getDefaultInitializer(ctx);
 
                 if (function.can_init_directly) {
@@ -857,7 +856,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, ctx: *
                     try w.printLine(" = {s};", .{return_type_initializer.?});
                 } else {
                     try w.writeAll(" = std.mem.zeroes(");
-                    try writeTypeAtReturn(w, &function.return_type, ctx);
+                    try writeTypeAtReturn(w, &function.return_type, class, ctx);
                     try w.writeLine(");");
                 }
             }
@@ -893,7 +892,7 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
     }
 }
 
-fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
     switch (function.return_type) {
         // Class functions need to cast an object pointer
         .class => {
@@ -915,7 +914,7 @@ fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, ctx: *
         // Vararg and operator functions cast to the return type, fixed arity return directly.
         else => if (function.is_vararg) {
             try w.writeAll("return result.as(");
-            try writeTypeAtReturn(w, &function.return_type, ctx);
+            try writeTypeAtReturn(w, &function.return_type, class, ctx);
             try w.writeLine(").?;");
         } else {
             try w.writeLine(
@@ -929,7 +928,7 @@ fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, ctx: *
     try w.writeLine("}");
 }
 
-fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Context) !void {
+fn writeImports(w: *CodeWriter, imports: *const Context.Imports, class: ?*const Context.Class, ctx: *const Context) !void {
     // std first
     try w.writeLine(
         \\
@@ -994,16 +993,30 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, ctx: *const Con
 
     // Write sorted imports (builtins, classes, globals all together under gdzig)
     // Note: import lists contain API names, but we need to use converted names
+    // If a name collides with something in the current class, skip the const alias
+    // and the code will use the fully qualified gdzig.class.X / gdzig.builtin.X path
     for (builtins.items) |api_name| {
         const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+        // Check if this name collides with a signal/enum/flag in the class
+        if (class) |c| {
+            if (c.hasCollision(name)) continue;
+        }
         try w.printLine("const {0s} = gdzig.builtin.{0s};", .{name});
     }
     for (classes.items) |api_name| {
         const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+        // Check if this name collides with a signal/enum/flag in the class
+        if (class) |c| {
+            if (c.hasCollision(name)) continue;
+        }
         try w.printLine("const {0s} = gdzig.class.{0s};", .{name});
     }
     for (globals.items) |api_name| {
         const name = if (ctx.enums.get(api_name)) |e| e.name else if (ctx.flags.get(api_name)) |f| f.name else api_name;
+        // Check if this name collides with a signal/enum/flag in the class
+        if (class) |c| {
+            if (c.hasCollision(name)) continue;
+        }
         try w.printLine("const {0s} = gdzig.global.{0s};", .{name});
     }
 }
@@ -1175,11 +1188,11 @@ fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Contex
 
         try writeModuleFunction(w, function, ctx);
     }
-    try writeImports(w, &module.imports, ctx);
+    try writeImports(w, &module.imports, null, ctx);
 }
 
 fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
-    try writeFunctionHeader(w, function, ctx);
+    try writeFunctionHeader(w, function, null, ctx);
 
     try w.printLine(
         \\if ({0s}_ptr == null) {{
@@ -1192,7 +1205,7 @@ fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *
         function.hash.?,
         if (function.return_type != .void) "@ptrCast(&result)" else "null",
     });
-    try writeFunctionFooter(w, function, ctx);
+    try writeFunctionFooter(w, function, null, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrUtilityFunction = null;
         \\
@@ -1224,17 +1237,21 @@ fn convertQualifiedName(api_name: []const u8, ctx: *const Context, comptime map_
     };
 }
 
-fn writeTypeAtField(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
+fn writeTypeAtField(w: *CodeWriter, @"type": *const Context.Type, class: ?*const Context.Class, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |api_name| {
             const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("*gdzig.class.{0s}", .{name});
+                return;
+            };
             try w.print("*{0s}", .{name});
         },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child, ctx);
+            try writeTypeAtField(w, child, class, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1243,31 +1260,47 @@ fn writeTypeAtField(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Co
         .void => try w.writeAll("void"),
         .basic => |api_name| {
             const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.builtin.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .@"enum" => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .enums);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .flag => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .flags);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         inline else => |s| try w.writeAll(s),
     }
 }
 
-fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
+fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type, class: ?*const Context.Class, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |api_name| {
             const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("?*gdzig.class.{0s}", .{name});
+                return;
+            };
             try w.print("?*{0s}", .{name});
         },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child, ctx);
+            try writeTypeAtField(w, child, class, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1276,14 +1309,26 @@ fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type, ctx: *const C
         .void => try w.writeAll("void"),
         .basic => |api_name| {
             const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.builtin.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .@"enum" => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .enums);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .flag => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .flags);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         inline else => |s| try w.writeAll(s),
@@ -1292,17 +1337,21 @@ fn writeTypeAtReturn(w: *CodeWriter, @"type": *const Context.Type, ctx: *const C
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
+fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type, class: ?*const Context.Class, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |api_name| {
             const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("*gdzig.class.{0s}", .{name});
+                return;
+            };
             try w.print("*{0s}", .{name});
         },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child, ctx);
+            try writeTypeAtField(w, child, class, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1311,14 +1360,26 @@ fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type, ctx: *cons
         .void => try w.writeAll("void"),
         .basic => |api_name| {
             const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.builtin.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .@"enum" => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .enums);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .flag => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .flags);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         inline else => |s| try w.writeAll(s),
@@ -1327,17 +1388,21 @@ fn writeTypeAtParameter(w: *CodeWriter, @"type": *const Context.Type, ctx: *cons
 
 /// Writes out a Type for a function parameter. Used to provide `anytype` where we do comptime type
 /// checks and coercions.
-fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Type, ctx: *const Context) !void {
+fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Type, class: ?*const Context.Class, ctx: *const Context) !void {
     switch (@"type".*) {
         .array => try w.writeAll("Array"),
         .class => |api_name| {
             const name = if (ctx.classes.get(api_name)) |c| c.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("*gdzig.class.{0s}", .{name});
+                return;
+            };
             try w.print("*{0s}", .{name});
         },
         .node_path => try w.writeAll("NodePath"),
         .pointer => |child| {
             try w.writeAll("*");
-            try writeTypeAtField(w, child, ctx);
+            try writeTypeAtField(w, child, class, ctx);
         },
         .string => try w.writeAll("String"),
         .string_name => try w.writeAll("StringName"),
@@ -1346,14 +1411,26 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
         .void => try w.writeAll("void"),
         .basic => |api_name| {
             const name = if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.builtin.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .@"enum" => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .enums);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         .flag => |api_name| {
             const name = convertQualifiedName(api_name, ctx, .flags);
+            if (class) |cl| if (cl.hasCollision(name)) {
+                try w.print("gdzig.global.{0s}", .{name});
+                return;
+            };
             try w.writeAll(name);
         },
         inline else => |s| try w.writeAll(s),

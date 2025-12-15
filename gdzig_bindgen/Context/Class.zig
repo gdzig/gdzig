@@ -58,15 +58,15 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         null;
 
     // Name
-    self.name = try casez.allocConvert(gdzig_case.type, allocator, api.name);
+    self.name = try casez.allocConvert(allocator, gdzig_case.type, api.name);
     self.name_api = api.name;
     self.imports.skip = try allocator.dupe(u8, api.name);
 
-    self.module = try casez.allocConvert(gdzig_case.file, allocator, self.name);
+    self.module = try casez.allocConvert(allocator, gdzig_case.file, self.name);
 
     // Base
     self.base = if (api.inherits) |inherits|
-        try casez.allocConvert(gdzig_case.type, allocator, inherits)
+        try casez.allocConvert(allocator, gdzig_case.type, inherits)
     else
         null;
     self.base_api = api.inherits;
@@ -227,6 +227,24 @@ pub fn getNearestSingleton(self: *const Class, ctx: *const Context) ?*const Clas
         return base.getNearestSingleton(ctx);
     }
     return null;
+}
+
+/// Returns true if the given name collides with a signal, enum, or flag defined in this class.
+/// Used to determine if an imported type needs a namespace prefix.
+pub fn hasCollision(self: *const Class, name: []const u8) bool {
+    // Check signal struct names
+    for (self.signals.values()) |signal| {
+        if (std.mem.eql(u8, signal.struct_name, name)) return true;
+    }
+    // Check enum names
+    for (self.enums.values()) |@"enum"| {
+        if (std.mem.eql(u8, @"enum".name, name)) return true;
+    }
+    // Check flag names
+    for (self.flags.values()) |flag| {
+        if (std.mem.eql(u8, flag.name, name)) return true;
+    }
+    return false;
 }
 
 const std = @import("std");

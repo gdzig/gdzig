@@ -16,7 +16,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
     errdefer self.deinit(allocator);
 
     self.name = name: {
-        const name = try casez.allocConvert(gdzig_case.file, allocator, api.name);
+        const name = try casez.allocConvert(allocator, gdzig_case.file, api.name);
         if (builtin.methods.contains(name)) {
             const n = try std.fmt.allocPrint(allocator, "{s}_", .{name});
             std.debug.assert(!builtin.methods.contains(n));
@@ -104,7 +104,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?Constant {
 
     const name_token = var_decl.ast.mut_token + 1;
     const name = ast.tokenSlice(name_token);
-    const name_api = try casez.allocConvert(gdzig_case.constant, allocator, name);
+    const name_api = try casez.allocConvert(allocator, gdzig_case.constant, name);
 
     return .{
         .skip = true,
