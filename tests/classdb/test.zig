@@ -5,7 +5,7 @@ pub fn init() void {
 pub fn run() !void {
     const node = TestNode.create() catch return error.CreateFailed;
     defer node.base.destroy();
-    defer node.destroy();
+    // Godot will call node.destroy via callback
 
     _ = Object.call(.upcast(node), .fromComptimeLatin1("increment"), .{});
     try testing.expectCall(node, "get_counter", .{}, @as(i64, 1));
