@@ -26,7 +26,6 @@ pub const registerClass = register.registerClass;
 pub const registerExtension = register.registerExtension;
 pub const registerMethod = register.registerMethod;
 pub const registerSignal = register.registerSignal;
-pub const InitializationLevel = register.InitializationLevel;
 
 const DispatchTable = @import("DispatchTable.zig");
 

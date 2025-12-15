@@ -1,4 +1,4 @@
-pub const level: godot.InitializationLevel = .core;
+pub const level: godot.global.InitializationLevel = .core;
 
 pub fn run() !void {
     try testAllocFree(.@"1");

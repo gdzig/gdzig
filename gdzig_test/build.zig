@@ -140,16 +140,12 @@ fn generateMain(b: *Build) Build.LazyPath {
         \\}
         \\
         \\pub const Extension = struct {
-        \\    pub fn create() *const Extension {
-        \\        return &.{};
-        \\    }
-        \\
-        \\    pub fn init(self: *const Extension, level: godot.InitializationLevel) void {
+        \\    pub fn enter(self: *Extension, level: InitializationLevel) void {
         \\        _ = self;
         \\        testing.runInit(testcase, level);
         \\    }
         \\
-        \\    pub fn deinit(self: *const Extension, level: godot.InitializationLevel) void {
+        \\    pub fn exit(self: *Extension, level: InitializationLevel) void {
         \\        _ = self;
         \\        testing.runDeinit(testcase, level);
         \\    }
@@ -157,6 +153,7 @@ fn generateMain(b: *Build) Build.LazyPath {
         \\
         \\const std = @import("std");
         \\const godot = @import("gdzig");
+        \\const InitializationLevel = godot.global.InitializationLevel;
         \\const testcase = @import("testcase");
         \\const testing = @import("gdzig_test");
     );

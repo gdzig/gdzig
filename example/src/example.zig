@@ -2,30 +2,27 @@ comptime {
     godot.registerExtension(Extension, .{ .entry_symbol = "my_extension_init" });
 }
 
-pub const Extension = struct {
-    gpa: DebugAllocator(.{}),
-    allocator: Allocator,
+var gpa: DebugAllocator(.{}) = .init;
 
-    pub fn create() !*Extension {
-        var gpa: DebugAllocator(.{}) = .init;
-        const self = try gpa.allocator().create(Extension);
-        self.gpa = gpa;
-        self.allocator = self.gpa.allocator();
-        return self;
+pub const Extension = struct {
+    class_userdata: Allocator,
+
+    pub fn init() !Extension {
+        return .{ .class_userdata = gpa.allocator() };
     }
 
-    pub fn init(self: *Extension, level: InitializationLevel) void {
+    pub fn enter(self: *Extension, level: InitializationLevel) void {
         if (level == .scene) {
-            godot.registerClass(ExampleNode, .{ .userdata = &self.allocator });
+            godot.registerClass(ExampleNode, .{ .userdata = &self.class_userdata });
             godot.registerMethod(ExampleNode, .onTimeout);
             godot.registerMethod(ExampleNode, .onResized);
             godot.registerMethod(ExampleNode, .onItemFocused);
 
-            godot.registerClass(GuiNode, .{ .userdata = &self.allocator });
+            godot.registerClass(GuiNode, .{ .userdata = &self.class_userdata });
             godot.registerMethod(GuiNode, .onPressed);
             godot.registerMethod(GuiNode, .onToggled);
 
-            godot.registerClass(SignalNode, .{ .userdata = &self.allocator });
+            godot.registerClass(SignalNode, .{ .userdata = &self.class_userdata });
             godot.registerMethod(SignalNode, .onSignal1);
             godot.registerMethod(SignalNode, .onSignal2);
             godot.registerMethod(SignalNode, .onSignal3);
@@ -36,13 +33,12 @@ pub const Extension = struct {
             godot.registerSignal(SignalNode, SignalNode.Signal2);
             godot.registerSignal(SignalNode, SignalNode.Signal3);
 
-            godot.registerClass(SpriteNode, .{ .userdata = &self.allocator });
+            godot.registerClass(SpriteNode, .{ .userdata = &self.class_userdata });
         }
     }
 
-    pub fn destroy(self: *Extension) void {
-        var gpa = self.gpa;
-        gpa.allocator().destroy(self);
+    pub fn deinit(self: *Extension) void {
+        _ = self;
         assert(gpa.deinit() == .ok);
     }
 };
@@ -51,7 +47,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const DebugAllocator = std.heap.DebugAllocator;
-const InitializationLevel = godot.InitializationLevel;
+const InitializationLevel = godot.global.InitializationLevel;
 
 const godot = @import("gdzig");
 

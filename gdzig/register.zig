@@ -4,14 +4,9 @@ pub const ExtensionOptions = struct {
 };
 
 pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void {
-    const return_type = @typeInfo(@TypeOf(T.create)).@"fn".return_type.?;
-    const actual_type = switch (@typeInfo(return_type)) {
-        .error_union => |eu| eu.payload,
-        else => return_type,
+    const Cache = struct {
+        var state: T = undefined;
     };
-
-    assert(@typeInfo(actual_type) == .pointer);
-    assert(@typeInfo(actual_type).pointer.child == T);
 
     @export(&struct {
         fn entrypoint(
@@ -22,34 +17,47 @@ pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void 
             raw.* = .init(p_get_proc_address.?, p_library.?);
             raw.getGodotVersion(@ptrCast(&gdzig.version));
 
-            const self = if (@typeInfo(return_type) == .error_union)
-                T.create() catch return @intFromBool(false)
-            else
-                T.create();
+            Cache.state = init() catch |err| {
+                std.log.err("Failed to initialize extension: {}", .{err});
+                return @intFromBool(false);
+            };
 
-            r_initialization.*.userdata = @ptrCast(@constCast(self));
-            r_initialization.*.initialize = @ptrCast(&init);
-            r_initialization.*.deinitialize = @ptrCast(&deinit);
+            r_initialization.*.userdata = @ptrCast(&Cache.state);
+            r_initialization.*.initialize = @ptrCast(&enter);
+            r_initialization.*.deinitialize = @ptrCast(&exit);
             r_initialization.*.minimum_initialization_level = @intFromEnum(opt.minimum_initialization_level);
 
             return @intFromBool(true);
         }
 
-        fn init(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
-            const self: *T = @ptrCast(@alignCast(userdata.?));
-            const level: InitializationLevel = @enumFromInt(p_level);
-
+        fn init() anyerror!T {
             if (@hasDecl(T, "init")) {
-                self.init(level);
+                const return_type = @typeInfo(@TypeOf(T.init)).@"fn".return_type.?;
+                return if (@typeInfo(return_type) == .error_union)
+                    T.init()
+                else
+                    T.init();
+            } else {
+                comptime assertDefaultInitializable();
+                return .{};
             }
         }
 
-        fn deinit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
+        fn enter(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
             const self: *T = @ptrCast(@alignCast(userdata.?));
             const level: InitializationLevel = @enumFromInt(p_level);
 
-            if (@hasDecl(T, "deinit")) {
-                self.deinit(level);
+            if (@hasDecl(T, "enter")) {
+                self.enter(level);
+            }
+        }
+
+        fn exit(userdata: ?*anyopaque, p_level: c.GDExtensionInitializationLevel) callconv(.c) void {
+            const self: *T = @ptrCast(@alignCast(userdata.?));
+            const level: InitializationLevel = @enumFromInt(p_level);
+
+            if (@hasDecl(T, "exit")) {
+                self.exit(level);
             }
 
             if (level == opt.minimum_initialization_level) {
@@ -58,18 +66,29 @@ pub fn registerExtension(comptime T: type, comptime opt: ExtensionOptions) void 
                 if (@hasDecl(T, "destroy")) self.destroy();
             }
         }
+
+        fn assertDefaultInitializable() void {
+            const info = @typeInfo(T);
+
+            if (info != .@"struct") @compileError(@typeName(T) ++ " is not a struct, and cannot be default-initialized. It must have an initializer function.");
+
+            comptime var missing: []const u8 = "";
+            for (info.@"struct".fields) |field| {
+                if (field.default_value_ptr == null) {
+                    missing = missing ++ if (missing.len > 0) ", " else "";
+                    missing = missing ++ "'" ++ field.name ++ "'";
+                }
+            }
+
+            if (missing.len > 0) {
+                @compileError("Cannot default-initialize '" ++ @typeName(T) ++ "' because field(s) " ++ missing ++ " are missing default values. Either provide default values for all fields, or implement 'pub fn init() " ++ @typeName(T) ++ " {}'.");
+            }
+        }
     }.entrypoint, .{
         .name = opt.entry_symbol,
         .linkage = .strong,
     });
 }
-
-pub const InitializationLevel = enum(c_int) {
-    core = 0,
-    servers = 1,
-    scene = 2,
-    editor = 3,
-};
 
 pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
     const class_name = StringName.fromComptimeLatin1(meta.typeShortName(T));
@@ -570,6 +589,7 @@ const string = gdzig.string;
 const class = gdzig.class;
 const classdb = gdzig.class.ClassDb;
 const ClassInfo4 = gdzig.class.ClassDb.ClassInfo4;
+const InitializationLevel = gdzig.global.InitializationLevel;
 const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;

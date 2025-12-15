@@ -18,6 +18,7 @@ gdzig/class/*.zig
 gdzig/global/*.zig
 !gdzig/builtin/variant.zig
 !gdzig/class/vtable.zig
+!gdzig/global/initialization_level.zig
 !gdzig/**/*.mixin.zig
 !gdzig/**/*.replace.zig
 gdzig/builtin.zig

@@ -1,5 +1,5 @@
-pub fn runInit(comptime testcase: type, current: godot.InitializationLevel) void {
-    const level: godot.InitializationLevel = if (@hasDecl(testcase, "level"))
+pub fn runInit(comptime testcase: type, current: InitializationLevel) void {
+    const level: InitializationLevel = if (@hasDecl(testcase, "level"))
         testcase.level
     else
         .scene;
@@ -14,8 +14,8 @@ pub fn runInit(comptime testcase: type, current: godot.InitializationLevel) void
     }
 }
 
-pub fn runDeinit(comptime testcase: type, current: godot.InitializationLevel) void {
-    const level: godot.InitializationLevel = if (@hasDecl(testcase, "level"))
+pub fn runDeinit(comptime testcase: type, current: InitializationLevel) void {
+    const level: InitializationLevel = if (@hasDecl(testcase, "level"))
         testcase.level
     else
         .scene;
@@ -95,5 +95,6 @@ pub const refAllDeclsRecursive = std.testing.refAllDeclsRecursive;
 pub const tmpDir = std.testing.tmpDir;
 
 const godot = @import("gdzig");
+const InitializationLevel = godot.global.InitializationLevel;
 const Object = godot.class.Object;
 const StringName = godot.builtin.StringName;
