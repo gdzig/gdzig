@@ -54,7 +54,7 @@ pub fn register() void {
     var class_name = StringName.fromComptimeLatin1("TestNode");
     var base_class_name = StringName.fromComptimeLatin1("Node");
 
-    ClassDB.registerClass3(TestNode, void, void, &class_name, &base_class_name, .{}, .{
+    ClassDB.registerClass1(TestNode, void, &class_name, &base_class_name, .{}, .{
         .create = create,
         .destroy = destroy,
     });
@@ -165,11 +165,13 @@ pub fn register() void {
     ClassDB.registerIntegerConstant(&class_name, &bitfield_name, &flag_name, 1, true);
 
     // Virtual method
-    var virtual_method_name = StringName.fromComptimeLatin1("_my_virtual_method");
-    ClassDB.registerVirtualMethod(&class_name, .{
-        .name = &virtual_method_name,
-        .return_value = .{ .type = .int },
-    });
+    if (godot.version.gte(.@"4.3")) {
+        var virtual_method_name = StringName.fromComptimeLatin1("_my_virtual_method");
+        ClassDB.registerVirtualMethod(&class_name, .{
+            .name = &virtual_method_name,
+            .return_value = .{ .type = .int },
+        });
+    }
 }
 
 fn callIncrement(instance: *TestNode, _: []const *const Variant) godot.CallError!Variant {
