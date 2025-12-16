@@ -110,15 +110,33 @@ pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
     self.disconnectRaw(signal_name, callable);
 }
 
-/// Emits a signal.
-pub fn emit(self: *Self, signal: anytype) EmitError!void {
-    const S = @TypeOf(signal);
-    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
-    const fields = @typeInfo(S).@"struct".fields;
-    var args: std.meta.Tuple(&typeInfoToTypes(fields)) = undefined;
+/// Emits a signal. Guarantees no allocations when calling across the FFI. Passing Transform2D, AABB, Basis, Transform3D, or Projection is a compile error; use the Alloc variant.
+pub fn emit(self: *Self, comptime Signal: type, signal: AssertNonAllocating(Signal)) EmitError!void {
+    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(Signal)));
+    const fields = @typeInfo(Signal).@"struct".fields;
+    var args: [fields.len]Variant = undefined;
     inline for (fields, 0..) |field, i| {
-        args[i] = @field(signal, field.name);
+        args[i] = Variant.init(field.type, @field(signal, field.name));
     }
+    // No defer needed - non-allocating types don't need cleanup
+    return emitImpl(self, signal_name, args);
+}
+
+/// Emits a signal. Will necessarily allocate when calling across the FFI with Transform2d, Aabb, Basis, Transform3d, or Projection.
+pub fn emitAlloc(self: *Self, comptime Signal: type, signal: Signal) EmitError!void {
+    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(Signal)));
+    const fields = @typeInfo(Signal).@"struct".fields;
+    var args: [fields.len]Variant = undefined;
+    inline for (fields, 0..) |field, i| {
+        args[i] = Variant.init(field.type, @field(signal, field.name));
+    }
+    defer inline for (&args, fields) |*arg, field| {
+        if (allocatesAsVariant(field.type)) arg.deinit();
+    };
+    return emitImpl(self, signal_name, args);
+}
+
+fn emitImpl(self: *Self, signal_name: StringName, args: anytype) EmitError!void {
     switch (self.emitRaw(signal_name, args)) {
         .ok => {},
         .err_unavailable => {
@@ -132,13 +150,19 @@ pub fn emit(self: *Self, signal: anytype) EmitError!void {
     }
 }
 
-fn typeInfoToTypes(comptime fields: []const std.builtin.Type.StructField) [fields.len]type {
-    var types: [fields.len]type = undefined;
-    for (fields, 0..) |field, i| {
-        types[i] = field.type;
+/// Returns Signal if no fields allocate, otherwise generates a compile error.
+fn AssertNonAllocating(comptime Signal: type) type {
+    const fields = @typeInfo(Signal).@"struct".fields;
+    inline for (fields) |field| {
+        if (allocatesAsVariant(field.type)) {
+            @compileError("Signal field '" ++ field.name ++ "' has type " ++ @typeName(field.type) ++
+                " which allocates when wrapped in Variant. Use emitAlloc instead.");
+        }
     }
-    return types;
+    return Signal;
 }
+
+const allocatesAsVariant = Variant.Tag.allocatesForType;
 
 const casez = @import("casez");
 const common = @import("common");

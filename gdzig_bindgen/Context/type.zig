@@ -350,6 +350,25 @@ pub const Type = union(enum) {
             else => null,
         };
     }
+
+    /// Returns true if wrapping this type in a Variant would allocate from Godot's pool allocators.
+    /// These types need explicit cleanup when wrapped: Transform2D, AABB, Basis, Transform3D, Projection.
+    /// Note: This must stay in sync with Variant.Tag.allocates() in the runtime.
+    pub fn allocatesAsVariant(self: Type, ctx: *const Context) bool {
+        _ = ctx;
+        const name = switch (self) {
+            .basic => |n| n,
+            else => return false,
+        };
+        return std.mem.eql(u8, name, "Transform2D") or
+            std.mem.eql(u8, name, "Transform2d") or
+            std.mem.eql(u8, name, "AABB") or
+            std.mem.eql(u8, name, "Aabb") or
+            std.mem.eql(u8, name, "Basis") or
+            std.mem.eql(u8, name, "Transform3D") or
+            std.mem.eql(u8, name, "Transform3d") or
+            std.mem.eql(u8, name, "Projection");
+    }
 };
 
 const std = @import("std");

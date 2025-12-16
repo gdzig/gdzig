@@ -19,12 +19,29 @@ pub const Variant = extern struct {
 
     pub fn init(comptime T: type, value: T) Variant {
         const tag = comptime Tag.forType(T);
-        const variantFromType = getVariantFromTypeConstructor(tag);
 
-        var result: Variant = undefined;
         if (tag == .object) {
-            variantFromType(@ptrCast(&result), @ptrCast(@constCast(&class.upcast(*Object, value))));
-        } else switch (@typeInfo(T)) {
+            // For RefCounted objects, manually construct the Variant and call reference()
+            // to share ownership. We bypass variantFromType because it uses init_ref()
+            // which only works correctly for first-time ownership transfer.
+            if (comptime class.isRefCountedPtr(T)) {
+                _ = RefCounted.upcast(value).reference();
+            }
+            const obj = Object.upcast(value);
+            return .{
+                .tag = .object,
+                .data = .{
+                    .object = .{
+                        .id = @enumFromInt(obj.getInstanceId()),
+                        .object = obj,
+                    },
+                },
+            };
+        }
+
+        const variantFromType = getVariantFromTypeConstructor(tag);
+        var result: Variant = undefined;
+        switch (@typeInfo(T)) {
             .pointer => variantFromType(@ptrCast(&result), @ptrCast(@constCast(value))),
             else => {
                 var v: T = value;
@@ -532,6 +549,20 @@ pub const Variant = extern struct {
         pub fn canConvertStrict(from: Tag, to: Tag) bool {
             return raw.variantCanConvertStrict(@intFromEnum(from), @intFromEnum(to)) != 0;
         }
+
+        /// Returns true if this variant type allocates from Godot's pool allocators.
+        /// These types need explicit cleanup when wrapped in a Variant.
+        pub fn allocates(self: Tag) bool {
+            return switch (self) {
+                .transform2d, .aabb, .basis, .transform3d, .projection => true,
+                else => false,
+            };
+        }
+
+        /// Returns true if wrapping the given type in a Variant would allocate from Godot's pool allocators.
+        pub fn allocatesForType(comptime T: type) bool {
+            return forType(T).allocates();
+        }
     };
 
     pub const Data = extern union {
@@ -747,6 +778,7 @@ const Vector3i = gdzig.builtin.Vector3i;
 const Vector4 = gdzig.builtin.Vector4;
 const Vector4i = gdzig.builtin.Vector4i;
 const Object = gdzig.class.Object;
+const RefCounted = gdzig.class.RefCounted;
 const class = gdzig.class;
 
 const precision = @import("build_options").precision;

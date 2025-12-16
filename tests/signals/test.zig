@@ -19,14 +19,14 @@ pub fn run() !void {
     try testing.expectEqual(0, receiver.count);
     try testing.expectEqual(0, receiver.value);
 
-    try emitter.base.emit(TestSignal{ .value = 42 });
+    try emitter.base.emit(TestSignal, .{ .value = 42 });
 
     try testing.expectEqual(1, receiver.count);
     try testing.expectEqual(42, receiver.value);
 
     emitter.base.disconnect(TestSignal, callable);
 
-    try emitter.base.emit(TestSignal{ .value = 99 });
+    try emitter.base.emit(TestSignal, .{ .value = 99 });
 
     try testing.expectEqual(1, receiver.count);
     try testing.expectEqual(42, receiver.value);

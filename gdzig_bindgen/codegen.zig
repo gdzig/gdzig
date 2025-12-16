@@ -386,6 +386,12 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
         if (function.mode != .final) continue;
         try writeClassFunction(w, class, function, ctx);
         try w.writeLine("");
+
+        // Write allocating wrapper for vararg functions
+        if (function.is_vararg) {
+            try writeFunctionAlloc(w, function, class, ctx);
+            try w.writeLine("");
+        }
     }
 
     // TODO: write properties and signals
@@ -450,6 +456,12 @@ fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, class: *const Cont
 }
 
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+    // For vararg functions, generate a thin wrapper that does comptime check + delegates to Alloc version
+    if (function.is_vararg) {
+        try writeClassFunctionVarargWrapper(w, class, function, ctx);
+        return;
+    }
+
     try writeFunctionHeader(w, function, class, ctx);
 
     if (class.is_singleton) {
@@ -458,10 +470,6 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
             \\    instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);
             \\}
         );
-    }
-
-    if (function.is_vararg) {
-        try w.writeLine("var err: c.GDExtensionCallError = undefined;");
     }
 
     try w.printLine(
@@ -475,30 +483,260 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
         function.hash.?,
     });
 
-    if (function.is_vararg) {
-        try w.print("raw.objectMethodBindCall({0s}_ptr, ", .{function.name});
-        try writeClassFunctionObjectPtr(w, class, function, ctx);
-        try w.printLine(", @ptrCast(@alignCast(&args[0])), args.len, {s}, &err);", .{
-            if (function.return_type != .void)
-                "@ptrCast(&result)"
-            else
-                "null",
-        });
-    } else {
-        try w.print("raw.objectMethodBindPtrcall({0s}_ptr, ", .{function.name});
-        try writeClassFunctionObjectPtr(w, class, function, ctx);
-        try w.printLine(", @ptrCast(&args), {s});", .{
-            if (function.return_type != .void)
-                "@ptrCast(&result)"
-            else
-                "null",
-        });
-    }
+    try w.print("raw.objectMethodBindPtrcall({0s}_ptr, ", .{function.name});
+    try writeClassFunctionObjectPtr(w, class, function, ctx);
+    try w.printLine(", @ptrCast(&args), {s});", .{
+        if (function.return_type != .void)
+            "@ptrCast(&result)"
+        else
+            "null",
+    });
 
     try writeFunctionFooter(w, function, class, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionMethodBindPtr = null;
     , .{function.name});
+}
+
+/// Writes a thin vararg wrapper that does comptime check and delegates to the Alloc version.
+fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+    try w.writeLine(
+        \\/// Guarantees no allocations when calling across the FFI. Passing Transform2d, Aabb, Basis, Transform3d, or Projection is a compile error; use the Alloc variant.
+        \\///
+    );
+    try writeDocBlock(w, function.doc);
+
+    // Function signature
+    if (std.zig.Token.keywords.has(function.name)) {
+        try w.print("pub fn @\"{s}\"(", .{function.name});
+    } else {
+        try w.print("pub fn {s}(", .{function.name});
+    }
+
+    var is_first = true;
+    const has_self = switch (function.self) {
+        .static, .singleton => false,
+        else => true,
+    };
+
+    if (has_self) {
+        try w.print("self: *{s}", .{class.name});
+        is_first = false;
+    }
+
+    for (function.parameters.values()) |param| {
+        if (!is_first) try w.writeAll(", ");
+        try w.print("{s}: ", .{param.name});
+        try writeTypeAtParameter(w, &param.type, class, ctx);
+        is_first = false;
+    }
+
+    if (!is_first) try w.writeAll(", ");
+    try w.writeAll("@\"...\": anytype) ");
+    try writeTypeAtReturn(w, &function.return_type, class, ctx);
+    try w.writeLine(" {");
+    w.indent += 1;
+
+    // Comptime check - skip Variant type (already a Variant, no wrapping needed)
+    try w.printLine(
+        \\inline for (0..@"...".len) |_i| {{
+        \\    if (@TypeOf(@"..."[_i]) != Variant and comptime Variant.Tag.allocatesForType(@TypeOf(@"..."[_i]))) {{
+        \\        @compileError(@typeName(@TypeOf(@"..."[_i])) ++ " allocates as Variant; use {s}Alloc() or pass a Variant instead.");
+        \\    }}
+        \\}}
+    , .{function.name});
+
+    // Delegate to Alloc version
+    if (function.return_type != .void) {
+        try w.writeAll("return ");
+    }
+
+    if (has_self) {
+        try w.print("self.{s}Alloc(", .{function.name});
+    } else {
+        try w.print("{s}Alloc(", .{function.name});
+    }
+
+    is_first = true;
+    for (function.parameters.values()) |param| {
+        if (!is_first) try w.writeAll(", ");
+        try w.print("{s}", .{param.name});
+        is_first = false;
+    }
+
+    if (!is_first) try w.writeAll(", ");
+    try w.writeLine("@\"...\");");
+
+    w.indent -= 1;
+    try w.writeLine("}");
+}
+
+/// Writes the allocating version of a vararg function that does the actual FFI call.
+fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
+    try w.writeLine(
+        \\/// Will necessarily allocate when calling across the FFI with Transform2d, Aabb, Basis, Transform3d, or Projection.
+        \\///
+    );
+    try writeDocBlock(w, function.doc);
+
+    // Declaration with Alloc suffix
+    if (std.zig.Token.keywords.has(function.name)) {
+        try w.print("pub fn @\"{s}Alloc\"(", .{function.name});
+    } else {
+        try w.print("pub fn {s}Alloc(", .{function.name});
+    }
+
+    var is_first = true;
+
+    // Self parameter
+    switch (function.self) {
+        .static, .singleton => {},
+        .constant => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.print("self: *const {0s}", .{name});
+            is_first = false;
+        },
+        .mutable => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.print("self: *{0s}", .{name});
+            is_first = false;
+        },
+        .value => |api_name| {
+            const name = if (ctx.classes.get(api_name)) |c| c.name else if (ctx.builtins.get(api_name)) |b| b.name else api_name;
+            try w.print("self: {0s}", .{name});
+            is_first = false;
+        },
+    }
+
+    // Positional parameters
+    for (function.parameters.values()) |param| {
+        if (!is_first) {
+            try w.writeAll(", ");
+        }
+        try w.print("{s}: ", .{param.name});
+        try writeTypeAtParameter(w, &param.type, class, ctx);
+        is_first = false;
+    }
+
+    // Variadic parameters as anytype
+    if (!is_first) {
+        try w.writeAll(", ");
+    }
+    try w.writeAll("@\"...\": anytype");
+
+    // Return type
+    try w.writeAll(") ");
+    try writeTypeAtReturn(w, &function.return_type, class, ctx);
+    try w.writeLine(" {");
+    w.indent += 1;
+
+    const param_count = function.parameters.count();
+
+    // Build pointer array to stack-temporary Variants
+    try w.printLine("var args: [{d} + @\"...\".len]*Variant = undefined;", .{param_count});
+
+    // Fixed parameters - wrap in Variant (unless already Variant), defer deinit immediately
+    for (function.parameters.values(), 0..) |param, i| {
+        if (param.type == .variant) {
+            try w.printLine("args[{d}] = @constCast(&{s});", .{ i, param.name });
+        } else {
+            try w.print("args[{d}] = @constCast(&Variant.init(", .{i});
+            try writeTypeAtParameter(w, &param.type, class, ctx);
+            try w.printLine(", {s}));", .{param.name});
+            try w.printLine("defer args[{d}].deinit();", .{i});
+        }
+    }
+
+    // Varargs - check if already a Variant before wrapping
+    try w.printLine("inline for (0..@\"...\".len, {d}..args.len) |i, j| {{", .{param_count});
+    w.indent += 1;
+    try w.writeLine("if (@TypeOf(@\"...\"[i]) == Variant) {");
+    w.indent += 1;
+    try w.writeLine("args[j] = @constCast(&@\"...\"[i]);");
+    w.indent -= 1;
+    try w.writeLine("} else {");
+    w.indent += 1;
+    try w.writeLine("args[j] = @constCast(&Variant.init(@TypeOf(@\"...\"[i]), @\"...\"[i]));");
+    w.indent -= 1;
+    try w.writeLine("}");
+    w.indent -= 1;
+    try w.writeLine("}");
+
+    // Defer deinit for varargs - only if we created the Variant
+    try w.printLine("defer inline for (0..@\"...\".len, {d}..args.len) |i, j| {{", .{param_count});
+    w.indent += 1;
+    try w.writeLine("if (@TypeOf(@\"...\"[i]) != Variant) {");
+    w.indent += 1;
+    try w.writeLine("args[j].deinit();");
+    w.indent -= 1;
+    try w.writeLine("}");
+    w.indent -= 1;
+    try w.writeLine("};");
+
+    // Return variable
+    try w.writeLine("var result: Variant = .nil;");
+
+    // Method bind lookup and call
+    if (class) |cls| {
+        try w.writeLine("var err: c.GDExtensionCallError = undefined;");
+        // Class method
+        if (cls.is_singleton) {
+            try w.writeLine("if (instance == null) {");
+            w.indent += 1;
+            try w.writeLine("instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);");
+            w.indent -= 1;
+            try w.writeLine("}");
+        }
+
+        try w.printLine("if ({0s}Alloc_ptr == null) {{", .{function.name});
+        w.indent += 1;
+        try w.printLine("{0s}Alloc_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"{1s}\")), @ptrCast(&StringName.fromComptimeLatin1(\"{2s}\")), {3d});", .{
+            function.name,
+            function.base.?,
+            function.name_api,
+            function.hash.?,
+        });
+        w.indent -= 1;
+        try w.writeLine("}");
+
+        try w.print("raw.objectMethodBindCall({0s}Alloc_ptr, ", .{function.name});
+        try writeClassFunctionObjectPtr(w, cls, function, ctx);
+        try w.writeLine(", @ptrCast(@alignCast(&args[0])), @intCast(args.len), @ptrCast(&result), &err);");
+    } else {
+        // Utility function
+        try w.printLine("if ({0s}Alloc_ptr == null) {{", .{function.name});
+        w.indent += 1;
+        try w.printLine("{0s}Alloc_ptr = raw.variantGetPtrUtilityFunction(@ptrCast(@constCast(&StringName.fromComptimeLatin1(\"{1s}\"))), {2d});", .{
+            function.name,
+            function.name_api,
+            function.hash.?,
+        });
+        w.indent -= 1;
+        try w.writeLine("}");
+        try w.printLine("{0s}Alloc_ptr.?(@ptrCast(&result), @ptrCast(&args), @intCast(args.len));", .{function.name});
+    }
+
+    // Return
+    switch (function.return_type) {
+        .class => try w.writeLine("return @ptrCast(result);"),
+        .variant => try w.writeLine("return result;"),
+        .void => {},
+        else => {
+            try w.writeAll("return result.as(");
+            try writeTypeAtReturn(w, &function.return_type, class, ctx);
+            try w.writeLine(").?;");
+        },
+    }
+
+    w.indent -= 1;
+    try w.writeLine("}");
+
+    // Method bind pointer storage
+    if (class != null) {
+        try w.printLine("var {0s}Alloc_ptr: c.GDExtensionMethodBindPtr = null;", .{function.name});
+    } else {
+        try w.printLine("var {0s}Alloc_ptr: c.GDExtensionPtrUtilityFunction = null;", .{function.name});
+    }
 }
 
 fn writeClassFunctionObjectPtr(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
@@ -685,6 +923,12 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
 }
 
 fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
+    if (function.is_vararg) {
+        try w.writeLine(
+            \\/// Guarantees no allocations when calling across the FFI. Passing Transform2d, Aabb, Basis, Transform3d, or Projection is a compile error; use the Alloc variant.
+            \\///
+        );
+    }
     try writeDocBlock(w, function.doc);
 
     // Declaration
@@ -729,7 +973,12 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
             try w.writeAll(", ");
         }
         try w.print("{s}: ", .{param.name});
-        try writeTypeAtParameter(w, &param.type, class, ctx);
+        // For vararg functions, allocating types are passed as Variant
+        if (function.is_vararg and param.type.allocatesAsVariant(ctx)) {
+            try w.writeAll("Variant");
+        } else {
+            try writeTypeAtParameter(w, &param.type, class, ctx);
+        }
         is_first = false;
     }
 
@@ -738,7 +987,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
         if (!is_first) {
             try w.writeAll(", ");
         }
-        try w.print("@\"...\": anytype", .{});
+        try w.writeAll("@\"...\": anytype");
         is_first = false;
     }
 
@@ -812,30 +1061,56 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
         }
     }
 
-    // Variadic argument slice variable
+    // Variadic argument handling
     if (function.is_vararg and function.operator_name == null) {
-        try w.printLine("var args: [@\"...\".len + {d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
+        const param_count = function.parameters.count();
+
+        // Comptime verification that vararg types don't allocate
+        try w.printLine(
+            \\inline for (0..@"...".len) |_i| {{
+            \\    if (comptime Variant.Tag.allocatesForType(@TypeOf(@"..."[_i]))) {{
+            \\        @compileError(@typeName(@TypeOf(@"..."[_i])) ++ " allocates as Variant; use {s}Alloc() or pass a Variant instead.");
+            \\    }}
+            \\}}
+        , .{function.name});
+
+        // Build varargs array
+        try w.writeLine("var _varargs: [@\"...\".len]Variant = undefined;");
+        try w.writeLine("inline for (0..@\"...\".len) |_i| _varargs[_i] = Variant.init(@TypeOf(@\"...\"[_i]), @\"...\"[_i]);");
+        try w.writeLine("defer for (&_varargs) |*v| v.deinit();");
+
+        try w.printLine("var args: [{d} + @\"...\".len]c.GDExtensionConstTypePtr = undefined;", .{param_count});
+
         for (function.parameters.values()[0..opt], 0..) |param, i| {
-            try w.print("args[{d}] = &Variant.init(", .{i});
-            try writeTypeAtParameter(w, &param.type, class, ctx);
-            try w.printLine(", {s});", .{param.name});
-        }
-        for (function.parameters.values()[opt..], opt..) |param, i| {
-            if (param.needsRuntimeInit(ctx)) {
-                try w.print("args[{d}] = &Variant.init(", .{i});
-                try writeTypeAtParameter(w, &param.type, class, ctx);
-                try w.printLine(", actual_{s});", .{param.name});
+            if (param.type == .variant or param.type.allocatesAsVariant(ctx)) {
+                try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
             } else {
-                try w.print("args[{d}] = &Variant.init(", .{i});
+                try w.print("args[{d}] = @ptrCast(&Variant.init(", .{i});
                 try writeTypeAtParameter(w, &param.type, class, ctx);
-                try w.printLine(", opt.{s});", .{param.name});
+                try w.printLine(", {s}));", .{param.name});
             }
         }
-        try w.printLine(
-            \\inline for (0..@"...".len) |i| {{
-            \\    args[{d} + i] = &Variant.init(@TypeOf(@"..."[i]), @"..."[i]);
-            \\}}
-        , .{function.parameters.count()});
+        for (function.parameters.values()[opt..], opt..) |param, i| {
+            if (param.type == .variant or param.type.allocatesAsVariant(ctx)) {
+                if (param.needsRuntimeInit(ctx)) {
+                    try w.printLine("args[{d}] = @ptrCast(&actual_{s});", .{ i, param.name });
+                } else {
+                    try w.printLine("args[{d}] = @ptrCast(&opt.{s});", .{ i, param.name });
+                }
+            } else {
+                if (param.needsRuntimeInit(ctx)) {
+                    try w.print("args[{d}] = @ptrCast(&Variant.init(", .{i});
+                    try writeTypeAtParameter(w, &param.type, class, ctx);
+                    try w.printLine(", actual_{s}));", .{param.name});
+                } else {
+                    try w.print("args[{d}] = @ptrCast(&Variant.init(", .{i});
+                    try writeTypeAtParameter(w, &param.type, class, ctx);
+                    try w.printLine(", opt.{s}));", .{param.name});
+                }
+            }
+        }
+
+        try w.printLine("inline for (0..@\"...\".len) |_i| args[{d} + _i] = @ptrCast(&_varargs[_i]);", .{param_count});
     }
 
     // Return variable
@@ -1187,18 +1462,29 @@ fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Contex
         if (function.skip) continue;
 
         try writeModuleFunction(w, function, ctx);
+
+        // Write allocating wrapper for vararg functions
+        if (function.is_vararg) {
+            try writeFunctionAlloc(w, function, null, ctx);
+        }
     }
     try writeImports(w, &module.imports, null, ctx);
 }
 
 fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+    // For vararg functions, generate a thin wrapper that does comptime check + delegates to Alloc version
+    if (function.is_vararg) {
+        try writeModuleFunctionVarargWrapper(w, function, ctx);
+        return;
+    }
+
     try writeFunctionHeader(w, function, null, ctx);
 
     try w.printLine(
         \\if ({0s}_ptr == null) {{
         \\    {0s}_ptr = raw.variantGetPtrUtilityFunction(@ptrCast(@constCast(&StringName.fromComptimeLatin1("{1s}"))), {2d});
         \\}}
-        \\{0s}_ptr.?({3s}, @ptrCast(&args), args.len);
+        \\{0s}_ptr.?({3s}, @ptrCast(&args), @intCast(args.len));
     , .{
         function.name,
         function.name_api,
@@ -1210,6 +1496,65 @@ fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *
         \\var {0s}_ptr: c.GDExtensionPtrUtilityFunction = null;
         \\
     , .{function.name});
+}
+
+/// Writes a thin vararg wrapper for a module function that does comptime check and delegates to the Alloc version.
+fn writeModuleFunctionVarargWrapper(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+    try w.writeLine(
+        \\/// Guarantees no allocations when calling across the FFI. Passing Transform2d, Aabb, Basis, Transform3d, or Projection is a compile error; use the Alloc variant.
+        \\///
+    );
+    try writeDocBlock(w, function.doc);
+
+    // Function signature
+    if (std.zig.Token.keywords.has(function.name)) {
+        try w.print("pub fn @\"{s}\"(", .{function.name});
+    } else {
+        try w.print("pub fn {s}(", .{function.name});
+    }
+
+    var is_first = true;
+    for (function.parameters.values()) |param| {
+        if (!is_first) try w.writeAll(", ");
+        try w.print("{s}: ", .{param.name});
+        try writeTypeAtParameter(w, &param.type, null, ctx);
+        is_first = false;
+    }
+
+    if (!is_first) try w.writeAll(", ");
+    try w.writeAll("@\"...\": anytype) ");
+    try writeTypeAtReturn(w, &function.return_type, null, ctx);
+    try w.writeLine(" {");
+    w.indent += 1;
+
+    // Comptime check - skip Variant type (already a Variant, no wrapping needed)
+    try w.printLine(
+        \\inline for (0..@"...".len) |_i| {{
+        \\    if (@TypeOf(@"..."[_i]) != Variant and comptime Variant.Tag.allocatesForType(@TypeOf(@"..."[_i]))) {{
+        \\        @compileError(@typeName(@TypeOf(@"..."[_i])) ++ " allocates as Variant; use {s}Alloc() or pass a Variant instead.");
+        \\    }}
+        \\}}
+    , .{function.name});
+
+    // Delegate to Alloc version
+    if (function.return_type != .void) {
+        try w.writeAll("return ");
+    }
+
+    try w.print("{s}Alloc(", .{function.name});
+
+    is_first = true;
+    for (function.parameters.values()) |param| {
+        if (!is_first) try w.writeAll(", ");
+        try w.print("{s}", .{param.name});
+        is_first = false;
+    }
+
+    if (!is_first) try w.writeAll(", ");
+    try w.writeLine("@\"...\");");
+
+    w.indent -= 1;
+    try w.writeLine("}");
 }
 
 /// Converts a possibly qualified type name (e.g., "AStarGrid2D.CellShape") to use converted class prefixes.

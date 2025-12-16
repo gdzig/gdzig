@@ -55,7 +55,7 @@ fn fail(err: anyerror) noreturn {
 pub fn expectCall(object: anytype, comptime name: [:0]const u8, args: anytype, expected: anytype) !void {
     const method: StringName = .fromComptimeLatin1(name);
 
-    var result = Object.call(.upcast(object), method, args);
+    var result = Object.callAlloc(.upcast(object), method, args);
     defer result.deinit();
 
     const val = result.as(@TypeOf(expected)) orelse return error.InvalidResult;

@@ -81,16 +81,16 @@ pub fn onSignal3(self: *Self) void {
 }
 
 pub fn emitSignal1(self: *Self) void {
-    self.base.emit(Signal1{
+    self.base.emit(Signal1, .{
         .name = .fromLatin1("test_signal_name"),
         .position = .initXYZ(123, 321, 333),
     }) catch {};
 }
 pub fn emitSignal2(self: *Self) void {
-    self.base.emit(Signal2{}) catch {};
+    self.base.emit(Signal2, .{}) catch {};
 }
 pub fn emitSignal3(self: *Self) void {
-    self.base.emit(Signal3{}) catch {};
+    self.base.emit(Signal3, .{}) catch {};
 }
 
 const std = @import("std");

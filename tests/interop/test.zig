@@ -129,7 +129,7 @@ pub const ZigObject = struct {
 
     /// Emit a signal for GDScript to receive
     pub fn emitZigSignal(self: *ZigObject, value: i64) void {
-        self.base.emit(ZigSignal{ .value = value }) catch {};
+        self.base.emit(ZigSignal, .{ .value = value }) catch {};
     }
 };
 
