@@ -1,15 +1,10 @@
-const casez = @import("casez");
-const common = @import("common");
-const godot_case = common.godot_case;
 const gdzig = @import("gdzig");
 const classdb = gdzig.class.ClassDb;
 const StringName = gdzig.builtin.StringName;
 
-const meta = @import("../meta.zig");
-
 pub fn registerSignal(comptime T: type, comptime S: type) void {
-    const class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
-    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
+    const class_name: StringName = .fromType(T);
+    const signal_name: StringName = .fromSignal(S);
 
     const fields = @typeInfo(S).@"struct".fields;
     var arg_info: [fields.len]classdb.PropertyInfo = undefined;

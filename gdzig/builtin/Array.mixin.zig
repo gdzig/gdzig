@@ -15,7 +15,7 @@ pub inline fn ref(self: *Array, from: *const Array) void {
 /// **Since Godot 4.1**
 pub inline fn setTyped(self: *Array, comptime T: type, script: ?*const Variant) void {
     const tag = Variant.Tag.forType(T);
-    const name: StringName = .fromComptimeLatin1(@import("gdzig").meta.typeShortName(T));
+    const name: StringName = .fromType(T);
     raw.arraySetTyped(self.ptr(), @intFromEnum(tag), if (tag == .object) name.constPtr() else null, if (script) |s| s.constPtr() else null);
 }
 

@@ -69,6 +69,49 @@ pub inline fn fromNullTerminatedUtf8(str: [:0]const u8) StringName {
     return viaString(str);
 }
 
+pub fn fromType(comptime T: type) StringName {
+    return fromTypeName(typeShortName(T));
+}
+
+pub fn fromSignal(comptime S: type) StringName {
+    return fromSignalName(typeShortName(S));
+}
+
+pub fn fromTypeName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.type, name);
+    return fromComptimeLatin1(converted);
+}
+
+pub fn fromConstantName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.constant, name);
+    return fromComptimeLatin1(converted);
+}
+
+pub fn fromFunctionName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.func, name);
+    return fromComptimeLatin1(converted);
+}
+
+pub fn fromMethodName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.method, name);
+    return fromComptimeLatin1(converted);
+}
+
+pub fn fromPropertyName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.field, name);
+    return fromComptimeLatin1(converted);
+}
+
+pub fn fromSignalName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.signal, name);
+    return fromComptimeLatin1(converted);
+}
+
+pub fn fromVirtualMethodName(comptime name: []const u8) StringName {
+    const converted = comptime casez.comptimeConvert(godot_case.virtual_method, name);
+    return fromComptimeLatin1(converted);
+}
+
 /// Creates a StringName via an intermediate String (4.1 fallback).
 fn viaString(str: [:0]const u8) StringName {
     var gd_string: String = undefined;
@@ -77,9 +120,20 @@ fn viaString(str: [:0]const u8) StringName {
     return StringName.fromString(gd_string);
 }
 
+fn typeShortName(comptime T: type) [:0]const u8 {
+    const full = @typeName(T);
+    const pos = std.mem.lastIndexOfScalar(u8, full, '.') orelse return full;
+    return full[pos + 1 ..];
+}
+
+const casez = @import("casez");
+const common = @import("common");
+const godot_case = common.godot_case;
+
 // @mixin stop
 
 const std = @import("std");
+const DeclEnum = std.meta.DeclEnum;
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;

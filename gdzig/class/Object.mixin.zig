@@ -57,7 +57,7 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
 
     const token = comptime typeToken(T);
 
-    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromComptimeLatin1(meta.typeShortName(T))), @ptrCast(instance_));
+    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromType(T)), @ptrCast(instance_));
     raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
         const callbacks = c.GDExtensionInstanceBindingCallbacks{
             .create_callback = create_callback,
@@ -99,20 +99,20 @@ fn typeToken(comptime T: type) *anyopaque {
 
 /// Connects a signal to a callable.
 pub fn connect(self: *Self, comptime S: type, callable: Callable) ConnectError!void {
-    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
+    const signal_name: StringName = .fromSignal(S);
     const result = self.connectRaw(signal_name, callable, .{});
     if (result != .ok) return ConnectError.AlreadyConnected;
 }
 
 /// Disconnects a signal from a callable.
 pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
-    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(S)));
+    const signal_name: StringName = .fromSignal(S);
     self.disconnectRaw(signal_name, callable);
 }
 
 /// Emits a signal. Guarantees no allocations when calling across the FFI. Passing Transform2D, AABB, Basis, Transform3D, or Projection is a compile error; use the Alloc variant.
 pub fn emit(self: *Self, comptime Signal: type, signal: AssertNonAllocating(Signal)) EmitError!void {
-    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(Signal)));
+    const signal_name: StringName = .fromSignal(Signal);
     const fields = @typeInfo(Signal).@"struct".fields;
     var args: [fields.len]Variant = undefined;
     inline for (fields, 0..) |field, i| {
@@ -124,7 +124,7 @@ pub fn emit(self: *Self, comptime Signal: type, signal: AssertNonAllocating(Sign
 
 /// Emits a signal. Will necessarily allocate when calling across the FFI with Transform2d, Aabb, Basis, Transform3d, or Projection.
 pub fn emitAlloc(self: *Self, comptime Signal: type, signal: Signal) EmitError!void {
-    const signal_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.signal, meta.typeShortName(Signal)));
+    const signal_name: StringName = .fromSignal(Signal);
     const fields = @typeInfo(Signal).@"struct".fields;
     var args: [fields.len]Variant = undefined;
     inline for (fields, 0..) |field, i| {
@@ -164,14 +164,9 @@ fn AssertNonAllocating(comptime Signal: type) type {
 
 const allocatesAsVariant = Variant.Tag.allocatesForType;
 
-const casez = @import("casez");
-const common = @import("common");
-const godot_case = common.godot_case;
-
 const ConnectError = gdzig.ConnectError;
 const EmitError = gdzig.EmitError;
 const class = gdzig.class;
-const meta = @import("../meta.zig");
 
 const DestroyInstanceBinding = gdzig.extension.DestroyInstanceBinding;
 

@@ -13,12 +13,10 @@ pub inline fn setTyped(
     key_script: ?*const Variant,
     value_script: ?*const Variant,
 ) void {
-    const gdzig_meta = @import("gdzig").meta;
-
     const key_tag = Variant.Tag.forType(K);
     const value_tag = Variant.Tag.forType(V);
-    const key_class_name: StringName = .fromComptimeLatin1(gdzig_meta.typeShortName(K));
-    const value_class_name: StringName = .fromComptimeLatin1(gdzig_meta.typeShortName(V));
+    const key_class_name: StringName = .fromType(K);
+    const value_class_name: StringName = .fromType(V);
 
     raw.dictionarySetTyped(
         self.ptr(),

@@ -14,11 +14,9 @@ const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
 const Object = gdzig.class.Object;
 
-const meta = @import("../meta.zig");
-
 pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
-    const class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
-    const base_name: StringName = .fromComptimeLatin1(meta.typeShortName(class.BaseOf(T)));
+    const class_name: StringName = .fromType(T);
+    const base_name: StringName = .fromType(class.BaseOf(T));
     const callbacks = comptime makeClassCallbacks(T);
 
     if (gdzig.version.gte(.@"4.4")) {

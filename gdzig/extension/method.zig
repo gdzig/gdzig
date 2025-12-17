@@ -1,21 +1,16 @@
 const std = @import("std");
 const DeclEnum = std.meta.DeclEnum;
 
-const casez = @import("casez");
-const common = @import("common");
-const godot_case = common.godot_case;
 const gdzig = @import("gdzig");
 const class = gdzig.class;
 const classdb = gdzig.class.ClassDb;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
 
-const meta = @import("../meta.zig");
-
 pub fn registerMethod(comptime T: type, comptime name: DeclEnum(T)) void {
     const name_str = @tagName(name);
-    var class_name: StringName = .fromComptimeLatin1(meta.typeShortName(T));
-    var method_name: StringName = .fromComptimeLatin1(casez.comptimeConvert(godot_case.method, name_str));
+    var class_name: StringName = .fromType(T);
+    var method_name: StringName = .fromMethodName(name_str);
 
     const MethodType = @TypeOf(@field(T, name_str));
     const fn_info = @typeInfo(MethodType).@"fn";

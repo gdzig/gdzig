@@ -55,7 +55,7 @@ pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
         return null;
     }
 
-    const name: StringName = .fromComptimeLatin1(meta.typeShortName(Target));
+    const name: StringName = .fromType(Target);
     const tag = raw.classdbGetClassTag(@ptrCast(&name));
     const result = raw.objectCastTo(@ptrCast(value), tag);
 
@@ -74,7 +74,6 @@ pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
 const std = @import("std");
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
-const meta = @import("meta.zig");
 const StringName = gdzig.builtin.StringName;
 
 // @mixin stop
