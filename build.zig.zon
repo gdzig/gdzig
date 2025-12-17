@@ -25,6 +25,11 @@
             .url = "git+https://github.com/gdzig/godot-versions#fad460d2ba431782d5005f6b1565f435c49fbe1f",
             .hash = "godot-0.0.0-Nast2iBUgQbRv5K3yKF_xVLVg2PHsYve3WxsTKgGlH31",
         },
+        .emsdk = .{
+            .url = "https://github.com/emscripten-core/emsdk/archive/refs/tags/4.0.11.tar.gz",
+            .hash = "N-V-__8AAMiHDwClaPnxkevFaUpzYpVpesNW7fwhaX9IV2np",
+            .lazy = true,
+        },
     },
 
     .paths = .{

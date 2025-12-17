@@ -3,7 +3,7 @@
 //! | Target                         | Implementation            |
 //! | ------------------------------ | ------------------------- |
 //! | Testing                        | `std.testing.allocator`   |
-//! | WebAssembly                    | `std.heap.WasmAllocator`  |
+//! | WebAssembly                    | `std.heap.c_allocator`    |
 //! | `.ReleaseSafe`/`.Debug`        | `std.heap.DebugAllocator` |
 //! | `.ReleaseFast`/`.ReleaseSmall` | Passthrough               |
 //!
@@ -29,16 +29,15 @@ else switch (builtin.mode) {
 
 impl: switch (strategy) {
     .testing => *@TypeOf(std.testing.allocator_instance),
-    .wasm => WasmAllocator,
     .safe => DebugAllocator(.{}),
-    .fast => Allocator,
+    .fast, .wasm => Allocator,
 },
 
 pub fn init(backing_allocator: ?Allocator) GeneralPurposeAllocator {
     return .{
         .impl = switch (strategy) {
             .testing => &std.testing.allocator_instance,
-            .wasm => .{},
+            .wasm => std.heap.c_allocator,
             .safe => .{
                 .backing_allocator = backing_allocator orelse std.heap.page_allocator,
             },
@@ -50,6 +49,7 @@ pub fn init(backing_allocator: ?Allocator) GeneralPurposeAllocator {
 pub fn allocator(self: *GeneralPurposeAllocator) Allocator {
     return switch (strategy) {
         .fast => self.impl,
+        .wasm => std.heap.c_allocator,
         else => self.impl.allocator(),
     };
 }

@@ -8,7 +8,10 @@ pub const Extension = struct {
     class_userdata: Allocator,
 
     pub fn init() !Extension {
-        return .{ .class_userdata = gpa.allocator() };
+        // Emscripten cannot use DebugAllocator in Zig ~0.15
+        return .{
+            .class_userdata = if (builtin.os.tag == .emscripten) std.heap.c_allocator else gpa.allocator(),
+        };
     }
 
     pub fn enter(self: *Extension, level: InitializationLevel) void {
@@ -39,7 +42,9 @@ pub const Extension = struct {
 
     pub fn deinit(self: *Extension) void {
         _ = self;
-        assert(gpa.deinit() == .ok);
+        if (builtin.os.tag != .emscripten) {
+            assert(gpa.deinit() == .ok);
+        }
     }
 };
 
@@ -50,6 +55,7 @@ const DebugAllocator = std.heap.DebugAllocator;
 const InitializationLevel = godot.extension.InitializationLevel;
 
 const godot = @import("gdzig");
+const builtin = @import("builtin");
 
 const ExampleNode = @import("ExampleNode.zig");
 const GuiNode = @import("GuiNode.zig");
