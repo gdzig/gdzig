@@ -285,15 +285,6 @@ fn runEmsdk(b: *Build, emsdk_path: Build.LazyPath) *Build.Step.Run {
     return b.addSystemCommand(&.{emsdk_path.path(b, emsdk_script).getPath(b)});
 }
 
-// fn emsdkRequiresInstall(b: *Build, emsdk_dep: *Dependency) bool {
-//     const em = emsdk_dep.path(".emscripten");
-//     std.fs.accessAbsolute(em.getPath(b), .{}) catch |err| switch (err) {
-//         error.FileNotFound => return true,
-//         else => {},
-//     };
-//     return false;
-// }
-
 fn emsdkInstall(b: *Build, emsdk_path: Build.LazyPath, version: []const u8) *Build.Step.Run {
     const run_emsdk_install = runEmsdk(b, emsdk_path);
     run_emsdk_install.addArgs(&.{ "install", version });
