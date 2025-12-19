@@ -26,8 +26,8 @@
             .hash = "godot-0.0.0-Nast2iBUgQbRv5K3yKF_xVLVg2PHsYve3WxsTKgGlH31",
         },
         .emsdk = .{
-            .url = "https://github.com/emscripten-core/emsdk/archive/refs/tags/4.0.11.tar.gz",
-            .hash = "N-V-__8AAMiHDwClaPnxkevFaUpzYpVpesNW7fwhaX9IV2np",
+            .url = "https://github.com/emscripten-core/emsdk/archive/refs/tags/4.0.20.tar.gz",
+            .hash = "N-V-__8AADn0DwBtrxa-qJrkru1KtGp4EA9dRIuW2x70KtFc",
             .lazy = true,
         },
     },

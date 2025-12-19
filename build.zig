@@ -1,7 +1,7 @@
 const default_version = "4.5";
 
 // Default emscripten verison for web builds. Matches version used by Godot.
-const godot_emscripten_version = "4.0.11";
+const godot_emscripten_version = "4.0.20";
 
 pub fn build(b: *Build) void {
     //
@@ -244,9 +244,7 @@ pub fn buildWeb(b: *Build, opt: EmscriptenOptions) Build.LazyPath {
         "-sWASM_BIGINT",
         "-sSUPPORT_LONGJMP='wasm'",
 
-        // Required for @returnAddress
-        // Option removed in emscripten 4.0.14
-        "-sUSE_OFFSET_CONVERTER",
+        // Note: for emscripten <=4.0.13 "-sUSE_OFFSET_CONVERTER" is required for @returnAddress
     });
 
     run_emcc.addArgs(switch (optimize) {
