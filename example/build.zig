@@ -1,10 +1,16 @@
 pub fn build(b: *Build) !void {
     // Options
-    const target = b.standardTargetOptions(.{});
+    var target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const godot_version = b.option([]const u8, "godot", "Which version of Godot to generate bindings for [default: `4.5.1`]") orelse "4.5.1";
+    const threads = b.option(bool, "threads", "Enable threads for web builds [default: false]") orelse false;
     const godot_exe = godot.executable(b, b.graph.host, godot_version) orelse return;
+
+    if (threads and target.result.cpu.arch.isWasm()) {
+        target.query.cpu_features_add.addFeature(@intFromEnum(std.Target.wasm.Feature.atomics));
+        target.query.cpu_features_add.addFeature(@intFromEnum(std.Target.wasm.Feature.bulk_memory));
+    }
 
     // Dependencies
     const gdzig_dep = b.dependency("gdzig", .{
@@ -27,9 +33,11 @@ pub fn build(b: *Build) !void {
     const install_step = if (target.result.cpu.arch.isWasm()) blk: {
         // Library
         mod.pic = true;
+        mod.single_threaded = !threads;
         const lib = gdzig.buildWeb(b, .{
             .name = "example",
             .root_module = mod,
+            .threads = threads,
         });
 
         // Install
