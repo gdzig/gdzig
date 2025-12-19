@@ -297,14 +297,12 @@ fn runEmsdk(b: *Build, emsdk_path: Build.LazyPath) *Build.Step.Run {
 fn emsdkInstall(b: *Build, emsdk_path: Build.LazyPath, version: []const u8) *Build.Step.Run {
     const run_emsdk_install = runEmsdk(b, emsdk_path);
     run_emsdk_install.addArgs(&.{ "install", version });
-    _ = run_emsdk_install.captureStdOut();
     return run_emsdk_install;
 }
 
 fn emsdkActivate(b: *Build, emsdk_path: Build.LazyPath, version: []const u8) *Build.Step.Run {
     const run_emsdk_activate = runEmsdk(b, emsdk_path);
     run_emsdk_activate.addArgs(&.{ "activate", version });
-    _ = run_emsdk_activate.captureStdOut();
     return run_emsdk_activate;
 }
 
