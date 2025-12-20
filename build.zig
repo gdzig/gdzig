@@ -1,7 +1,7 @@
 const default_version = "4.5";
 
-// Default emscripten verison for web builds. Matches version used by Godot.
-const godot_emscripten_version = "4.0.20";
+/// Default emscripten verison for web builds. Matches version used by Godot.
+const default_godot_emscripten_version = "4.0.20";
 
 pub fn build(b: *Build) void {
     //
@@ -188,23 +188,24 @@ pub fn build(b: *Build) void {
     });
 }
 
-pub const EmscriptenOptions = struct {
+pub const BuildWebOptions = struct {
     name: []const u8,
     root_module: *Build.Module,
     emsdk_path: ?Build.LazyPath = null,
-    threads: bool = false,
-    emsdk_version: []const u8 = godot_emscripten_version,
+    emsdk_version: []const u8 = default_godot_emscripten_version,
 };
 
-// Helper for building Gdextension for web. Returns path to wasm library.
-pub fn buildWeb(b: *Build, opt: EmscriptenOptions) Build.LazyPath {
+/// Build GdExtension for web. Returns LazyPath to wasm library.
+pub fn buildWeb(b: *Build, opt: BuildWebOptions) Build.LazyPath {
     const optimize = opt.root_module.optimize orelse b.standardOptimizeOption(.{});
     const emsdk_path = if (opt.emsdk_path) |p| p else blk: {
         // If no emsdk is provided by user, use gdzig emsdk lazy dependency.
-        const gdzig_dep = b.dependencyFromBuildZig(@This(), .{});
+        const gdzig_dep = b.dependency("gdzig", .{});
         const emsdk_dep = gdzig_dep.builder.lazyDependency("emsdk", .{}) orelse std.process.exit(0);
         break :blk emsdk_dep.path("");
     };
+
+    const single_threaded = opt.root_module.single_threaded orelse false;
 
     if (opt.root_module.resolved_target) |target| {
         if (target.result.os.tag != .emscripten or target.result.cpu.arch != .wasm32) {
@@ -224,14 +225,13 @@ pub fn buildWeb(b: *Build, opt: EmscriptenOptions) Build.LazyPath {
         .root_module = opt.root_module,
     });
 
-    const install_emsdk = emsdkInstall(b, emsdk_path, opt.emsdk_version);
-    const activate_emsdk = emsdkActivate(b, emsdk_path, opt.emsdk_version);
+    const install_emsdk = build_emscripten.emsdkInstall(b, emsdk_path, opt.emsdk_version);
+    const activate_emsdk = build_emscripten.emsdkActivate(b, emsdk_path, opt.emsdk_version);
     activate_emsdk.step.dependOn(&install_emsdk.step);
     lib.step.dependOn(&activate_emsdk.step);
     lib.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
-    const run_emcc = runEmcc(b, emsdk_path);
-    _ = run_emcc.captureStdErr();
+    const run_emcc = build_emscripten.runEmcc(b, emsdk_path);
 
     for (lib.getCompileDependencies(false)) |dep| {
         if (dep.isStaticLibrary()) {
@@ -271,34 +271,13 @@ pub fn buildWeb(b: *Build, opt: EmscriptenOptions) Build.LazyPath {
         });
     }
 
-    if (opt.threads) {
+    if (!single_threaded) {
         run_emcc.addArg("-sUSE_PTHREADS=1");
     }
 
     run_emcc.addArg("-o");
     const output = run_emcc.addOutputFileArg(b.fmt("lib{s}.wasm", .{lib.name}));
     return output;
-}
-
-fn runEmsdk(b: *Build, emsdk_path: Build.LazyPath) *Build.Step.Run {
-    const emsdk_script = if (b.graph.host.result.os.tag == .windows) "emsdk.bat" else "emsdk";
-    return b.addSystemCommand(&.{emsdk_path.path(b, emsdk_script).getPath(b)});
-}
-
-fn emsdkInstall(b: *Build, emsdk_path: Build.LazyPath, version: []const u8) *Build.Step.Run {
-    const run_emsdk_install = runEmsdk(b, emsdk_path);
-    run_emsdk_install.addArgs(&.{ "install", version });
-    return run_emsdk_install;
-}
-
-fn emsdkActivate(b: *Build, emsdk_path: Build.LazyPath, version: []const u8) *Build.Step.Run {
-    const run_emsdk_activate = runEmsdk(b, emsdk_path);
-    run_emsdk_activate.addArgs(&.{ "activate", version });
-    return run_emsdk_activate;
-}
-
-fn runEmcc(b: *Build, emsdk_path: Build.LazyPath) *Build.Step.Run {
-    return b.addSystemCommand(&.{emsdk_path.path(b, "upstream/emscripten/emcc").getPath(b)});
 }
 
 const BindGenOptions = struct {
@@ -437,5 +416,6 @@ const Build = std.Build;
 const LazyPath = Build.LazyPath;
 const Step = std.Build.Step;
 const gdzig_test = @import("gdzig_test/build.zig");
+const build_emscripten = @import("build_emscripten.zig");
 
 const godot = @import("godot");
