@@ -224,8 +224,139 @@ pub fn build(b: *Build) void {
     });
 }
 
+pub const CreateGdzigModuleOptions = struct {
+    /// This could either be a generated file, in which case the module
+    /// contains exactly one file, or it could be a path to the root source
+    /// file of directory of files which constitute the module.
+    /// If `null`, it means this module is made up of only `link_objects`.
+    root_source_file: ?LazyPath = null,
+
+    /// The table of other modules that this module can access via `@import`.
+    /// Imports are allowed to be cyclical, so this table can be added to after
+    /// the `Module` is created via `addImport`.
+    imports: []const Import = &.{},
+
+    target: ?std.Build.ResolvedTarget = null,
+    optimize: ?std.builtin.OptimizeMode = null,
+
+    /// `true` requires a compilation that includes this Module to link libc.
+    /// `false` causes a build failure if a compilation that includes this Module would link libc.
+    /// `null` neither requires nor prevents libc from being linked.
+    link_libc: ?bool = null,
+    /// `true` requires a compilation that includes this Module to link libc++.
+    /// `false` causes a build failure if a compilation that includes this Module would link libc++.
+    /// `null` neither requires nor prevents libc++ from being linked.
+    link_libcpp: ?bool = null,
+    single_threaded: ?bool = null,
+    strip: ?bool = null,
+    unwind_tables: ?std.builtin.UnwindTables = null,
+    dwarf_format: ?std.dwarf.Format = null,
+    code_model: std.builtin.CodeModel = .default,
+    stack_protector: ?bool = null,
+    stack_check: ?bool = null,
+    sanitize_c: ?std.zig.SanitizeC = null,
+    sanitize_thread: ?bool = null,
+    fuzz: ?bool = null,
+    /// Whether to emit machine code that integrates with Valgrind.
+    valgrind: ?bool = null,
+    /// Position Independent Code
+    pic: ?bool = null,
+    red_zone: ?bool = null,
+    /// Whether to omit the stack frame pointer. Frees up a register and makes it
+    /// more difficult to obtain stack traces. Has target-dependent effects.
+    omit_frame_pointer: ?bool = null,
+    error_tracing: ?bool = null,
+    no_builtin: ?bool = null,
+
+    /// Which version of Godot to generate bindings for [default: `4.5.1`]
+    godot_version: ?[]const u8 = null,
+    /// Path to the `godot` executable. When `null`, it will resolve to `godot_version`.
+    godot_exe: ?LazyPath = null,
+};
+
+pub fn createModule(b: *Build, options: CreateGdzigModuleOptions) *Module {
+    // Dependencies
+    const gdzig = b.dependency("gdzig", .{
+        .target = options.target,
+        .optimize = options.optimize,
+        .godot = options.godot_version,
+    });
+
+    // Imports
+    var imports = ArrayList(Import).initCapacity(b.allocator, options.imports.len + 1) catch @panic("OOM");
+    imports.appendAssumeCapacity(.{
+        .name = "gdzig",
+        .module = gdzig.module("gdzig"),
+    });
+    for (options.imports) |import| {
+        imports.appendAssumeCapacity(import);
+    }
+
+    // Module
+    const mod = b.createModule(.{
+        .root_source_file = b.path("src/example.zig"),
+        .imports = imports.toOwnedSlice(b.allocator) catch @panic("OOM"),
+        .target = options.target,
+        .optimize = options.optimize,
+        .link_libc = options.link_libc,
+        .single_threaded = options.single_threaded,
+        .strip = options.strip,
+        .unwind_tables = options.unwind_tables,
+        .dwarf_format = options.dwarf_format,
+        .code_model = options.code_model,
+        .stack_protector = options.stack_protector,
+        .stack_check = options.stack_check,
+        .sanitize_c = options.sanitize_c,
+        .sanitize_thread = options.sanitize_thread,
+        .fuzz = options.fuzz,
+        .valgrind = options.valgrind,
+        .pic = options.pic,
+        .red_zone = options.red_zone,
+        .omit_frame_pointer = options.omit_frame_pointer,
+        .error_tracing = options.error_tracing,
+        .no_builtin = options.no_builtin,
+    });
+
+    return mod;
+}
+
+pub const AddGdzigLibraryOptions = struct {
+    linkage: std.builtin.LinkMode = .dynamic,
+    name: []const u8,
+    root_module: *Module,
+    version: ?std.SemanticVersion = null,
+    max_rss: usize = 0,
+    use_llvm: ?bool = true,
+    use_lld: ?bool = null,
+    zig_lib_dir: ?LazyPath = null,
+    /// Embed a `.manifest` file in the compilation if the object format supports it.
+    /// https://learn.microsoft.com/en-us/windows/win32/sbscs/manifest-files-reference
+    /// Manifest files must have the extension `.manifest`.
+    /// Can be set regardless of target. The `.manifest` file will be ignored
+    /// if the target object format does not support embedded manifests.
+    win32_manifest: ?LazyPath = null,
+};
+
+pub fn addLibrary(b: *Build, options: AddGdzigLibraryOptions) *Step.Compile {
+    return b.addLibrary(.{
+        .linkage = options.linkage,
+        .name = options.name,
+        .root_module = options.root_module,
+        .version = options.version,
+        .max_rss = options.max_rss,
+        .use_llvm = options.use_llvm,
+        .use_lld = options.use_lld,
+        .zig_lib_dir = options.zig_lib_dir,
+        .win32_manifest = options.win32_manifest,
+    });
+}
+
 const std = @import("std");
+const ArrayList = std.ArrayList;
 const Build = std.Build;
+const LazyPath = Build.LazyPath;
+const Module = Build.Module;
+const Import = Module.Import;
 const Step = std.Build.Step;
 const gdzig_test = @import("gdzig_test/build.zig");
 

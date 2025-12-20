@@ -6,29 +6,19 @@ pub fn build(b: *Build) !void {
     const godot_version = b.option([]const u8, "godot", "Which version of Godot to generate bindings for [default: `4.5.1`]") orelse "4.5.1";
     const godot_exe = godot.executable(b, b.graph.host, godot_version) orelse return;
 
-    // Dependencies
-    const gdzig = b.dependency("gdzig", .{
-        .target = target,
-        .optimize = optimize,
-        .godot = godot_version,
-    });
-
     // Module
-    const mod = b.createModule(.{
+    const mod = gdzig.createModule(b, .{
         .root_source_file = b.path("src/example.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{
-            .{ .name = "gdzig", .module = gdzig.module("gdzig") },
-        },
+        .godot_version = godot_version,
+        .godot_exe = godot_exe,
     });
 
     // Library
-    const lib = b.addLibrary(.{
+    const lib = gdzig.addLibrary(b, .{
         .name = "example",
-        .linkage = .dynamic,
         .root_module = mod,
-        .use_llvm = true,
     });
 
     // Install
@@ -52,3 +42,4 @@ const std = @import("std");
 const Build = std.Build;
 
 const godot = @import("godot");
+const gdzig = @import("gdzig");
