@@ -5,30 +5,30 @@
     .minimum_zig_version = "0.15.1",
 
     .dependencies = .{
-        .casez = .{
-            .url = "git+https://github.com/gdzig/casez#f53ad26e94a005d25b099f2a1656b1ce4060f14b",
-            .hash = "casez-0.0.1-aTb4GjaDAAA880DFLQTEOUjvx5q-zOQqicxd7kg-fw5_",
-        },
         .bbcodez = .{
             .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
             .hash = "bbcodez-0.0.1-dev-YlrOBo-iAQBWdgFSZ5eINgMNAZlmrHLQ35zKSZEEqgS2",
         },
-        .temp = .{
-            .url = "git+https://github.com/abhinav/temp.zig#7f0a9697d3d46d06c4f84fc3bc5199b7779fab33",
-            .hash = "temp-0.3.0-Ogl1Ff5-AABRtiHj_zDFI0CZVU8ORLPko6iQiw63Znrz",
-        },
-        .oopz = .{
-            .url = "git+https://github.com/gdzig/oopz#a02a3eb8d0914437ecf317d36fca426fee300e72",
-            .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
-        },
-        .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions#fad460d2ba431782d5005f6b1565f435c49fbe1f",
-            .hash = "godot-0.0.0-Nast2iBUgQbRv5K3yKF_xVLVg2PHsYve3WxsTKgGlH31",
+        .casez = .{
+            .url = "git+https://github.com/gdzig/casez#f53ad26e94a005d25b099f2a1656b1ce4060f14b",
+            .hash = "casez-0.0.1-aTb4GjaDAAA880DFLQTEOUjvx5q-zOQqicxd7kg-fw5_",
         },
         .emsdk = .{
             .url = "https://github.com/emscripten-core/emsdk/archive/refs/tags/4.0.20.tar.gz",
             .hash = "N-V-__8AADn0DwBtrxa-qJrkru1KtGp4EA9dRIuW2x70KtFc",
             .lazy = true,
+        },
+        .godot = .{
+            .url = "git+https://github.com/gdzig/godot-versions#fad460d2ba431782d5005f6b1565f435c49fbe1f",
+            .hash = "godot-0.0.0-Nast2iBUgQbRv5K3yKF_xVLVg2PHsYve3WxsTKgGlH31",
+        },
+        .oopz = .{
+            .url = "git+https://github.com/gdzig/oopz#a02a3eb8d0914437ecf317d36fca426fee300e72",
+            .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
+        },
+        .temp = .{
+            .url = "git+https://github.com/abhinav/temp.zig#7f0a9697d3d46d06c4f84fc3bc5199b7779fab33",
+            .hash = "temp-0.3.0-Ogl1Ff5-AABRtiHj_zDFI0CZVU8ORLPko6iQiw63Znrz",
         },
     },
 

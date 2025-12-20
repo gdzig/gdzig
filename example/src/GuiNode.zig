@@ -1,5 +1,11 @@
 const GuiNode = @This();
 
+pub fn register(r: *Registry) void {
+    const class = r.createClass(GuiNode, r.allocator, .auto);
+    class.addMethod("on_pressed", .auto);
+    class.addMethod("on_toggled", .auto);
+}
+
 allocator: Allocator,
 base: *Control,
 sprite: *Sprite2D = undefined,
@@ -66,7 +72,8 @@ pub fn onToggled(self: *GuiNode, toggled_on: bool) void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const godot = @import("gdzig");
+const godot = @import("godot");
+const Registry = godot.extension.Registry;
 const Button = godot.class.Button;
 const CheckBox = godot.class.CheckBox;
 const Control = godot.class.Control;

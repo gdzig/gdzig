@@ -19,4 +19,4 @@ runs:
 
     - name: Run tests
       shell: bash
-      run: zig build test -Dgodot=${{ inputs.godot-version }} -Dfetch-godot=true
+      run: zig build test -Dgodot-version=${{ inputs.godot-version }}

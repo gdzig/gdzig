@@ -1,61 +1,21 @@
-comptime {
-    godot.registerExtension(Extension, .{ .entry_symbol = "my_extension_init" });
+pub fn register(r: *Registry) void {
+    // Register a class inline - simplest approach
+    r.addClass(SpriteNode, r.allocator, .auto);
+
+    // Use modules to organize registration into separate files
+    r.addModule(ExampleNode);
+    r.addModule(GuiNode);
+    r.addModule(SignalNode);
 }
 
-var gpa: DebugAllocator(.{}) = .init;
-
-pub const Extension = struct {
-    class_userdata: Allocator,
-
-    pub fn init() !Extension {
-        // Emscripten cannot use DebugAllocator in Zig ~0.15
-        return .{
-            .class_userdata = if (builtin.os.tag == .emscripten) std.heap.c_allocator else gpa.allocator(),
-        };
-    }
-
-    pub fn enter(self: *Extension, level: InitializationLevel) void {
-        if (level == .scene) {
-            godot.registerClass(ExampleNode, .{ .userdata = &self.class_userdata });
-            godot.registerMethod(ExampleNode, .onTimeout);
-            godot.registerMethod(ExampleNode, .onResized);
-            godot.registerMethod(ExampleNode, .onItemFocused);
-
-            godot.registerClass(GuiNode, .{ .userdata = &self.class_userdata });
-            godot.registerMethod(GuiNode, .onPressed);
-            godot.registerMethod(GuiNode, .onToggled);
-
-            godot.registerClass(SignalNode, .{ .userdata = &self.class_userdata });
-            godot.registerMethod(SignalNode, .onSignal1);
-            godot.registerMethod(SignalNode, .onSignal2);
-            godot.registerMethod(SignalNode, .onSignal3);
-            godot.registerMethod(SignalNode, .emitSignal1);
-            godot.registerMethod(SignalNode, .emitSignal2);
-            godot.registerMethod(SignalNode, .emitSignal3);
-            godot.registerSignal(SignalNode, SignalNode.Signal1);
-            godot.registerSignal(SignalNode, SignalNode.Signal2);
-            godot.registerSignal(SignalNode, SignalNode.Signal3);
-
-            godot.registerClass(SpriteNode, .{ .userdata = &self.class_userdata });
-        }
-    }
-
-    pub fn deinit(self: *Extension) void {
-        _ = self;
-        if (builtin.os.tag != .emscripten) {
-            assert(gpa.deinit() == .ok);
-        }
-    }
-};
+test "godot version is 4.x" {
+    // Tests run inside Godot via `zig build test`
+    try std.testing.expectEqual(4, godot.version.major);
+}
 
 const std = @import("std");
-const assert = std.debug.assert;
-const Allocator = std.mem.Allocator;
-const DebugAllocator = std.heap.DebugAllocator;
-const InitializationLevel = godot.extension.InitializationLevel;
-
-const godot = @import("gdzig");
-const builtin = @import("builtin");
+const godot = @import("godot");
+const Registry = godot.extension.Registry;
 
 const ExampleNode = @import("ExampleNode.zig");
 const GuiNode = @import("GuiNode.zig");

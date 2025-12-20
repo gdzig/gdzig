@@ -1,4 +1,4 @@
-const Self = @This();
+const SpriteNode = @This();
 
 allocator: Allocator,
 base: *Control,
@@ -13,27 +13,27 @@ const Sprite = struct {
     gd_sprite: *Sprite2D,
 };
 
-pub fn create(allocator: *Allocator) !*Self {
-    const self = try allocator.create(Self);
+pub fn create(allocator: *Allocator) !*SpriteNode {
+    const self = try allocator.create(SpriteNode);
     self.* = .{
         .allocator = allocator.*,
         .base = Control.init(),
     };
-    self.base.setInstance(Self, self);
+    self.base.setInstance(SpriteNode, self);
     return self;
 }
 
-pub fn destroy(self: *Self, allocator: *Allocator) void {
+pub fn destroy(self: *SpriteNode, allocator: *Allocator) void {
     self.base.destroy();
     allocator.destroy(self);
 }
 
-pub fn randfRange(self: Self, comptime T: type, min: T, max: T) T {
+pub fn randfRange(self: SpriteNode, comptime T: type, min: T, max: T) T {
     const u: T = self.rng.float(T);
     return u * (max - min) + min;
 }
 
-pub fn _ready(self: *Self) void {
+pub fn _ready(self: *SpriteNode) void {
     if (Engine.isEditorHint()) return;
 
     var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
@@ -67,11 +67,11 @@ pub fn _ready(self: *Self) void {
     }
 }
 
-pub fn _exitTree(self: *Self) void {
+pub fn _exitTree(self: *SpriteNode) void {
     self.sprites.deinit(godot.engine_allocator);
 }
 
-pub fn _physicsProcess(self: *Self, delta: f64) void {
+pub fn _physicsProcess(self: *SpriteNode, delta: f64) void {
     const sz = self.base.getParentAreaSize(); //get_size();
 
     for (self.sprites.items) |*spr| {
@@ -97,7 +97,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
-const godot = @import("gdzig");
+const godot = @import("godot");
+
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
 const ResourceLoader = godot.class.ResourceLoader;

@@ -6,6 +6,26 @@ const Examples = [_]struct { name: [:0]const u8, T: type }{
     .{ .name = "Signals", .T = SignalNode },
 };
 
+pub fn register(r: *Registry) void {
+    // createClass returns a builder for adding methods, properties, signals
+    // .auto uses defaults; override with .{ .level = .editor } etc.
+    const class = r.createClass(ExampleNode, r.allocator, .auto);
+
+    // Methods auto-detect decl from snake_case name (on_timeout -> onTimeout)
+    class.addMethod("on_timeout", .auto);
+    class.addMethod("on_resized", .auto);
+    class.addMethod("on_item_focused", .auto);
+
+    // Properties auto-detect getter/setter from getX/setX methods or field
+    class.addProperty("property1", .auto);
+    // Override to make read-only (no setter)
+    class.addProperty("property2", .{ .setter = .none });
+
+    // Reuse a method as a property getter
+    const get_speed = class.createMethod("get_speed", .auto);
+    class.addProperty("speed", .{ .getter = .{ .method = get_speed }, .setter = .none });
+}
+
 allocator: Allocator,
 base: *Node,
 panel: *PanelContainer = undefined,
@@ -13,24 +33,19 @@ example_node: ?*Node = null,
 
 property1: Vector3 = .zero,
 property2: Vector3 = .zero,
+speed: f64 = 1.0,
 
 fps_counter: *Label,
 
-const property1_name: [:0]const u8 = "property1";
-const property2_name: [:0]const u8 = "property2";
-
 pub fn create(allocator: *Allocator) !*ExampleNode {
     const self = try allocator.create(ExampleNode);
-    const base = Node.init();
-    const fps_counter = Label.init();
-
     self.* = .{
         .allocator = allocator.*,
-        .base = base,
-        .fps_counter = fps_counter,
+        .base = .init(),
+        .fps_counter = .init(),
     };
-
     self.base.setInstance(ExampleNode, self);
+
     self.base.addChild(.upcast(self.fps_counter), .{});
     self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{});
 
@@ -60,13 +75,18 @@ pub fn _process(self: *ExampleNode, _: f64) void {
 
 fn clearScene(self: *ExampleNode) void {
     if (self.example_node) |n| {
-        n.queueFree();
+        n.destroy();
+        self.example_node = null;
     }
 }
 
 pub fn onTimeout(_: *ExampleNode) void {}
 
 pub fn onResized(_: *ExampleNode) void {}
+
+pub fn getSpeed(self: *ExampleNode) f64 {
+    return self.speed;
+}
 
 pub fn onItemFocused(self: *ExampleNode, idx: i64) void {
     self.clearScene();
@@ -153,89 +173,6 @@ pub fn _notification(self: *ExampleNode, what: i32, _: bool) void {
     }
 }
 
-pub fn _getPropertyList(self: *ExampleNode) ![]const PropertyInfo {
-    return try self.allocator.dupe(PropertyInfo, &.{
-        .{
-            .name = &StringName.fromComptimeLatin1("property1"),
-            .type = .string,
-        },
-        .{
-            .name = &StringName.fromComptimeLatin1("property2"),
-            .type = .string,
-        },
-    });
-}
-
-pub fn _destroyPropertyList(self: *ExampleNode, property_list: []const PropertyInfo) void {
-    self.allocator.free(property_list);
-}
-
-pub fn _propertyCanRevert(_: *ExampleNode, name: *const StringName) bool {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        return true;
-    } else if (name.casecmpTo(prop2) == 0) {
-        return true;
-    }
-
-    return false;
-}
-
-pub fn _propertyGetRevert(_: *ExampleNode, name: *const StringName) godot.PropertyError!Variant {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        return .init(Vector3, .initXYZ(42, 42, 42));
-    } else if (name.casecmpTo(prop2) == 0) {
-        return .init(Vector3, .initXYZ(24, 24, 24));
-    }
-
-    return error.InvalidKey;
-}
-
-pub fn _set(self: *ExampleNode, name: *const StringName, value: *const Variant) godot.PropertyError!void {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        self.property1 = value.as(Vector3).?;
-        return;
-    } else if (name.casecmpTo(prop2) == 0) {
-        self.property2 = value.as(Vector3).?;
-        return;
-    }
-
-    return error.InvalidKey;
-}
-
-pub fn _get(self: *ExampleNode, name: *const StringName) godot.PropertyError!Variant {
-    var prop1 = String.fromLatin1(property1_name);
-    defer prop1.deinit();
-
-    var prop2 = String.fromLatin1(property2_name);
-    defer prop2.deinit();
-
-    if (name.casecmpTo(prop1) == 0) {
-        return .init(Vector3, self.property1);
-    } else if (name.casecmpTo(prop2) == 0) {
-        return .init(Vector3, self.property2);
-    }
-
-    return error.InvalidKey;
-}
-
 pub fn _toString(_: *ExampleNode) ?String {
     return String.fromLatin1("ExampleNode");
 }
@@ -243,16 +180,15 @@ pub fn _toString(_: *ExampleNode) ?String {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const godot = @import("gdzig");
+const godot = @import("godot");
+const Registry = godot.extension.Registry;
 const Engine = godot.class.Engine;
 const HSplitContainer = godot.class.HSplitContainer;
 const ItemList = godot.class.ItemList;
 const Label = godot.class.Label;
 const Node = godot.class.Node;
 const PanelContainer = godot.class.PanelContainer;
-const PropertyInfo = godot.class.ClassDb.PropertyInfo;
 const String = godot.builtin.String;
-const StringName = godot.builtin.StringName;
 const Variant = godot.builtin.Variant;
 const Vector3 = godot.builtin.Vector3;
 const SceneTreeTimer = godot.class.SceneTreeTimer;
