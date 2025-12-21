@@ -214,6 +214,7 @@ const godot = @import("godot");
 const api = @import("build/api.zig");
 pub const addExtension = api.addExtension;
 pub const addTest = api.addTest;
+pub const Extension = api.Extension;
 pub const ExtensionOptions = api.ExtensionOptions;
 pub const TestOptions = api.TestOptions;
 pub const InitializationLevel = api.InitializationLevel;

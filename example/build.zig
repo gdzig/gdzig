@@ -32,7 +32,7 @@ pub fn build(b: *Build) !void {
     });
 
     // Extension library (handles both native and wasm)
-    const lib = gdzig.addExtension(b, .{
+    const extension = gdzig.addExtension(b, .{
         .root_module = mod,
         .entry_symbol = "my_extension_init",
         .target = target,
@@ -41,9 +41,7 @@ pub fn build(b: *Build) !void {
 
     // Install
     const out_path = "../project/lib";
-    const install = b.addInstallArtifact(lib, .{
-        .dest_dir = .{ .override = .{ .custom = out_path } },
-    });
+    const install = b.addInstallFileWithDir(extension.output, .{ .custom = out_path }, "extension");
     b.default_step.dependOn(&install.step);
 
     // Run
@@ -51,7 +49,7 @@ pub fn build(b: *Build) !void {
     run.addFileArg(gdzig_dep.namedLazyPath("godot"));
     run.addArg("--path");
     run.addDirectoryArg(b.path("./project"));
-    run.step.dependOn(&install.step);
+    run.step.dependOn(extension.step);
 
     const run_step = b.step("run", "Run with Godot");
     run_step.dependOn(&run.step);

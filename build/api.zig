@@ -22,13 +22,26 @@ pub const ExtensionOptions = struct {
     emsdk_version: []const u8 = "4.0.20",
 };
 
+/// A GDExtension build artifact.
+///
+/// Handles both native and web (wasm32-emscripten) targets automatically.
+/// For web builds, runs emscripten to produce the final .wasm file.
+pub const Extension = struct {
+    /// The step to depend on for building this extension.
+    step: *Step,
+    /// The underlying compile step.
+    compile: *Build.Step.Compile,
+    /// The output file (.so/.dylib/.dll for native, .wasm for web).
+    output: Build.LazyPath,
+};
+
 /// Creates a GDExtension from a user module.
 ///
 /// Handles both native and web (wasm32-emscripten) targets automatically.
 /// For web builds, uses emscripten to produce a .wasm file.
 ///
-/// Returns a Step.Compile for native builds, or null if waiting for lazy dependencies.
-pub fn addExtension(b: *Build, options: ExtensionOptions) ?*Build.Step.Compile {
+/// Returns an ExtensionStep, or null if waiting for lazy dependencies.
+pub fn addExtension(b: *Build, options: ExtensionOptions) ?*Extension {
     const dep = getSelfDependency(b);
     const is_wasm = options.target.result.cpu.arch.isWasm();
 
@@ -50,12 +63,20 @@ pub fn addExtension(b: *Build, options: ExtensionOptions) ?*Build.Step.Compile {
     if (is_wasm) {
         return addExtensionWeb(b, dep, mod, options);
     } else {
-        return b.addLibrary(.{
+        const lib = b.addLibrary(.{
             .linkage = .dynamic,
             .name = "extension",
             .root_module = mod,
             .use_llvm = true,
         });
+
+        const ext = b.allocator.create(Extension) catch @panic("OOM");
+        ext.* = .{
+            .step = &lib.step,
+            .compile = lib,
+            .output = lib.getEmittedBin(),
+        };
+        return ext;
     }
 }
 
@@ -64,7 +85,7 @@ fn addExtensionWeb(
     dep: *Build.Dependency,
     mod: *Build.Module,
     options: ExtensionOptions,
-) ?*Build.Step.Compile {
+) ?*Extension {
     const emsdk_path = if (options.emsdk_path) |p| p else blk: {
         const emsdk_dep = dep.builder.lazyDependency("emsdk", .{}) orelse return null;
         break :blk emsdk_dep.path("");
@@ -91,10 +112,56 @@ fn addExtensionWeb(
     lib.step.dependOn(&activate_emsdk.step);
     lib.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
-    // TODO: Run emcc to produce final .wasm
-    // For now, return the static lib - user needs to run emcc separately
+    // Run emcc to produce final .wasm
+    const optimize = options.optimize;
+    const single_threaded = mod.single_threaded orelse false;
 
-    return lib;
+    const run_emcc = b.addSystemCommand(&.{emsdk_path.path(b, "upstream/emscripten/emcc").getPath(b)});
+    run_emcc.addArtifactArg(lib);
+
+    run_emcc.addArgs(&.{
+        "-sSIDE_MODULE=1",
+        "-sWASM_BIGINT",
+        "-sSUPPORT_LONGJMP='wasm'",
+    });
+
+    if (!single_threaded) {
+        run_emcc.addArg("-sUSE_PTHREADS=1");
+    }
+
+    run_emcc.addArgs(switch (optimize) {
+        .Debug => &.{
+            "-O0",
+            "-g3",
+            "-fsanitize=undefined",
+        },
+        .ReleaseSafe => &.{
+            "-O3",
+            "-fsanitize=undefined",
+            "-fsanitize-minimal-runtime",
+        },
+        .ReleaseFast => &.{"-O3"},
+        .ReleaseSmall => &.{"-Oz"},
+    });
+
+    if (optimize != .Debug) {
+        run_emcc.addArgs(&.{
+            "-flto",
+            "--closure",
+            "1",
+        });
+    }
+
+    run_emcc.addArg("-o");
+    const wasm_output = run_emcc.addOutputFileArg(b.fmt("lib{s}.wasm", .{lib.name}));
+
+    const ext = b.allocator.create(Extension) catch @panic("OOM");
+    ext.* = .{
+        .step = &run_emcc.step,
+        .compile = lib,
+        .output = wasm_output,
+    };
+    return ext;
 }
 
 /// Options for adding a Godot test.
