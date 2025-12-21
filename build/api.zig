@@ -33,6 +33,8 @@ pub const Extension = struct {
     compile: *Build.Step.Compile,
     /// The output file (.so/.dylib/.dll for native, .wasm for web).
     output: Build.LazyPath,
+    /// The output filename.
+    filename: []const u8,
 };
 
 /// Creates a GDExtension from a user module.
@@ -75,6 +77,7 @@ pub fn addExtension(b: *Build, options: ExtensionOptions) ?*Extension {
             .step = &lib.step,
             .compile = lib,
             .output = lib.getEmittedBin(),
+            .filename = lib.out_filename,
         };
         return ext;
     }
@@ -153,13 +156,15 @@ fn addExtensionWeb(
     }
 
     run_emcc.addArg("-o");
-    const wasm_output = run_emcc.addOutputFileArg(b.fmt("lib{s}.wasm", .{lib.name}));
+    const wasm_filename = b.fmt("lib{s}.wasm", .{lib.name});
+    const wasm_output = run_emcc.addOutputFileArg(wasm_filename);
 
     const ext = b.allocator.create(Extension) catch @panic("OOM");
     ext.* = .{
         .step = &run_emcc.step,
         .compile = lib,
         .output = wasm_output,
+        .filename = wasm_filename,
     };
     return ext;
 }

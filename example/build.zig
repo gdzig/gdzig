@@ -40,8 +40,7 @@ pub fn build(b: *Build) !void {
     }) orelse return;
 
     // Install
-    const out_path = "../project/lib";
-    const install = b.addInstallFileWithDir(extension.output, .{ .custom = out_path }, "extension");
+    const install = b.addInstallFileWithDir(extension.output, .{ .custom = "../project/lib" }, extension.filename);
     b.default_step.dependOn(&install.step);
 
     // Run
