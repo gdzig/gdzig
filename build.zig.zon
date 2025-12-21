@@ -39,8 +39,12 @@
         "gdzig_common",
         "gdzig_bindgen",
         "gdzig_test",
-        "tests",
+        "test",
+        "build",
         "build.zig",
         "build.zig.zon",
+        "example",
+        "pkg",
+        "src",
     },
 }
