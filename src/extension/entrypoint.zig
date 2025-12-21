@@ -39,6 +39,8 @@ fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv
 }
 
 fn exit(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(.c) void {
+    if (level < @intFromEnum(options.minimum_initialization_level)) return;
+
     registry.exit(@enumFromInt(level));
     if (level == @intFromEnum(options.minimum_initialization_level)) {
         gdzig.extension.PropertyListInstanceBinding.cleanup();
