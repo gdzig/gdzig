@@ -8,6 +8,8 @@ pub const InitializationLevel = enum {
 
 /// Options for creating a GDExtension.
 pub const ExtensionOptions = struct {
+    /// The name of the extension (used for output filename).
+    name: []const u8,
     /// The extension module. Must export `pub fn register(r: *godot.extension.Registry) void`.
     root_module: *Build.Module,
     /// The symbol name for the extension entry point.
@@ -67,7 +69,7 @@ pub fn addExtension(b: *Build, options: ExtensionOptions) ?*Extension {
     } else {
         const lib = b.addLibrary(.{
             .linkage = .dynamic,
-            .name = "extension",
+            .name = options.name,
             .root_module = mod,
             .use_llvm = true,
         });
@@ -99,7 +101,7 @@ fn addExtensionWeb(
 
     const lib = b.addLibrary(.{
         .linkage = .static,
-        .name = "extension",
+        .name = options.name,
         .root_module = mod,
     });
 
