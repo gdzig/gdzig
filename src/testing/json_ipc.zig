@@ -164,6 +164,31 @@ pub fn freeResponse(allocator: std.mem.Allocator, response: *Response) void {
     }
 }
 
+/// Format a command as JSON into a buffer, returning the slice.
+pub fn formatCommand(buf: []u8, cmd: Command) ![]const u8 {
+    var fbs = std.io.fixedBufferStream(buf);
+    const writer = fbs.writer();
+
+    try writer.writeAll("{\"__gdzig__\":\"");
+    try writer.writeAll(MARKER);
+    try writer.writeAll("\",\"cmd\":\"");
+
+    switch (cmd) {
+        .query_metadata => try writer.writeAll("query_metadata\"}"),
+        .run_test => |index| {
+            try writer.writeAll("run_test\",\"index\":");
+            var num_buf: [16]u8 = undefined;
+            const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{index}) catch unreachable;
+            try writer.writeAll(num_str);
+            try writer.writeAll("}");
+        },
+        .exit => try writer.writeAll("exit\"}"),
+    }
+    try writer.writeAll("\n");
+
+    return fbs.getWritten();
+}
+
 /// Write a command as JSON to a writer.
 pub fn writeCommand(writer: anytype, cmd: Command) !void {
     try writer.writeAll("{\"__gdzig__\":\"");

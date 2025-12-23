@@ -223,17 +223,14 @@ const Runner = struct {
         _ = self;
         const stdin = child.stdin orelse return error.NoStdin;
         var buf: [4096]u8 = undefined;
-        var writer = std.fs.File.Writer.initStreaming(stdin, &buf);
-        try json_ipc.writeCommand(&writer.interface, cmd);
-        try writer.interface.flush();
+        const data = json_ipc.formatCommand(&buf, cmd) catch return error.FormatError;
+        stdin.writeAll(data) catch return error.WriteError;
     }
 
     /// Read lines from Godot's stdout until we get an IPC response.
     /// Non-IPC lines are collected in godot_output for error display.
     fn readResponse(self: *Runner, child: *std.process.Child, godot_output: *std.ArrayListUnmanaged(u8)) !?json_ipc.Response {
         const stdout = child.stdout orelse return null;
-        var read_buf: [4096]u8 = undefined;
-        var reader = std.fs.File.Reader.initStreaming(stdout, &read_buf);
         var line_buf: std.ArrayListUnmanaged(u8) = .empty;
         defer line_buf.deinit(self.allocator);
 
@@ -241,10 +238,10 @@ const Runner = struct {
             // Read bytes until we find a newline
             line_buf.clearRetainingCapacity();
             while (true) {
-                const byte = reader.interface.takeByte() catch |err| {
-                    if (err == error.EndOfStream) return null;
-                    return null;
-                };
+                var byte_buf: [1]u8 = undefined;
+                const n = stdout.read(&byte_buf) catch return null;
+                if (n == 0) return null; // EOF
+                const byte = byte_buf[0];
                 if (byte == '\n') break;
                 try line_buf.append(self.allocator, byte);
             }
