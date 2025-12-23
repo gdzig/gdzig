@@ -1,56 +1,110 @@
-name: Integration Tests
+name: Tests
 
 on:
   push:
-    branches: [master]
+    # branches: [master]
   pull_request:
   workflow_dispatch:
 
 jobs:
-  # Quick test for PRs - only latest Godot on Linux
-  test-pr:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+  test:
+    name: Godot ${{ matrix.godot }} (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
-    if: github.event_name == 'pull_request'
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        godot: ["4.5"]
+        include:
+          - os: ubuntu-latest
+            godot: "4.5"
+            target: x86_64-linux
+          - os: ubuntu-latest
+            godot: "4.5"
+            target: x86_64-windows
+            wine: true
+          - os: ubuntu-24.04-arm
+            godot: "4.5"
+            target: aarch64-linux
+          - os: ubuntu-24.04-arm
+            godot: "4.5"
+            target: aarch64-windows
+            wine: true
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+      - name: Run tests
+        run: zig build test -Dgodot-version=${{ matrix.godot }} -Dtarget=${{ matrix.target }} ${{ matrix.wine && '-fwine' || '' }}
 
-      - uses: ./.github/actions/test-godot
-        with:
-          godot-version: ${{ matrix.godot }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
-
-  # Full matrix for push to master and manual dispatch
-  test-full:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+  test-extended:
+    name: Godot ${{ matrix.godot }} (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     strategy:
+      fail-fast: false
       matrix:
-        # All Godot versions on Linux, latest on macOS/Windows
-        os: [ubuntu-latest]
-        godot: ["4.1", "4.2", "4.3", "4.4", "4.5"]
         include:
-          # Add macOS and Windows for latest Godot only
+          - os: ubuntu-latest
+            godot: "4.4"
+            target: x86_64-linux
+          - os: ubuntu-latest
+            godot: "4.4"
+            target: x86_64-windows
+            wine: true
+          - os: ubuntu-24.04-arm
+            godot: "4.4"
+            target: aarch64-linux
+          - os: ubuntu-24.04-arm
+            godot: "4.4"
+            target: aarch64-windows
+            wine: true
+          - os: ubuntu-latest
+            godot: "4.3"
+            target: x86_64-linux
+          - os: ubuntu-latest
+            godot: "4.3"
+            target: x86_64-windows
+            wine: true
+          - os: ubuntu-24.04-arm
+            godot: "4.3"
+            target: aarch64-linux
+          - os: ubuntu-24.04-arm
+            godot: "4.3"
+            target: aarch64-windows
+            wine: true
+          - os: ubuntu-latest
+            godot: "4.2"
+            target: x86_64-linux
+          - os: ubuntu-latest
+            godot: "4.2"
+            target: x86_64-windows
+            wine: true
+          - os: ubuntu-24.04-arm
+            godot: "4.2"
+            target: aarch64-linux
+          - os: ubuntu-24.04-arm
+            godot: "4.2"
+            target: aarch64-windows
+            wine: true
+          - os: ubuntu-latest
+            godot: "4.1"
+            target: x86_64-linux
+          - os: ubuntu-latest
+            godot: "4.1"
+            target: x86_64-windows
+            wine: true
+          - os: ubuntu-24.04-arm
+            godot: "4.1"
+            target: aarch64-linux
+          - os: ubuntu-24.04-arm
+            godot: "4.1"
+            target: aarch64-windows
+            wine: true
           - os: macos-latest
             godot: "4.5"
-          # Temporarily disabled while we figure out hanging
-          - os: windows-latest
-            godot: "4.5"
+            target: aarch64-macos
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/test-godot
-        with:
-          godot-version: ${{ matrix.godot }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+      - name: Run tests
+        run: zig build test -Dgodot-version=${{ matrix.godot }} -Dtarget=${{ matrix.target }} ${{ matrix.wine && '-fwine' || '' }}
