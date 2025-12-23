@@ -98,14 +98,11 @@ const Runner = struct {
     fn collectFolderMetadata(self: *Runner, folder: []const u8, folder_idx: u32) !void {
         const folder_name = std.fs.path.basename(folder);
 
-        // Spawn Godot with stdin/stdout piped
-        var child = try self.spawnGodot(folder);
+        // Spawn Godot with query_metadata command
+        var child = try self.spawnGodot(folder, "query_metadata");
         defer {
             _ = child.wait() catch {};
         }
-
-        // Send query_metadata command
-        try self.sendCommand(&child, .query_metadata);
 
         // Read response from stdout, filtering out Godot noise
         var godot_output: std.ArrayListUnmanaged(u8) = .empty;
@@ -146,9 +143,6 @@ const Runner = struct {
             }
             return error.NoResponse;
         }
-
-        // Send exit command
-        try self.sendCommand(&child, .exit);
     }
 
     fn handleRunTest(self: *Runner, global_index: u32) !void {
@@ -163,14 +157,15 @@ const Runner = struct {
         const mapping = self.test_mappings.items[global_index];
         const folder = options.test_folders[mapping.folder_index];
 
-        // Spawn Godot
-        var child = try self.spawnGodot(folder);
+        // Format command with test index
+        var cmd_buf: [64]u8 = undefined;
+        const cmd = std.fmt.bufPrint(&cmd_buf, "run_test:{d}", .{mapping.local_index}) catch "run_test:0";
+
+        // Spawn Godot with run_test command
+        var child = try self.spawnGodot(folder, cmd);
         defer {
             _ = child.wait() catch {};
         }
-
-        // Send run_test command
-        try self.sendCommand(&child, .{ .run_test = mapping.local_index });
 
         // Read response, collecting Godot output
         var godot_output: std.ArrayListUnmanaged(u8) = .empty;
@@ -192,18 +187,12 @@ const Runner = struct {
             }
         }
 
-        // Send exit command
-        self.sendCommand(&child, .exit) catch {};
-
         // Wait for child to exit
         _ = child.wait() catch {};
 
         // If test failed, print Godot's output to stderr so user sees stack trace
         if (failed and godot_output.items.len > 0) {
-            var stderr_buf: [4096]u8 = undefined;
-            var stderr = std.fs.File.Writer.initStreaming(std.fs.File.stderr(), &stderr_buf);
-            stderr.interface.writeAll(godot_output.items) catch {};
-            stderr.interface.flush() catch {};
+            std.fs.File.stderr().writeAll(godot_output.items) catch {};
         }
 
         // Send result to build system
@@ -216,15 +205,6 @@ const Runner = struct {
                 .fuzz = false,
             },
         });
-    }
-
-    /// Send a command to the child process stdin
-    fn sendCommand(self: *Runner, child: *std.process.Child, cmd: json_ipc.Command) !void {
-        _ = self;
-        const stdin = child.stdin orelse return error.NoStdin;
-        var buf: [4096]u8 = undefined;
-        const data = json_ipc.formatCommand(&buf, cmd) catch return error.FormatError;
-        stdin.writeAll(data) catch return error.WriteError;
     }
 
     /// Read lines from Godot's stdout until we get an IPC response.
@@ -261,19 +241,18 @@ const Runner = struct {
         }
     }
 
-    fn spawnGodot(self: *Runner, folder: []const u8) !std.process.Child {
-        // Copy existing environment and add test mode flag
+    fn spawnGodot(self: *Runner, folder: []const u8, cmd: []const u8) !std.process.Child {
+        // Copy existing environment and add command
         var env_map = std.process.getEnvMap(self.allocator) catch return error.EnvironmentError;
         defer env_map.deinit();
 
-        try env_map.put("GDZIG_TEST_MODE", "1");
+        try env_map.put("GDZIG_TEST_CMD", cmd);
 
         var child = std.process.Child.init(
-            &.{ options.godot_exe, "--headless", "--path", folder, "--quit-after", "60" },
+            &.{ options.godot_exe, "--headless", "-e", "--path", folder, "--quit-after", "60" },
             self.allocator,
         );
         child.env_map = &env_map;
-        child.stdin_behavior = .Pipe;
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Pipe;
 

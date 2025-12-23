@@ -1,12 +1,11 @@
 //! Test server that runs inside the Godot extension.
 //!
-//! Reads commands from stdin, writes responses to stdout using JSON IPC.
-//! Non-IPC output from Godot is filtered out by the coordinator.
+//! Reads command from GDZIG_TEST_CMD environment variable, executes it,
+//! writes response to stdout using JSON IPC, then exits.
 //!
-//! Commands:
-//! - query_metadata: returns list of test names from builtin.test_functions
-//! - run_test: executes a specific test and returns the result
-//! - exit: triggers Godot to quit
+//! Commands (via GDZIG_TEST_CMD env var):
+//! - "query_metadata": returns list of test names from builtin.test_functions
+//! - "run_test:<index>": executes a specific test and returns the result
 
 const std = @import("std");
 const json_ipc = @import("json_ipc.zig");
@@ -16,54 +15,30 @@ const Os = gdzig.class.Os;
 
 const builtin = @import("builtin");
 
-/// Run the test server. This blocks until the runner sends an exit message.
-/// After returning, the caller should trigger Godot to quit.
+/// Run the test server. Reads command from env var, executes, writes response, exits.
 pub fn run(allocator: std.mem.Allocator) void {
     runImpl(allocator) catch {};
 }
 
 fn runImpl(allocator: std.mem.Allocator) !void {
-    // Check if we should run (env var signals test mode)
-    const test_mode = std.process.getEnvVarOwned(allocator, "GDZIG_TEST_MODE") catch |err| switch (err) {
+    // Check for command in env var
+    const cmd_str = std.process.getEnvVarOwned(allocator, "GDZIG_TEST_CMD") catch |err| switch (err) {
         error.EnvironmentVariableNotFound => return,
         else => return,
     };
-    defer allocator.free(test_mode);
+    defer allocator.free(cmd_str);
 
-    // Get stdin and stdout
-    const stdin_file = std.fs.File.stdin();
     const stdout_file = std.fs.File.stdout();
 
-    var line_buf: std.ArrayListUnmanaged(u8) = .empty;
-    defer line_buf.deinit(allocator);
-
-    // Message loop - read commands from stdin, write responses to stdout
-    while (true) {
-        // Read a line from stdin byte by byte (for Windows pipe compatibility)
-        line_buf.clearRetainingCapacity();
-        while (true) {
-            var byte_buf: [1]u8 = undefined;
-            const n = stdin_file.read(&byte_buf) catch return;
-            if (n == 0) return; // EOF
-            const byte = byte_buf[0];
-            if (byte == '\n') break;
-            try line_buf.append(allocator, byte);
-        }
-
-        const line = line_buf.items;
-
-        // Skip non-IPC lines (shouldn't happen on stdin, but be safe)
-        if (!json_ipc.isIpcMessage(line)) continue;
-
-        // Parse command
-        const cmd = json_ipc.parseCommand(line) orelse continue;
-
-        switch (cmd) {
-            .query_metadata => try handleQueryMetadata(stdout_file),
-            .run_test => |index| try handleRunTest(stdout_file, index),
-            .exit => break,
-        }
+    // Parse and execute command
+    if (std.mem.eql(u8, cmd_str, "query_metadata")) {
+        try handleQueryMetadata(stdout_file);
+    } else if (std.mem.startsWith(u8, cmd_str, "run_test:")) {
+        const index_str = cmd_str["run_test:".len..];
+        const index = std.fmt.parseInt(u32, index_str, 10) catch return;
+        try handleRunTest(stdout_file, index);
     }
+    // Command executed, server will exit and Godot will quit
 }
 
 /// Trigger Godot to quit.
