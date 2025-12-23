@@ -269,7 +269,7 @@ const Runner = struct {
         try env_map.put("GDZIG_TEST_MODE", "1");
 
         var child = std.process.Child.init(
-            &.{ options.godot_exe, "--headless", "-e", "--path", folder, "--quit-after", "60" },
+            &.{ options.godot_exe, "--headless", "--path", folder, "--quit-after", "60" },
             self.allocator,
         );
         child.env_map = &env_map;

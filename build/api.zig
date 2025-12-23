@@ -235,6 +235,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     const project_files = b.addWriteFiles();
     _ = project_files.add("test_extension.gdextension", generateGdextension(b, lib.out_filename));
     _ = project_files.add("project.godot", generateProjectGodot(b, options.name));
+    _ = project_files.add("main.tscn", generateMainScene());
 
     const install_project = b.addInstallDirectory(.{
         .source_dir = project_files.getDirectory(),
@@ -327,6 +328,15 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
     @panic("Could not find gdzig as dependency");
 }
 
+fn generateMainScene() []const u8 {
+    return 
+    \\[gd_scene format=3]
+    \\
+    \\[node name="Main" type="Node"]
+    \\
+    ;
+}
+
 fn generateProjectGodot(b: *Build, name: []const u8) []const u8 {
     return b.fmt(
         \\; Minimal Godot project for gdzig tests
@@ -334,6 +344,7 @@ fn generateProjectGodot(b: *Build, name: []const u8) []const u8 {
         \\
         \\[application]
         \\config/name="{s}"
+        \\run/main_scene="res://main.tscn"
         \\
         \\[rendering]
         \\renderer/rendering_method="gl_compatibility"
