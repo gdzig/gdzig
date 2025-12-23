@@ -42,9 +42,8 @@ jobs:
           # Add macOS and Windows for latest Godot only
           - os: macos-latest
             godot: "4.5"
-          # Temporarily disabled while we figure out hanging
-          # - os: windows-latest
-          #   godot: "4.5"
+          - os: windows-latest
+            godot: "4.5"
 
     steps:
       - name: Checkout

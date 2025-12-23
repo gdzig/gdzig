@@ -3,33 +3,18 @@
 //! This executable:
 //! 1. Speaks the std.zig.Server protocol with the build system (via stdin/stdout)
 //! 2. Spawns Godot processes for each test folder
-//! 3. Communicates with test harnesses via TCP using our protocol
+//! 3. Communicates with test harnesses via JSON IPC over stdin/stdout pipes
 //!
 //! The coordinator maintains a mapping from global test indices to (folder, local_index) pairs.
 
 const std = @import("std");
 const builtin = @import("builtin");
-const posix = std.posix;
-const protocol = @import("protocol.zig");
+const json_ipc = @import("json_ipc.zig");
 const options = @import("runner_options");
 
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ZigServer = std.zig.Server;
-const ZigClient = std.zig.Client;
-
-const log = std.log.scoped(.gdzig_testing);
-
-/// Timeout for waiting for Godot to connect (in milliseconds)
-const ACCEPT_TIMEOUT_MS = 30_000;
-
-pub const std_options: std.Options = .{
-    // Set gdzig_testing scope to .warn by default (silent)
-    // To enable debug logging, set GDZIG_TEST_DEBUG=1 environment variable
-    .log_scope_levels = &.{
-        .{ .scope = .gdzig_testing, .level = .warn },
-    },
-};
 
 /// Mapping from global test index to folder and local index
 const TestMapping = struct {
@@ -66,49 +51,27 @@ const Runner = struct {
     }
 
     fn run(self: *Runner) !void {
-        log.debug("runner started, waiting for messages from build system", .{});
-        log.debug("test_folders: {d}", .{options.test_folders.len});
-        for (options.test_folders) |folder| {
-            log.debug("  folder: {s}", .{folder});
-        }
-
         while (true) {
-            log.debug("waiting for message...", .{});
             const header = self.server.receiveMessage() catch |err| {
-                log.debug("receiveMessage error: {}", .{err});
-                // End of input from build system
                 if (err == error.EndOfStream) break;
                 return err;
             };
 
-            log.debug("received message tag: {} (raw={d}) bytes_len={d}", .{ header.tag, @intFromEnum(header.tag), header.bytes_len });
-
             switch (header.tag) {
-                .exit => {
-                    log.debug("exit requested", .{});
-                    break;
-                },
-                .query_test_metadata => {
-                    log.debug("query_test_metadata requested", .{});
-                    try self.handleQueryTestMetadata();
-                },
+                .exit => break,
+                .query_test_metadata => try self.handleQueryTestMetadata(),
                 .run_test => {
                     const index = try self.server.receiveBody_u32();
-                    log.debug("run_test requested: index={d}", .{index});
                     try self.handleRunTest(index);
                 },
                 else => {
-                    log.debug("unknown message, skipping {d} bytes", .{header.bytes_len});
-                    // Unknown message, skip body
                     _ = try self.server.in.discard(Io.Limit.limited(header.bytes_len));
                 },
             }
         }
-        log.debug("runner finished", .{});
     }
 
     fn handleQueryTestMetadata(self: *Runner) !void {
-        log.debug("handleQueryTestMetadata: starting", .{});
         // Clear previous state
         self.test_mappings.clearRetainingCapacity();
         self.string_bytes.clearRetainingCapacity();
@@ -118,7 +81,6 @@ const Runner = struct {
         for (options.test_folders, 0..) |folder, folder_idx| {
             try self.collectFolderMetadata(folder, @intCast(folder_idx));
         }
-        log.debug("handleQueryTestMetadata: collected {d} tests", .{self.test_name_indices.items.len});
 
         // Build expected_panic_msgs (all zeros - we don't use panic expectations)
         const expected_panic_msgs = try self.allocator.alloc(u32, self.test_name_indices.items.len);
@@ -126,107 +88,67 @@ const Runner = struct {
         @memset(expected_panic_msgs, 0);
 
         // Send metadata to build system
-        log.debug("handleQueryTestMetadata: sending {d} tests to build system", .{self.test_name_indices.items.len});
-
         try self.server.serveTestMetadata(.{
             .names = self.test_name_indices.items,
             .expected_panic_msgs = expected_panic_msgs,
             .string_bytes = self.string_bytes.items,
         });
-        log.debug("handleQueryTestMetadata: sent metadata", .{});
     }
 
     fn collectFolderMetadata(self: *Runner, folder: []const u8, folder_idx: u32) !void {
-        log.debug("collectFolderMetadata: folder={s} idx={d}", .{ folder, folder_idx });
-
-        // Extract folder name for prefixing
         const folder_name = std.fs.path.basename(folder);
-        log.debug("  folder_name={s}", .{folder_name});
 
-        // Start TCP listener
-        const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, 0);
-        var listener = try address.listen(.{ .reuse_address = true });
-        defer listener.stream.close();
-
-        const port = listener.listen_address.getPort();
-        log.debug("  listening on port {d}", .{port});
-
-        // Spawn Godot
-        log.debug("  spawning godot: {s}", .{options.godot_exe});
-        var child = try self.spawnGodot(folder, port);
+        // Spawn Godot with stdin/stdout piped
+        var child = try self.spawnGodot(folder);
         defer {
-            // Collect and log Godot output before waiting
-            const output = self.collectGodotOutput(&child) catch "";
-            defer if (output.len > 0) self.allocator.free(output);
-            if (output.len > 0) {
-                log.debug("  godot output:\n{s}", .{output});
-            }
             _ = child.wait() catch {};
         }
-        log.debug("  godot spawned, pid={d}", .{child.id});
 
-        // Accept connection with timeout
-        log.debug("  waiting for connection (timeout: {d}ms)...", .{ACCEPT_TIMEOUT_MS});
-        var conn = acceptWithTimeout(&listener, ACCEPT_TIMEOUT_MS) catch |err| {
-            if (err == error.Timeout) {
-                log.debug("  timeout waiting for Godot to connect", .{});
-                // Collect Godot output to help diagnose the issue
-                const output = self.collectGodotOutput(&child) catch "";
-                defer if (output.len > 0) self.allocator.free(output);
-                if (output.len > 0) {
-                    std.debug.print("Godot output (timed out):\n{s}\n", .{output});
-                }
+        // Send query_metadata command
+        try self.sendCommand(&child, .query_metadata);
+
+        // Read response from stdout, filtering out Godot noise
+        var godot_output: std.ArrayListUnmanaged(u8) = .empty;
+        defer godot_output.deinit(self.allocator);
+
+        const response = try self.readResponse(&child, &godot_output);
+        if (response) |resp| {
+            defer {
+                var r = resp;
+                json_ipc.freeResponse(self.allocator, &r);
             }
-            return err;
-        };
-        defer conn.stream.close();
-        log.debug("  connection accepted!", .{});
 
-        // Set up buffered I/O
-        var read_buf: [4096]u8 = undefined;
-        var write_buf: [4096]u8 = undefined;
-        var reader = std.net.Stream.Reader.init(conn.stream, &read_buf);
-        var writer = std.net.Stream.Writer.init(conn.stream, &write_buf);
+            switch (resp) {
+                .metadata => |tests| {
+                    for (tests, 0..) |name, i| {
+                        // Record the string index before adding the prefixed name
+                        const string_idx: u32 = @intCast(self.string_bytes.items.len);
+                        try self.test_name_indices.append(self.allocator, string_idx);
 
-        // Query test metadata
-        log.debug("  sending query_test_metadata to extension...", .{});
-        try protocol.writeMessage(&writer.interface, .query_test_metadata, &.{});
-        log.debug("  sent query_test_metadata, waiting for response...", .{});
+                        // Add prefixed name: "folder.test name\0"
+                        try self.string_bytes.appendSlice(self.allocator, folder_name);
+                        try self.string_bytes.append(self.allocator, '.');
+                        try self.string_bytes.appendSlice(self.allocator, name);
+                        try self.string_bytes.append(self.allocator, 0);
 
-        // Read response
-        var msg_buf: [65536]u8 = undefined;
-        const msg = try protocol.readMessage(reader.interface(), &msg_buf);
-        log.debug("  received response from extension, tag={}", .{msg.tag});
-
-        if (msg.tag != .test_metadata) {
-            return error.UnexpectedResponse;
+                        // Record mapping
+                        try self.test_mappings.append(self.allocator, .{
+                            .folder_index = folder_idx,
+                            .local_index = @intCast(i),
+                        });
+                    }
+                },
+                .result => return error.UnexpectedResponse,
+            }
+        } else {
+            if (godot_output.items.len > 0) {
+                std.debug.print("Godot output:\n{s}\n", .{godot_output.items});
+            }
+            return error.NoResponse;
         }
 
-        // Parse test names and add to our mappings
-        var iter = protocol.decodeTestMetadata(msg.payload);
-        var local_idx: u32 = 0;
-        while (iter.next()) |name| {
-            // Record the string index before adding the prefixed name
-            const string_idx: u32 = @intCast(self.string_bytes.items.len);
-            try self.test_name_indices.append(self.allocator, string_idx);
-
-            // Add prefixed name: "folder.test name\0"
-            try self.string_bytes.appendSlice(self.allocator, folder_name);
-            try self.string_bytes.append(self.allocator, '.');
-            try self.string_bytes.appendSlice(self.allocator, name);
-            try self.string_bytes.append(self.allocator, 0);
-
-            // Record mapping
-            try self.test_mappings.append(self.allocator, .{
-                .folder_index = folder_idx,
-                .local_index = local_idx,
-            });
-
-            local_idx += 1;
-        }
-
-        // Tell extension to exit
-        try protocol.writeMessage(&writer.interface, .exit, &.{});
+        // Send exit command
+        try self.sendCommand(&child, .exit);
     }
 
     fn handleRunTest(self: *Runner, global_index: u32) !void {
@@ -241,71 +163,48 @@ const Runner = struct {
         const mapping = self.test_mappings.items[global_index];
         const folder = options.test_folders[mapping.folder_index];
 
-        // Start TCP listener
-        const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, 0);
-        var listener = try address.listen(.{ .reuse_address = true });
-        defer listener.stream.close();
-
-        const port = listener.listen_address.getPort();
-
         // Spawn Godot
-        var child = try self.spawnGodot(folder, port);
-        errdefer {
+        var child = try self.spawnGodot(folder);
+        defer {
             _ = child.wait() catch {};
         }
 
-        // Accept connection with timeout
-        var conn = acceptWithTimeout(&listener, ACCEPT_TIMEOUT_MS) catch |err| {
-            if (err == error.Timeout) {
-                // Collect Godot output to help diagnose the issue
-                const output = self.collectGodotOutput(&child) catch "";
-                defer if (output.len > 0) self.allocator.free(output);
-                if (output.len > 0) {
-                    std.debug.print("Godot output (timed out):\n{s}\n", .{output});
-                }
-            }
-            return err;
-        };
-        defer conn.stream.close();
-
-        // Set up buffered I/O
-        var read_buf: [4096]u8 = undefined;
-        var write_buf: [4096]u8 = undefined;
-        var reader = std.net.Stream.Reader.init(conn.stream, &read_buf);
-        var writer = std.net.Stream.Writer.init(conn.stream, &write_buf);
-
         // Send run_test command
-        const run_payload = protocol.encodeRunTest(mapping.local_index);
-        try protocol.writeMessage(&writer.interface, .run_test, &run_payload);
+        try self.sendCommand(&child, .{ .run_test = mapping.local_index });
 
-        // Read result
-        var msg_buf: [65536]u8 = undefined;
-        const msg = try protocol.readMessage(reader.interface(), &msg_buf);
+        // Read response, collecting Godot output
+        var godot_output: std.ArrayListUnmanaged(u8) = .empty;
+        defer godot_output.deinit(self.allocator);
 
-        var failed = false;
-        if (msg.tag != .test_result) {
-            failed = true;
-        } else {
-            const result = protocol.decodeTestResult(msg.payload);
-            failed = !result.passed;
+        var failed = true;
+        const response = try self.readResponse(&child, &godot_output);
+        if (response) |resp| {
+            defer {
+                var r = resp;
+                json_ipc.freeResponse(self.allocator, &r);
+            }
+
+            switch (resp) {
+                .result => |result| {
+                    failed = !result.passed;
+                },
+                .metadata => {},
+            }
         }
 
-        // Tell extension to exit
-        try protocol.writeMessage(&writer.interface, .exit, &.{});
-
-        // Collect Godot output (contains stack traces on failure)
-        const output = self.collectGodotOutput(&child) catch "";
-        defer if (output.len > 0) self.allocator.free(output);
+        // Send exit command
+        self.sendCommand(&child, .exit) catch {};
 
         // Wait for child to exit
         _ = child.wait() catch {};
 
         // If test failed, print Godot's output to stderr so user sees stack trace
-        if (failed and output.len > 0) {
-            std.fs.File.stderr().writeAll(output) catch {};
+        if (failed and godot_output.items.len > 0) {
+            var stderr_buf: [4096]u8 = undefined;
+            var stderr = std.fs.File.Writer.initStreaming(std.fs.File.stderr(), &stderr_buf);
+            stderr.interface.writeAll(godot_output.items) catch {};
+            stderr.interface.flush() catch {};
         }
-
-        log.debug("godot output:\n{s}", .{output});
 
         // Send result to build system
         try self.server.serveTestResults(.{
@@ -319,52 +218,65 @@ const Runner = struct {
         });
     }
 
-    /// Collect any remaining output from a Godot child process
-    fn collectGodotOutput(self: *Runner, child: *std.process.Child) ![]const u8 {
-        var output: std.ArrayListUnmanaged(u8) = .empty;
-        errdefer output.deinit(self.allocator);
-
-        // Read stdout
-        if (child.stdout) |stdout| {
-            var buf: [4096]u8 = undefined;
-            while (true) {
-                const n = stdout.read(&buf) catch break;
-                if (n == 0) break;
-                try output.appendSlice(self.allocator, buf[0..n]);
-            }
-        }
-
-        // Read stderr
-        if (child.stderr) |stderr| {
-            var buf: [4096]u8 = undefined;
-            while (true) {
-                const n = stderr.read(&buf) catch break;
-                if (n == 0) break;
-                try output.appendSlice(self.allocator, buf[0..n]);
-            }
-        }
-
-        return output.toOwnedSlice(self.allocator);
+    /// Send a command to the child process stdin
+    fn sendCommand(self: *Runner, child: *std.process.Child, cmd: json_ipc.Command) !void {
+        _ = self;
+        const stdin = child.stdin orelse return error.NoStdin;
+        var buf: [4096]u8 = undefined;
+        var writer = std.fs.File.Writer.initStreaming(stdin, &buf);
+        try json_ipc.writeCommand(&writer.interface, cmd);
+        try writer.interface.flush();
     }
 
-    fn spawnGodot(self: *Runner, folder: []const u8, port: u16) !std.process.Child {
-        // Format port as string (must be heap-allocated to outlive this function)
-        const port_str = std.fmt.allocPrint(self.allocator, "{d}", .{port}) catch unreachable;
-        defer self.allocator.free(port_str);
+    /// Read lines from Godot's stdout until we get an IPC response.
+    /// Non-IPC lines are collected in godot_output for error display.
+    fn readResponse(self: *Runner, child: *std.process.Child, godot_output: *std.ArrayListUnmanaged(u8)) !?json_ipc.Response {
+        const stdout = child.stdout orelse return null;
+        var read_buf: [4096]u8 = undefined;
+        var reader = std.fs.File.Reader.initStreaming(stdout, &read_buf);
+        var line_buf: std.ArrayListUnmanaged(u8) = .empty;
+        defer line_buf.deinit(self.allocator);
 
-        // Copy existing environment and add our port
+        while (true) {
+            // Read bytes until we find a newline
+            line_buf.clearRetainingCapacity();
+            while (true) {
+                const byte = reader.interface.takeByte() catch |err| {
+                    if (err == error.EndOfStream) return null;
+                    return null;
+                };
+                if (byte == '\n') break;
+                try line_buf.append(self.allocator, byte);
+            }
+
+            const line = line_buf.items;
+
+            // Check if this is an IPC message
+            if (json_ipc.isIpcMessage(line)) {
+                if (try json_ipc.parseResponse(self.allocator, line)) |resp| {
+                    return resp;
+                }
+            } else {
+                // Collect non-IPC output
+                try godot_output.appendSlice(self.allocator, line);
+                try godot_output.append(self.allocator, '\n');
+            }
+        }
+    }
+
+    fn spawnGodot(self: *Runner, folder: []const u8) !std.process.Child {
+        // Copy existing environment and add test mode flag
         var env_map = std.process.getEnvMap(self.allocator) catch return error.EnvironmentError;
         defer env_map.deinit();
 
-        try env_map.put("GDZIG_TEST_PORT", port_str);
+        try env_map.put("GDZIG_TEST_MODE", "1");
 
         var child = std.process.Child.init(
-            &.{ options.godot_exe, "--headless", "--quiet", "-e", "--path", folder, "--quit-after", "60" },
+            &.{ options.godot_exe, "--headless", "-e", "--path", folder, "--quit-after", "60" },
             self.allocator,
         );
         child.env_map = &env_map;
-        // CRITICAL: Don't let Godot's stdout/stderr pollute our protocol stream
-        // Capture them so we can display on test failure
+        child.stdin_behavior = .Pipe;
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Pipe;
 
@@ -373,77 +285,11 @@ const Runner = struct {
     }
 };
 
-/// Accept a connection with a timeout using poll.
-/// Returns error.Timeout if no connection is received within the timeout period.
-fn acceptWithTimeout(listener: *std.net.Server, timeout_ms: i32) !std.net.Server.Connection {
-    // Use platform-appropriate poll types
-    const native_os = builtin.os.tag;
-    if (native_os == .windows) {
-        const ws2_32 = std.os.windows.ws2_32;
-        var pollfds = [_]ws2_32.pollfd{
-            .{
-                .fd = listener.stream.handle,
-                .events = ws2_32.POLL.RDNORM, // POLLRDNORM for incoming connections on Windows
-                .revents = 0,
-            },
-        };
-
-        const result = std.os.windows.poll(&pollfds, 1, timeout_ms);
-        if (result == ws2_32.SOCKET_ERROR) {
-            log.debug("WSAPoll error: {}", .{ws2_32.WSAGetLastError()});
-            return error.Unexpected;
-        }
-
-        if (result == 0) {
-            return error.Timeout;
-        }
-
-        if (pollfds[0].revents & ws2_32.POLL.RDNORM != 0) {
-            return listener.accept();
-        }
-
-        return error.Unexpected;
-    } else {
-        var pollfds = [_]posix.pollfd{
-            .{
-                .fd = listener.stream.handle,
-                .events = posix.POLL.IN,
-                .revents = 0,
-            },
-        };
-
-        const result = posix.poll(&pollfds, timeout_ms) catch |err| {
-            log.debug("poll error: {}", .{err});
-            return err;
-        };
-
-        if (result == 0) {
-            return error.Timeout;
-        }
-
-        if (pollfds[0].revents & posix.POLL.IN != 0) {
-            return listener.accept();
-        }
-
-        return error.Unexpected;
-    }
-}
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Log command line args
-    var args_iter = try std.process.argsWithAllocator(allocator);
-    defer args_iter.deinit();
-    var arg_idx: usize = 0;
-    while (args_iter.next()) |arg| {
-        log.debug("arg[{d}]: {s}", .{ arg_idx, arg });
-        arg_idx += 1;
-    }
-
-    // Set up stdin/stdout for build system communication
     var stdin_buf: [4096]u8 = undefined;
     var stdout_buf: [4096]u8 = undefined;
 
@@ -452,7 +298,6 @@ pub fn main() !void {
 
     var runner = try Runner.init(allocator, &stdin_reader.interface, &stdout_writer.interface);
     defer runner.deinit();
-    log.debug("runner initialized", .{});
 
     try runner.run();
 }

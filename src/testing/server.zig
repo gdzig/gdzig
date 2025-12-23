@@ -1,98 +1,74 @@
 //! Test server that runs inside the Godot extension.
 //!
-//! Connects to the test runner via TCP and handles:
-//! - query_test_metadata: returns list of test names from builtin.test_functions
+//! Reads commands from stdin, writes responses to stdout using JSON IPC.
+//! Non-IPC output from Godot is filtered out by the coordinator.
+//!
+//! Commands:
+//! - query_metadata: returns list of test names from builtin.test_functions
 //! - run_test: executes a specific test and returns the result
 //! - exit: triggers Godot to quit
 
 const std = @import("std");
-const protocol = @import("protocol.zig");
-const Io = std.Io;
+const json_ipc = @import("json_ipc.zig");
 
 const gdzig = @import("gdzig");
 const Os = gdzig.class.Os;
 
-const log = std.log.scoped(.gdzig_testing);
+const builtin = @import("builtin");
 
 /// Run the test server. This blocks until the runner sends an exit message.
 /// After returning, the caller should trigger Godot to quit.
 pub fn run(allocator: std.mem.Allocator) void {
-    runImpl(allocator) catch |err| {
-        log.debug("test server error: {}", .{err});
-    };
+    runImpl(allocator) catch {};
 }
 
 fn runImpl(allocator: std.mem.Allocator) !void {
-    log.debug("server starting...", .{});
-
-    const port_str = std.process.getEnvVarOwned(allocator, "GDZIG_TEST_PORT") catch |err| {
-        if (err == error.EnvironmentVariableNotFound) {
-            log.debug("GDZIG_TEST_PORT not set, skipping test server", .{});
-            return;
-        }
-        log.debug("failed to get GDZIG_TEST_PORT: {}", .{err});
-        return;
+    // Check if we should run (env var signals test mode)
+    const test_mode = std.process.getEnvVarOwned(allocator, "GDZIG_TEST_MODE") catch |err| switch (err) {
+        error.EnvironmentVariableNotFound => return,
+        else => return,
     };
-    defer allocator.free(port_str);
+    defer allocator.free(test_mode);
 
-    log.debug("GDZIG_TEST_PORT={s}", .{port_str});
+    // Get stdin and stdout with buffering
+    const stdin_file = std.fs.File.stdin();
+    const stdout_file = std.fs.File.stdout();
 
-    const port = std.fmt.parseInt(u16, port_str, 10) catch {
-        log.debug("invalid GDZIG_TEST_PORT: {s}", .{port_str});
-        return;
-    };
+    var stdin_buf: [4096]u8 = undefined;
+    var stdout_buf: [4096]u8 = undefined;
+    var stdin = std.fs.File.Reader.initStreaming(stdin_file, &stdin_buf);
+    var stdout = std.fs.File.Writer.initStreaming(stdout_file, &stdout_buf);
 
-    // Connect to the runner
-    log.debug("connecting to runner on port {d}...", .{port});
-    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, port);
-    const stream = std.net.tcpConnectToAddress(address) catch |err| {
-        log.debug("failed to connect to test runner on port {d}: {}", .{ port, err });
-        return;
-    };
-    defer stream.close();
-    log.debug("connected!", .{});
+    var line_buf: std.ArrayListUnmanaged(u8) = .empty;
+    defer line_buf.deinit(allocator);
 
-    // Create buffered reader and writer
-    var read_buf: [4096]u8 = undefined;
-    var write_buf: [4096]u8 = undefined;
-    var reader = std.net.Stream.Reader.init(stream, &read_buf);
-    var writer = std.net.Stream.Writer.init(stream, &write_buf);
-
-    var msg_buf: [65536]u8 = undefined;
-
-    // Message loop
-    log.debug("entering message loop...", .{});
+    // Message loop - read commands from stdin, write responses to stdout
     while (true) {
-        log.debug("waiting for message...", .{});
-        const msg = protocol.readMessage(reader.interface(), &msg_buf) catch |err| {
-            log.debug("failed to read message: {}", .{err});
-            break;
-        };
+        // Read a line from stdin
+        line_buf.clearRetainingCapacity();
+        while (true) {
+            const byte = stdin.interface.takeByte() catch |err| {
+                if (err == error.EndOfStream) return;
+                return;
+            };
+            if (byte == '\n') break;
+            try line_buf.append(allocator, byte);
+        }
 
-        log.debug("received message tag: {}", .{msg.tag});
+        const line = line_buf.items;
 
-        switch (msg.tag) {
-            .query_test_metadata => {
-                log.debug("handling query_test_metadata", .{});
-                try handleQueryMetadata(allocator, &writer.interface);
-                log.debug("query_test_metadata done", .{});
-            },
-            .run_test => {
-                const index = protocol.decodeRunTest(msg.payload);
-                log.debug("handling run_test index={d}", .{index});
-                try handleRunTest(allocator, &writer.interface, index);
-                log.debug("run_test done", .{});
-            },
-            .exit => {
-                log.debug("exit requested", .{});
-                break;
-            },
-            else => {
-                log.debug("unknown message tag: {}", .{@intFromEnum(msg.tag)});
-            },
+        // Skip non-IPC lines (shouldn't happen on stdin, but be safe)
+        if (!json_ipc.isIpcMessage(line)) continue;
+
+        // Parse command
+        const cmd = json_ipc.parseCommand(line) orelse continue;
+
+        switch (cmd) {
+            .query_metadata => try handleQueryMetadata(&stdout.interface),
+            .run_test => |index| try handleRunTest(&stdout.interface, index),
+            .exit => break,
         }
     }
-    log.debug("server finished", .{});
 }
 
 /// Trigger Godot to quit.
@@ -101,41 +77,36 @@ pub fn quit() void {
     _ = Os.kill(pid);
 }
 
-fn handleQueryMetadata(allocator: std.mem.Allocator, writer: *Io.Writer) !void {
+fn handleQueryMetadata(writer: *std.Io.Writer) !void {
     const test_fns = getTestFunctions();
-    var names: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer names.deinit(allocator);
+    var names: [256][]const u8 = undefined;
+    const count = @min(test_fns.len, names.len);
 
-    for (test_fns) |t| {
-        try names.append(allocator, t.name);
+    for (test_fns[0..count], 0..) |t, i| {
+        names[i] = t.name;
     }
 
-    const payload = try protocol.encodeTestMetadata(allocator, names.items);
-    defer allocator.free(payload);
-
-    try protocol.writeMessage(writer, .test_metadata, payload);
+    try json_ipc.writeMetadataResponse(writer, names[0..count]);
+    try writer.flush();
 }
 
-fn handleRunTest(allocator: std.mem.Allocator, writer: *Io.Writer, index: u32) !void {
+fn handleRunTest(writer: *std.Io.Writer, index: u32) !void {
     const test_fns = getTestFunctions();
 
     if (index >= test_fns.len) {
-        const payload = try protocol.encodeTestResult(allocator, index, false, "Test index out of bounds");
-        defer allocator.free(payload);
-        try protocol.writeMessage(writer, .test_result, payload);
+        try json_ipc.writeResultResponse(writer, index, false, "Test index out of bounds");
+        try writer.flush();
         return;
     }
 
     const test_fn = test_fns[index];
-    const result = runSingleTest(allocator, test_fn);
+    const result = runSingleTest(test_fn);
 
-    const payload = try protocol.encodeTestResult(allocator, index, result.passed, result.message);
-    defer allocator.free(payload);
-    try protocol.writeMessage(writer, .test_result, payload);
+    try json_ipc.writeResultResponse(writer, index, result.passed, result.message);
+    try writer.flush();
 }
 
 const TestFn = std.builtin.TestFn;
-const builtin = @import("builtin");
 
 fn getTestFunctions() []const TestFn {
     return builtin.test_functions;
@@ -143,21 +114,17 @@ fn getTestFunctions() []const TestFn {
 
 const SingleTestResult = struct {
     passed: bool,
-    message: []const u8,
+    message: ?[]const u8,
 };
 
-fn runSingleTest(allocator: std.mem.Allocator, test_fn: TestFn) SingleTestResult {
-    _ = allocator;
-    // Run the test function
+fn runSingleTest(test_fn: TestFn) SingleTestResult {
     if (test_fn.func()) |_| {
-        return .{ .passed = true, .message = "" };
+        return .{ .passed = true, .message = null };
     } else |err| {
-        // Print error with stack trace like Zig's built-in test runner
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
         }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
-
-        return .{ .passed = false, .message = "" };
+        return .{ .passed = false, .message = null };
     }
 }

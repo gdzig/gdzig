@@ -11,16 +11,6 @@ const gdzig = @import("gdzig");
 const options = @import("options");
 const server = @import("server.zig");
 
-const log = std.log.scoped(.gdzig_testing);
-
-pub const std_options: std.Options = .{
-    // Set gdzig_testing scope to .warn by default (silent)
-    // To enable debug logging, users can set log_scope_levels in their test.zig
-    .log_scope_levels = &.{
-        .{ .scope = .gdzig_testing, .level = .warn },
-    },
-};
-
 // Export the GDExtension entrypoint
 comptime {
     @export(&entrypoint, .{
@@ -34,16 +24,8 @@ fn entrypoint(
     library: gdzig.c.GDExtensionClassLibraryPtr,
     r_initialization: *gdzig.c.GDExtensionInitialization,
 ) callconv(.c) gdzig.c.GDExtensionBool {
-    log.debug("extension entrypoint called", .{});
-
     gdzig.raw = .init(get_proc_address.?, library.?);
     gdzig.raw.getGodotVersion(@ptrCast(&gdzig.version));
-
-    log.debug("godot version: {d}.{d}.{d}", .{
-        gdzig.version.major,
-        gdzig.version.minor,
-        gdzig.version.patch,
-    });
 
     r_initialization.* = .{
         .minimum_initialization_level = @intFromEnum(options.minimum_initialization_level),
@@ -56,13 +38,9 @@ fn entrypoint(
 }
 
 fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(.c) void {
-    if (level != @intFromEnum(options.minimum_initialization_level)) {
-        return;
-    }
+    if (level != @intFromEnum(options.minimum_initialization_level)) return;
 
-    log.debug("starting test server, {d} tests available", .{builtin.test_functions.len});
     server.run(gdzig.engine_allocator);
-    log.debug("test server finished, quitting godot", .{});
     server.quit();
 }
 

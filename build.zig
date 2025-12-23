@@ -44,8 +44,8 @@ pub fn build(b: *Build) !void {
     };
 
     const headers = blk: {
-        const gdextension_interface_h = godot.headers(b, b.graph.host, .{ .version = latest_version }).path(b, "gdextension_interface.h");
         const api_header_source: godot.HeaderSource = if (godot_version) |v| .{ .version = v } else if (godot_path != null) .{ .exe = godot_exe } else .{ .version = latest_version };
+        const gdextension_interface_h = godot.headers(b, b.graph.host, .{ .version = latest_version }).path(b, "gdextension_interface.h");
         const extension_api_json = godot.headers(b, b.graph.host, api_header_source).path(b, "extension_api.json");
 
         const write = b.addWriteFiles();

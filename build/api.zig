@@ -227,11 +227,6 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     });
     lib.addObject(obj);
 
-    // Link Windows socket library for networking in test server
-    if (options.target.result.os.tag == .windows) {
-        lib.linkSystemLibrary("ws2_32");
-    }
-
     const install_subdir = b.fmt("test/{s}", .{options.name});
     const install_ext = b.addInstallArtifact(lib, .{
         .dest_dir = .{ .override = .{ .custom = install_subdir } },
@@ -265,11 +260,6 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
             },
         }),
     });
-
-    // Link Windows socket library for networking in coordinator
-    if (options.target.result.os.tag == .windows) {
-        coordinator.linkSystemLibrary("ws2_32");
-    }
 
     const run = b.addRunArtifact(coordinator);
     run.enableTestRunnerMode();
