@@ -30,27 +30,22 @@ fn runImpl(allocator: std.mem.Allocator) !void {
     };
     defer allocator.free(test_mode);
 
-    // Get stdin and stdout with buffering
+    // Get stdin and stdout
     const stdin_file = std.fs.File.stdin();
     const stdout_file = std.fs.File.stdout();
-
-    var stdin_buf: [4096]u8 = undefined;
-    var stdout_buf: [4096]u8 = undefined;
-    var stdin = std.fs.File.Reader.initStreaming(stdin_file, &stdin_buf);
-    var stdout = std.fs.File.Writer.initStreaming(stdout_file, &stdout_buf);
 
     var line_buf: std.ArrayListUnmanaged(u8) = .empty;
     defer line_buf.deinit(allocator);
 
     // Message loop - read commands from stdin, write responses to stdout
     while (true) {
-        // Read a line from stdin
+        // Read a line from stdin byte by byte (for Windows pipe compatibility)
         line_buf.clearRetainingCapacity();
         while (true) {
-            const byte = stdin.interface.takeByte() catch |err| {
-                if (err == error.EndOfStream) return;
-                return;
-            };
+            var byte_buf: [1]u8 = undefined;
+            const n = stdin_file.read(&byte_buf) catch return;
+            if (n == 0) return; // EOF
+            const byte = byte_buf[0];
             if (byte == '\n') break;
             try line_buf.append(allocator, byte);
         }
@@ -64,8 +59,8 @@ fn runImpl(allocator: std.mem.Allocator) !void {
         const cmd = json_ipc.parseCommand(line) orelse continue;
 
         switch (cmd) {
-            .query_metadata => try handleQueryMetadata(&stdout.interface),
-            .run_test => |index| try handleRunTest(&stdout.interface, index),
+            .query_metadata => try handleQueryMetadata(stdout_file),
+            .run_test => |index| try handleRunTest(stdout_file, index),
             .exit => break,
         }
     }
@@ -77,7 +72,7 @@ pub fn quit() void {
     _ = Os.kill(pid);
 }
 
-fn handleQueryMetadata(writer: *std.Io.Writer) !void {
+fn handleQueryMetadata(stdout: std.fs.File) !void {
     const test_fns = getTestFunctions();
     var names: [256][]const u8 = undefined;
     const count = @min(test_fns.len, names.len);
@@ -86,24 +81,29 @@ fn handleQueryMetadata(writer: *std.Io.Writer) !void {
         names[i] = t.name;
     }
 
-    try json_ipc.writeMetadataResponse(writer, names[0..count]);
-    try writer.flush();
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try json_ipc.writeMetadataResponse(fbs.writer(), names[0..count]);
+    try stdout.writeAll(fbs.getWritten());
 }
 
-fn handleRunTest(writer: *std.Io.Writer, index: u32) !void {
+fn handleRunTest(stdout: std.fs.File, index: u32) !void {
     const test_fns = getTestFunctions();
 
+    var buf: [4096]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+
     if (index >= test_fns.len) {
-        try json_ipc.writeResultResponse(writer, index, false, "Test index out of bounds");
-        try writer.flush();
+        try json_ipc.writeResultResponse(fbs.writer(), index, false, "Test index out of bounds");
+        try stdout.writeAll(fbs.getWritten());
         return;
     }
 
     const test_fn = test_fns[index];
     const result = runSingleTest(test_fn);
 
-    try json_ipc.writeResultResponse(writer, index, result.passed, result.message);
-    try writer.flush();
+    try json_ipc.writeResultResponse(fbs.writer(), index, result.passed, result.message);
+    try stdout.writeAll(fbs.getWritten());
 }
 
 const TestFn = std.builtin.TestFn;
