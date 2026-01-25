@@ -32,11 +32,11 @@ pub fn build(b: *Build) !void {
 
     // Godot executable for the host (used for bindgen, running editor, etc.)
     const godot_exe_host: ?Build.LazyPath = blk: {
-        if (godot_version) |v| {
-            break :blk godot.executable(b, b.graph.host, v);
-        }
         if (godot_path) |p| {
             break :blk .{ .cwd_relative = p };
+        }
+        if (godot_version) |v| {
+            break :blk godot.executable(b, b.graph.host, v);
         }
         if (b.findProgram(&.{"godot"}, &.{}) catch null) |p| {
             break :blk .{ .cwd_relative = p };
@@ -47,19 +47,19 @@ pub fn build(b: *Build) !void {
     // Godot executable for the target (used for running tests)
     // This enables cross-platform testing with -fwine
     const godot_exe_target: ?Build.LazyPath = blk: {
-        if (godot_version) |v| {
-            break :blk godot.executable(b, target, v);
-        }
         if (godot_path) |p| {
             // If user specifies a path, assume it's for the target
             break :blk .{ .cwd_relative = p };
+        }
+        if (godot_version) |v| {
+            break :blk godot.executable(b, target, v);
         }
         break :blk godot.executable(b, target, latest_version);
     };
 
     const headers = blk: {
-        const gdextension_interface_h = godot.headers(b, b.graph.host, .{ .version = latest_version }).path(b, "gdextension_interface.h");
-        const api_header_source: godot.HeaderSource = if (godot_version) |v| .{ .version = v } else if (godot_path != null) .{ .exe = godot_exe_host.? } else .{ .version = latest_version };
+        const api_header_source: godot.HeaderSource = if (godot_path != null) .{ .exe = godot_exe_host.? } else if (godot_version) |v| .{ .version = v } else .{ .version = latest_version };
+        const gdextension_interface_h = godot.headers(b, b.graph.host, api_header_source).path(b, "gdextension_interface.h");
         const extension_api_json = godot.headers(b, b.graph.host, api_header_source).path(b, "extension_api.json");
 
         const write = b.addWriteFiles();
