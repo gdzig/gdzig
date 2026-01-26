@@ -311,6 +311,7 @@ fn writeClasses(ctx: *const Context) !void {
         try w.writeLine(
             \\
             \\test {
+            \\  @setEvalBranchQuota(20000);
             \\  @import("std").testing.refAllDecls(@This());
             \\}
         );
@@ -1248,25 +1249,13 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, class: ?*const 
     try w.writeLine(
         \\
         \\const std = @import("std");
-        \\
-    );
-
-    // c (gdextension)
-    try w.writeLine(
-        \\const c = @import("gdextension");
-        \\
-    );
-
-    // gdzig with all aliases
-    try w.writeLine(
-        \\const gdzig = @import("gdzig");
-        \\const raw = &gdzig.raw;
     );
 
     // Collect imports into separate lists for sorting
     var builtins: std.ArrayList([]const u8) = .empty;
     var classes: std.ArrayList([]const u8) = .empty;
     var globals: std.ArrayList([]const u8) = .empty;
+    var typedefs: std.ArrayList([]const u8) = .empty;
     const allocator = ctx.arena.allocator();
 
     var iter = imports.iterator();
@@ -1289,7 +1278,7 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, class: ?*const 
         } else if (ctx.flags.contains(import.*)) {
             try globals.append(allocator, import.*);
         } else if (ctx.dispatch_table.typedefs.contains(import.*)) {
-            // TODO: handle gdextension typedefs
+            try typedefs.append(allocator, import.*);
         } else {
             // TODO: native structures?
         }
@@ -1305,6 +1294,26 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, class: ?*const 
     std.mem.sort([]const u8, builtins.items, {}, sortFn);
     std.mem.sort([]const u8, classes.items, {}, sortFn);
     std.mem.sort([]const u8, globals.items, {}, sortFn);
+    std.mem.sort([]const u8, typedefs.items, {}, sortFn);
+
+    // c (gdextension)
+    try w.writeLine(
+        \\
+        \\const c = @import("gdextension");
+    );
+
+    // Write sorted imports (typdefstogether under c)
+    for (typedefs.items) |api_name| {
+        // Note: We do not currently check for name collisions for interface typedefs.
+        try w.printLine("const {0s} = c.{0s};", .{api_name});
+    }
+
+    // gdzig with all aliases
+    try w.writeLine(
+        \\
+        \\const gdzig = @import("gdzig");
+        \\const raw = &gdzig.raw;
+    );
 
     // Write sorted imports (builtins, classes, globals all together under gdzig)
     // Note: import lists contain API names, but we need to use converted names

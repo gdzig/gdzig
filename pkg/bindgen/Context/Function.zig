@@ -94,6 +94,11 @@ const operator_enum_names = StaticStringMap([]const u8).initComptime(.{
     .{ "in", "in" },
 });
 
+/// Set of type meta values to ignore.
+const ignored_meta_values = std.StaticStringMap(void).initComptime(.{
+    .{ "required", {} }, // Introduced in 4.6. ignore for now
+});
+
 pub fn fromBuiltinOperator(allocator: Allocator, builtin_name: []const u8, api: GodotApi.Builtin.Operator, ctx: *const Context) !Function {
     var self: Function = .{};
 
@@ -321,12 +326,15 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     self.is_vararg = api.is_vararg;
 
     for (api.arguments orelse &.{}) |arg| {
+        const is_meta = arg.meta.len > 0 and !ignored_meta_values.has(arg.meta);
+        const arg_type = if (is_meta) arg.meta else arg.type;
+
         const parameter: Parameter = if (arg.default_value.len > 0)
             try .fromNameTypeDefault(
                 allocator,
                 arg.name,
-                if (arg.meta.len > 0) arg.meta else arg.type,
-                arg.meta.len > 0,
+                arg_type,
+                is_meta,
                 arg.default_value,
                 ctx,
             )
@@ -334,23 +342,23 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
             try .fromNameType(
                 allocator,
                 arg.name,
-                if (arg.meta.len > 0) arg.meta else arg.type,
-                arg.meta.len > 0,
+                arg_type,
+                is_meta,
                 ctx,
                 .{},
             );
         try self.parameters.put(allocator, arg.name, parameter);
     }
 
-    self.return_type = if (api.return_value) |rv|
-        try .from(
+    self.return_type = if (api.return_value) |rv| blk: {
+        const is_meta = rv.meta.len > 0 and !ignored_meta_values.has(rv.meta);
+        break :blk try .from(
             allocator,
-            if (rv.meta.len > 0) rv.meta else rv.type,
-            rv.meta.len > 0,
+            if (is_meta) rv.meta else rv.type,
+            is_meta,
             ctx,
-        )
-    else
-        .void;
+        );
+    } else .void;
 
     // TODO: default return values? rv.default_value
 
