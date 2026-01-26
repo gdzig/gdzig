@@ -51,10 +51,11 @@ pub fn build(b: *Build) !void {
             // If user specifies a path, assume it's for the target
             break :blk .{ .cwd_relative = p };
         }
+        const tgt = if (target.result.cpu.arch.isWasm()) b.graph.host else target;
         if (godot_version) |v| {
-            break :blk godot.executable(b, target, v);
+            break :blk godot.executable(b, tgt, v);
         }
-        break :blk godot.executable(b, target, latest_version);
+        break :blk godot.executable(b, tgt, latest_version);
     };
 
     const headers = blk: {
@@ -149,35 +150,39 @@ pub fn build(b: *Build) !void {
     //
     // Tests
     //
+    var tests_gdzig_run: ?*Build.Step.Run = null;
+    var tests_common_run: ?*Build.Step.Run = null;
 
-    const tests_gdzig = b.addTest(.{ .root_module = gdzig_mod });
-    const tests_common = b.addTest(.{ .root_module = common_mod });
-    const tests_gdzig_run = b.addRunArtifact(tests_gdzig);
-    const tests_common_run = b.addRunArtifact(tests_common);
+    if (!target.result.cpu.arch.isWasm()) { // Do not add test for web targets.
+        const tests_gdzig = b.addTest(.{ .root_module = gdzig_mod });
+        const tests_common = b.addTest(.{ .root_module = common_mod });
+        tests_gdzig_run = b.addRunArtifact(tests_gdzig);
+        tests_common_run = b.addRunArtifact(tests_common);
 
-    var tests_dir = try std.fs.cwd().openDir(b.path("test").getPath2(b, null), .{ .iterate = true });
-    defer tests_dir.close();
+        var tests_dir = try std.fs.cwd().openDir(b.path("test").getPath2(b, null), .{ .iterate = true });
+        defer tests_dir.close();
 
-    var iter = tests_dir.iterate();
-    while (iter.next() catch null) |entry| {
-        if (entry.kind != .directory) continue;
+        var iter = tests_dir.iterate();
+        while (iter.next() catch null) |entry| {
+            if (entry.kind != .directory) continue;
 
-        const test_mod = b.createModule(.{
-            .root_source_file = b.path(b.fmt("test/{s}/root.zig", .{entry.name})),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "gdzig", .module = gdzig_mod },
-            },
-        });
+            const test_mod = b.createModule(.{
+                .root_source_file = b.path(b.fmt("test/{s}/root.zig", .{entry.name})),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "gdzig", .module = gdzig_mod },
+                },
+            });
 
-        const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
-            .name = b.dupe(entry.name),
-            .root_module = test_mod,
-            .target = target,
-            .optimize = optimize,
-        });
-        test_step.dependOn(&run_test.step);
+            const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
+                .name = b.dupe(entry.name),
+                .root_module = test_mod,
+                .target = target,
+                .optimize = optimize,
+            });
+            test_step.dependOn(&run_test.step);
+        }
     }
 
     //
@@ -185,8 +190,8 @@ pub fn build(b: *Build) !void {
     //
 
     check_step.dependOn(&gdzig_lib.step);
-    test_step.dependOn(&tests_gdzig_run.step);
-    test_step.dependOn(&tests_common_run.step);
+    if (tests_gdzig_run) |r| test_step.dependOn(&r.step);
+    if (tests_common_run) |r| test_step.dependOn(&r.step);
 
     //
     // Default step
