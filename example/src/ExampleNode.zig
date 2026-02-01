@@ -95,7 +95,7 @@ pub fn onItemFocused(self: *ExampleNode, idx: i64) void {
             const n = Examples[i].T.create(&self.allocator) catch unreachable;
             self.example_node = .upcast(n);
             self.panel.addChild(self.example_node.?, .{});
-            self.panel.grabFocus();
+            self.panel.grabFocus(.{});
         },
         else => {},
     }
