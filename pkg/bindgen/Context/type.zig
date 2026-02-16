@@ -53,6 +53,7 @@ pub const Type = union(enum) {
         .{ "uint16", Type{ .int = "u16" } },
         .{ "uint32", Type{ .int = "u32" } },
         .{ "uint64", Type{ .int = "u64" } },
+        .{ "void", .void },
     });
 
     // TODO: may no longer be needed

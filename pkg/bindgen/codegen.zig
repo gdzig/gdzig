@@ -223,11 +223,12 @@ fn writeBuiltinDestructor(w: *CodeWriter, builtin: *const Context.Builtin) !void
 
 fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function, ctx: *const Context) !void {
     try writeFunctionHeader(w, method, null, ctx);
+
     try w.printLine(
         \\if ({0s}_ptr == null) {{
         \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
         \\}}
-        \\{0s}_ptr.?({4s}, @ptrCast(&args), @ptrCast(&result), args.len);
+        \\{0s}_ptr.?({4s}, @ptrCast(&args), {5s}, args.len);
     , .{
         method.name,
         method.name_api,
@@ -240,6 +241,7 @@ fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const C
             .mutable => "@ptrCast(self)",
             .value => "@ptrCast(@constCast(&self))",
         },
+        if (method.return_type != .void) "@ptrCast(&result)" else "null",
     });
     try writeFunctionFooter(w, method, null, ctx);
     try w.printLine(
