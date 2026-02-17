@@ -940,10 +940,7 @@ fn writeField(w: *CodeWriter, field: *const Context.Field, class: ?*const Contex
 fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !void {
     try writeDocBlock(w, flag.doc);
     try w.printLine("pub const {s} = packed struct({s}) {{", .{
-        flag.name, switch (flag.representation) {
-            .u32 => "u32",
-            .u64 => "u64",
-        },
+        flag.name, flag.representation.name(),
     });
     w.indent += 1;
     for (flag.fields.values()) |field| {
@@ -955,10 +952,7 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
     }
     for (flag.consts.values()) |@"const"| {
         try writeDocBlock(w, @"const".doc);
-        try w.printLine("pub const {s}: {s} = @bitCast(@as({s}, {d}));", .{ @"const".name, flag.name, switch (flag.representation) {
-            .u32 => "u32",
-            .u64 => "u64",
-        }, @"const".value });
+        try w.printLine("pub const {s}: {s} = @bitCast(@as({s}, {d}));", .{ @"const".name, flag.name, flag.representation.name(), @"const".value });
     }
     try writeMixin(w, "global/{s}.mixin.zig", .{flag.module}, ctx);
     w.indent -= 1;
