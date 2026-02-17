@@ -492,6 +492,8 @@ pub const Parameter = struct {
 
         if (self.type == .array and std.mem.indexOf(u8, default, "[]") != null) {
             self.default = .null;
+        } else if (self.type == .basic and std.mem.eql(u8, default, "{}")) {
+            self.default = .null;
         } else if (self.type == .string and std.mem.eql(u8, default, "\"\"")) {
             self.default = .null;
         } else if (self.type == .string_name and std.mem.eql(u8, default, "&\"\"")) {
@@ -501,8 +503,9 @@ pub const Parameter = struct {
                 .primitive = try std.fmt.allocPrint(allocator, "@enumFromInt({s})", .{default}),
             };
         } else if (self.type == .flag) {
+            const repr = ctx.flagRepr(self.type.flag);
             self.default = .{
-                .primitive = try std.fmt.allocPrint(allocator, "@bitCast({s})", .{default}),
+                .primitive = try std.fmt.allocPrint(allocator, "@bitCast(@as({s}, {s}))", .{ repr, default }),
             };
         } else {
             self.default = try .parse(allocator, default, ctx);
