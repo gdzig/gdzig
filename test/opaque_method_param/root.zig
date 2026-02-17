@@ -1,12 +1,4 @@
 /// Test: Methods with opaque class pointer parameters should compile and work
-///
-/// BUG: Currently fails with isStructClass assertion because Variant.as()
-/// doesn't properly handle opaque class pointers (like *Node) as method parameters.
-///
-/// Expected: This should compile and allow calling methods with Node parameters
-/// Actual: Compilation fails at isStructClass(T) assertion in asInstance()
-///
-/// Related: https://github.com/gdzig/gdzig/issues/XXX (fill in when issue created)
 pub fn register(r: *gdzig.extension.Registry) void {
     const class = r.createClass(TestNode, {}, .auto);
     // BUG: This line causes compilation failure with isStructClass assertion
