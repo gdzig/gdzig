@@ -151,7 +151,7 @@ pub const Variant = extern struct {
             var object: ?*Object = null;
             variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
             if (object == null) return null;
-            if (class.isOpaqueClassPtr(T)) {
+            if (comptime class.isOpaqueClassPtr(T)) {
                 return @ptrCast(@alignCast(object));
             } else {
                 const Base = class.BaseOf(Child(T));
