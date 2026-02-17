@@ -7,7 +7,19 @@ name_api: []const u8 = "_",
 fields: StringArrayHashMap(Field) = .empty,
 consts: StringArrayHashMap(Const) = .empty,
 padding: u8 = 0,
-representation: enum { u32, u64 } = .u32,
+representation: Representation = .u32,
+
+pub const Representation = enum {
+    u32,
+    u64,
+
+    pub fn name(self: Representation) []const u8 {
+        return switch (self) {
+            .u32 => "u32",
+            .u64 => "u64",
+        };
+    }
+};
 
 pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotApi.GlobalEnum, ctx: *const Context) !Flag {
     var self: Flag = .{};
