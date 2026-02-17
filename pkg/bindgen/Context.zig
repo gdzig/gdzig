@@ -393,6 +393,17 @@ fn castEnums(self: *Context) !void {
     }
 }
 
+/// Resolves the backing type name ("u32" or "u64") for a flag, searching
+/// global flags first, then class-level flags for qualified names like "Mesh.ArrayFormat".
+pub fn flagRepr(self: *const Context, flag_name: []const u8) []const u8 {
+    if (self.flags.get(flag_name)) |f| return f.representation.name();
+    if (std.mem.indexOfScalar(u8, flag_name, '.')) |dot| {
+        if (self.classes.get(flag_name[0..dot])) |class|
+            if (class.flags.get(flag_name[dot + 1 ..])) |f| return f.representation.name();
+    }
+    return "u64";
+}
+
 fn castFlags(self: *Context) !void {
     for (self.api.global_enums) |@"enum"| {
         if (!@"enum".is_bitfield) {
