@@ -8,6 +8,19 @@ test "default values for basic and flag types" {
     _ = &ArrayMesh.addSurfaceFromArrays;
 }
 
+test "forType handles optional class pointer types" {
+    // Optional class pointers like ?*Curve should resolve to .object,
+    // same as their non-optional counterparts.
+    try std.testing.expectEqual(.object, Variant.Tag.forType(?*Curve));
+    try std.testing.expectEqual(.object, Variant.Tag.forType(?*Noise));
+    try std.testing.expectEqual(.object, Variant.Tag.forType(?*Material));
+}
+
+const std = @import("std");
 const gdzig = @import("gdzig");
 const Array = gdzig.builtin.Array;
 const ArrayMesh = gdzig.class.ArrayMesh;
+const Curve = gdzig.class.Curve;
+const Material = gdzig.class.Material;
+const Noise = gdzig.class.Noise;
+const Variant = gdzig.builtin.Variant;
