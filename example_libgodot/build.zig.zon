@@ -1,0 +1,15 @@
+.{
+    .name = .gdzib_example_libgodot,
+    .version = "0.0.1",
+    .fingerprint = 0xe5d06b29c48e908c,
+    .dependencies = .{
+        .gdzig = .{
+            .path = "../",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

@@ -11,6 +11,7 @@ pub const InitializationLevel = enum(c_int) {
 };
 
 pub const Registry = @import("extension/Registry.zig");
+pub const LibGodot = @import("extension/LibGodot.zig");
 
 const class = @import("extension/class.zig");
 pub const DestroyInstanceBinding = class.DestroyInstanceBinding;
