@@ -10,7 +10,7 @@ pub fn build(b: *Build) !void {
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
     const godot_version = b.option([]const u8, "godot-version", "Download and use this Godot version (e.g. `latest` or `4.5`)");
-    const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
+    const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable or directory containing one");
 
     //
     // Steps
@@ -225,9 +225,25 @@ fn getGodotVersion(b: *Build, p: Build.LazyPath) []const u8 {
     var parts = std.mem.splitScalar(u8, output, '.');
     const major = parts.next() orelse @panic("Failed to parse major version");
     const minor = parts.next() orelse @panic("Failed to parse minor version");
-    const patch = parts.next() orelse @panic("Failed to parse patch version");
+    const raw_patch = parts.next() orelse "0";
 
-    return b.fmt("{s}.{s}.{s}", .{ major, minor, patch });
+    // Patch may contain non-numeric prefixes like "beta2", "rc1", "stable".
+    // Extract the trailing numeric portion for semver compatibility.
+    var patch_num: usize = 0;
+    for (raw_patch) |c| {
+        if (c >= '0' and c <= '9') {
+            patch_num = patch_num * 10 + (c - '0');
+        } else if (patch_num > 0) {
+            // Already seen digits, stop at first non-digit
+            break;
+        }
+    }
+    // If no digits found (e.g. "stable", "dev"), default to 0
+    if (patch_num == 0 and !std.mem.startsWith(u8, raw_patch, "0")) {
+        patch_num = 0;
+    }
+
+    return b.fmt("{s}.{s}.{d}", .{ major, minor, patch_num });
 }
 
 const std = @import("std");
