@@ -1122,9 +1122,11 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
             if (param.type == .variant or param.type.allocatesAsVariant(ctx)) {
                 try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
             } else {
-                try w.print("args[{d}] = @ptrCast(&Variant.init(", .{i});
+                try w.print("var _fixed_arg_{d}: Variant = Variant.init(", .{i});
                 try writeTypeAtParameter(w, &param.type, class, ctx);
-                try w.printLine(", {s}));", .{param.name});
+                try w.printLine(", {s});", .{param.name});
+                try w.printLine("defer _fixed_arg_{d}.deinit();", .{i});
+                try w.printLine("args[{d}] = @ptrCast(&_fixed_arg_{d});", .{ i, i });
             }
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
@@ -1136,13 +1138,17 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
                 }
             } else {
                 if (param.needsRuntimeInit(ctx)) {
-                    try w.print("args[{d}] = @ptrCast(&Variant.init(", .{i});
+                    try w.print("var _opt_arg_{d}: Variant = Variant.init(", .{i});
                     try writeTypeAtParameter(w, &param.type, class, ctx);
-                    try w.printLine(", actual_{s}));", .{param.name});
+                    try w.printLine(", actual_{s});", .{param.name});
+                    try w.printLine("defer _opt_arg_{d}.deinit();", .{i});
+                    try w.printLine("args[{d}] = @ptrCast(&_opt_arg_{d});", .{ i, i });
                 } else {
-                    try w.print("args[{d}] = @ptrCast(&Variant.init(", .{i});
+                    try w.print("var _opt_arg_{d}: Variant = Variant.init(", .{i});
                     try writeTypeAtParameter(w, &param.type, class, ctx);
-                    try w.printLine(", opt.{s}));", .{param.name});
+                    try w.printLine(", opt.{s});", .{param.name});
+                    try w.printLine("defer _opt_arg_{d}.deinit();", .{i});
+                    try w.printLine("args[{d}] = @ptrCast(&_opt_arg_{d});", .{ i, i });
                 }
             }
         }

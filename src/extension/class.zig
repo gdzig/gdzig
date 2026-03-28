@@ -104,7 +104,7 @@ pub const DestroyInstanceBinding = struct {
 
     var gpa: GeneralPurposeAllocator = .init;
     const allocator = gpa.allocator();
-    var pool: MemoryPool(PropertyListInstanceBinding) = .init(allocator);
+    var pool: MemoryPool(DestroyInstanceBinding) = .init(allocator);
 
     pub const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
