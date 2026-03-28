@@ -37,20 +37,34 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                     const method = @field(Owner, method_name);
                     const FnType = @TypeOf(method);
                     const fn_info = @typeInfo(FnType).@"fn";
-                    const ReturnType = fn_info.return_type orelse void;
+                    const RawReturn = fn_info.return_type orelse void;
+
+                    // Unwrap error union: `!T` -> `T`, `void` -> `void`
+                    const is_error_union = @typeInfo(RawReturn) == .error_union;
+                    const ReturnType = if (is_error_union) @typeInfo(RawReturn).error_union.payload else RawReturn;
 
                     const param_count = fn_info.params.len;
                     if (param_count == 1) {
-                        // Only self parameter - generate simpler wrapper
                         const Wrapper = struct {
                             fn call(p_instance: c.GDExtensionClassInstancePtr, _: [*]const c.GDExtensionConstTypePtr, p_ret: c.GDExtensionTypePtr) callconv(.c) void {
                                 const instance: *Owner = @ptrCast(@alignCast(p_instance));
-                                if (ReturnType == void) {
-                                    method(instance);
+                                if (is_error_union) {
+                                    if (ReturnType == void) {
+                                        method(instance) catch |err| pushVirtualError(method_name, err);
+                                    } else {
+                                        if (method(instance)) |result| {
+                                            const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
+                                            ret.* = result;
+                                        } else |err| pushVirtualError(method_name, err);
+                                    }
                                 } else {
-                                    const result = method(instance);
-                                    const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
-                                    ret.* = result;
+                                    if (ReturnType == void) {
+                                        method(instance);
+                                    } else {
+                                        const result = method(instance);
+                                        const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
+                                        ret.* = result;
+                                    }
                                 }
                             }
                         };
@@ -66,12 +80,23 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                                     const Arg = fn_info.params[j].type.?;
                                     args[j] = @as(*const Arg, @ptrCast(@alignCast(p_args[j - 1]))).*;
                                 }
-                                if (ReturnType == void) {
-                                    @call(.always_inline, method, args);
+                                if (is_error_union) {
+                                    if (ReturnType == void) {
+                                        @call(.always_inline, method, args) catch |err| pushVirtualError(method_name, err);
+                                    } else {
+                                        if (@call(.always_inline, method, args)) |result| {
+                                            const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
+                                            ret.* = result;
+                                        } else |err| pushVirtualError(method_name, err);
+                                    }
                                 } else {
-                                    const result = @call(.always_inline, method, args);
-                                    const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
-                                    ret.* = result;
+                                    if (ReturnType == void) {
+                                        @call(.always_inline, method, args);
+                                    } else {
+                                        const result = @call(.always_inline, method, args);
+                                        const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
+                                        ret.* = result;
+                                    }
                                 }
                             }
                         };
@@ -80,6 +105,17 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                 }
             }
             return null;
+        }
+
+        /// Reports an error from a virtual method to Godot's error system.
+        fn pushVirtualError(comptime method_name: []const u8, err: anyerror) void {
+            var msg_buf: [256]u8 = undefined;
+            const msg = std.fmt.bufPrint(&msg_buf, "Error in virtual method '{s}': {s}", .{ method_name, @errorName(err) }) catch method_name;
+            var msg_str = gdzig.builtin.String.fromLatin1(msg);
+            defer msg_str.deinit();
+            var msg_variant = gdzig.builtin.Variant.init(gdzig.builtin.String, msg_str);
+            defer msg_variant.deinit();
+            gdzig.general.pushError(msg_variant, .{});
         }
 
         pub fn has(name: []const u8) bool {
