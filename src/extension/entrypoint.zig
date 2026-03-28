@@ -6,6 +6,7 @@ const extension = @import("extension");
 const options = @import("options");
 
 pub const std_options: std.Options = if (@hasDecl(extension, "std_options")) extension.std_options else .{};
+pub const panic = if (@hasDecl(extension, "panic")) extension.panic else std.debug.defaultPanic;
 
 var registry: gdzig.extension.Registry = .init(gdzig.engine_allocator);
 

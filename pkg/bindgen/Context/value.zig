@@ -17,11 +17,14 @@ pub const Value = union(ValueType) {
     },
 
     pub fn isNullable(self: Value) bool {
-        return self == .null or self == .string;
+        return self == .null;
     }
 
     pub fn needsRuntimeInit(self: Value, ctx: *const Context) bool {
         switch (self) {
+            // String literal defaults (e.g. bus: StringName = &"Master") need
+            // runtime init because StringName/String are heap-allocated Godot types.
+            .string => return true,
             .constructor => |c| {
                 // Extract the type name from the constructor type
                 const type_name = switch (c.type) {
@@ -63,6 +66,16 @@ pub const Value = union(ValueType) {
             }
 
             unreachable;
+        }
+
+        // Zig string literal pointer: &"Master" -> treat as string default
+        if (value.len >= 3 and value[0] == '&' and value[1] == '"') {
+            if (std.mem.lastIndexOf(u8, value[1..], "\"")) |index| {
+                // index is relative to value[1..], so actual content is value[2..index+1]
+                const content = value[2 .. index + 1];
+                if (content.len == 0) return .null;
+                return .{ .string = try arena.dupe(u8, content) };
+            }
         }
 
         // boolean

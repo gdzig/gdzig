@@ -22,13 +22,22 @@ pub const Variant = extern struct {
         const tag = comptime Tag.forType(T);
 
         if (tag == .object) {
+            // Unwrap optional to get the actual pointer type
+            const ActualValue = switch (@typeInfo(T)) {
+                .optional => value orelse return .{ .tag = .nil, .data = .{ .nil = {} } },
+                else => value,
+            };
+            const PtrType = switch (@typeInfo(T)) {
+                .optional => |o| o.child,
+                else => T,
+            };
             // For RefCounted objects, manually construct the Variant and call reference()
             // to share ownership. We bypass variantFromType because it uses init_ref()
             // which only works correctly for first-time ownership transfer.
-            if (comptime class.isRefCountedPtr(T)) {
-                _ = RefCounted.upcast(value).reference();
+            if (comptime class.isRefCountedPtr(PtrType)) {
+                _ = RefCounted.upcast(ActualValue).reference();
             }
-            const obj = Object.upcast(value);
+            const obj = Object.upcast(ActualValue);
             return .{
                 .tag = .object,
                 .data = .{
@@ -101,11 +110,18 @@ pub const Variant = extern struct {
                 .dictionary => .{ .dictionary = @constCast(value) },
 
                 // Object
-                .object => .{
-                    .object = .{
-                        .id = @enumFromInt(Object.upcast(value.*).getInstanceId()),
-                        .object = Object.upcast(value.*),
-                    },
+                .object => blk: {
+                    // Unwrap optional: ?*Curve with null value becomes nil
+                    const actual_ptr = switch (@typeInfo(T)) {
+                        .optional => value.* orelse break :blk .{ .nil = {} },
+                        else => value.*,
+                    };
+                    break :blk .{
+                        .object = .{
+                            .id = @enumFromInt(Object.upcast(actual_ptr).getInstanceId()),
+                            .object = Object.upcast(actual_ptr),
+                        },
+                    };
                 },
 
                 // Packed arrays cannot be wrapped - they require heap-allocated PackedArrayRef
@@ -151,12 +167,19 @@ pub const Variant = extern struct {
             var object: ?*Object = null;
             variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
             if (object == null) return null;
-            if (comptime class.isOpaqueClassPtr(T)) {
+            // Unwrap optional to get the actual pointer type for class checks
+            const PtrType = switch (@typeInfo(T)) {
+                .optional => |o| o.child,
+                else => T,
+            };
+            if (comptime class.isOpaqueClassPtr(PtrType)) {
                 return @ptrCast(@alignCast(object));
-            } else {
-                const Base = class.BaseOf(Child(T));
+            } else if (comptime class.isClassPtr(PtrType)) {
+                const Base = class.BaseOf(Child(PtrType));
                 const base: *Base = @ptrCast(object);
-                return base.asInstance(Child(T));
+                return base.asInstance(Child(PtrType));
+            } else {
+                return null;
             }
         }
     }
@@ -586,6 +609,7 @@ pub const Variant = extern struct {
                         .@"enum" => .int,
                         .@"struct" => |info| if (info.backing_integer != null) .int else null,
                         .pointer => |p| if (class.isClassPtr(T)) .object else forType(p.child),
+                        .optional => |o| forType(o.child),
                         else => null,
                     };
                 },
@@ -809,6 +833,12 @@ test "forType" {
         try testing.expectEqual(tag, Variant.Tag.forType(*T));
         try testing.expectEqual(tag, Variant.Tag.forType(*const T));
     }
+}
+
+test "forType optional class pointer" {
+    // Optional class pointers should resolve to .object, same as non-optional
+    try testing.expectEqual(.object, Variant.Tag.forType(?*Object));
+    try testing.expectEqual(.object, Variant.Tag.forType(?*const Object));
 }
 
 test "forType comptime" {

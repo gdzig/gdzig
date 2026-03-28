@@ -1053,7 +1053,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
                 }
                 try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
                 try w.writeAll(" = ");
-                try writeValue(w, param.default.?, ctx);
+                try writeValue(w, param.default.?, &param.type, ctx);
             }
             is_first = false;
         }
@@ -1077,7 +1077,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
         for (function.parameters.values()[opt..]) |param| {
             if (param.needsRuntimeInit(ctx)) {
                 try w.print("const actual_{s} = opt.{s} orelse ", .{ param.name, param.name });
-                try writeValue(w, param.default.?, ctx);
+                try writeValue(w, param.default.?, &param.type, ctx);
                 try w.writeLine(";");
             }
         }
@@ -1182,9 +1182,17 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     }
 }
 
-fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
+fn writeValue(w: *CodeWriter, value: Context.Value, param_type: *const Context.Type, ctx: *const Context) !void {
     switch (value) {
-        inline .null, .string => try w.writeAll("null"),
+        .null => try w.writeAll("null"),
+        .string => |s| {
+            // String literal defaults need runtime init via fromComptimeLatin1
+            switch (param_type.*) {
+                .string_name => try w.print("StringName.fromComptimeLatin1(\"{s}\")", .{s}),
+                .string => try w.print("String.fromLatin1(\"{s}\")", .{s}),
+                else => try w.print("StringName.fromComptimeLatin1(\"{s}\")", .{s}),
+            }
+        },
         .boolean => |b| try w.print("{}", .{b}),
         .primitive => |p| try w.writeAll(p),
         .constructor => |c| {
