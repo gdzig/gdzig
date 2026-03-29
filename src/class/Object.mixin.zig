@@ -52,7 +52,7 @@ pub fn constPtr(self: *const Self) *const anyopaque {
 
 /// Bind an instance of an extension class to this engine class.
 pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
-    comptime std.debug.assert(class.BaseOf(T) == Self);
+    comptime std.debug.assert(class.isA(Self, T));
     comptime std.debug.assert(class.isStructClass(T));
 
     const token = comptime typeToken(T);
@@ -78,7 +78,7 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
 }
 
 pub fn asInstance(self: *Self, comptime T: type) ?*T {
-    comptime std.debug.assert(class.BaseOf(T) == Self);
+    comptime std.debug.assert(class.isA(Self, T));
     comptime std.debug.assert(class.isStructClass(T));
 
     const token = comptime typeToken(T);
