@@ -20,6 +20,10 @@ pub fn register(r: *Registry) void {
     colors.addProperty("colors_signal3", .auto);
 }
 
+pub fn unregister(r: *Registry) void {
+    r.removeClass(SignalNode);
+}
+
 allocator: Allocator,
 base: *Control, //this makes @Self a valid gdextension class
 color_rect: *ColorRect = undefined,
@@ -34,6 +38,16 @@ pub const Signal1 = struct {
 };
 pub const Signal2 = struct {};
 pub const Signal3 = struct {};
+
+pub fn recreate(allocator: *Allocator, obj: *Object) *SignalNode {
+    const self = allocator.create(SignalNode) catch @panic("OOM");
+    self.* = .{
+        .allocator = allocator.*,
+        .base = @ptrCast(obj),
+    };
+    self.base.setInstance(SignalNode, self);
+    return self;
+}
 
 pub fn create(allocator: *Allocator) !*SignalNode {
     const self = try allocator.create(SignalNode);
@@ -127,6 +141,7 @@ const Color = godot.builtin.Color;
 const ColorRect = godot.class.ColorRect;
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
+const Object = godot.class.Object;
 const StringName = godot.builtin.StringName;
 const String = godot.builtin.String;
 const Vector3 = godot.builtin.Vector3;

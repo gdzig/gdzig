@@ -23,6 +23,16 @@ pub fn create(allocator: *Allocator) !*SpriteNode {
     return self;
 }
 
+pub fn recreate(allocator: *Allocator, obj: *Object) *SpriteNode {
+    const self = allocator.create(SpriteNode) catch @panic("OOM");
+    self.* = .{
+        .allocator = allocator.*,
+        .base = @ptrCast(obj),
+    };
+    self.base.setInstance(SpriteNode, self);
+    return self;
+}
+
 pub fn destroy(self: *SpriteNode, allocator: *Allocator) void {
     self.base.destroy();
     allocator.destroy(self);
@@ -101,6 +111,7 @@ const godot = @import("godot");
 
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
+const Object = godot.class.Object;
 const ResourceLoader = godot.class.ResourceLoader;
 const Sprite2D = godot.class.Sprite2d;
 const Texture2D = godot.class.Texture2d;

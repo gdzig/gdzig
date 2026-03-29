@@ -6,9 +6,23 @@ pub fn register(r: *Registry) void {
     class.addMethod("on_toggled", .auto);
 }
 
+pub fn unregister(r: *Registry) void {
+    r.removeClass(GuiNode);
+}
+
 allocator: Allocator,
 base: *Control,
 sprite: *Sprite2D = undefined,
+
+pub fn recreate(allocator: *Allocator, obj: *Object) *GuiNode {
+    const self = allocator.create(GuiNode) catch @panic("OOM");
+    self.* = .{
+        .allocator = allocator.*,
+        .base = @ptrCast(obj),
+    };
+    self.base.setInstance(GuiNode, self);
+    return self;
+}
 
 pub fn create(allocator: *Allocator) !*GuiNode {
     const self = try allocator.create(GuiNode);
@@ -78,6 +92,7 @@ const Button = godot.class.Button;
 const CheckBox = godot.class.CheckBox;
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
+const Object = godot.class.Object;
 const ResourceLoader = godot.class.ResourceLoader;
 const Sprite2D = godot.class.Sprite2d;
 const String = godot.builtin.String;

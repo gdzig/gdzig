@@ -26,6 +26,10 @@ pub fn register(r: *Registry) void {
     class.addProperty("speed", .{ .getter = .{ .method = get_speed }, .setter = .none });
 }
 
+pub fn unregister(r: *Registry) void {
+    r.removeClass(ExampleNode);
+}
+
 allocator: Allocator,
 base: *Node,
 panel: *PanelContainer = undefined,
@@ -49,6 +53,17 @@ pub fn create(allocator: *Allocator) !*ExampleNode {
     self.base.addChild(.upcast(self.fps_counter), .{});
     self.fps_counter.setPosition(.{ .x = 50, .y = 50 }, .{});
 
+    return self;
+}
+
+pub fn recreate(allocator: *Allocator, obj: *Object) *ExampleNode {
+    const self = allocator.create(ExampleNode) catch @panic("OOM");
+    self.* = .{
+        .allocator = allocator.*,
+        .base = @ptrCast(obj),
+        .fps_counter = .init(),
+    };
+    self.base.setInstance(ExampleNode, self);
     return self;
 }
 
@@ -187,6 +202,7 @@ const HSplitContainer = godot.class.HSplitContainer;
 const ItemList = godot.class.ItemList;
 const Label = godot.class.Label;
 const Node = godot.class.Node;
+const Object = godot.class.Object;
 const PanelContainer = godot.class.PanelContainer;
 const String = godot.builtin.String;
 const Variant = godot.builtin.Variant;
