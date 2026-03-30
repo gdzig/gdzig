@@ -586,6 +586,7 @@ pub const Variant = extern struct {
                         .@"enum" => .int,
                         .@"struct" => |info| if (info.backing_integer != null) .int else null,
                         .pointer => |p| if (class.isClassPtr(T)) .object else forType(p.child),
+                        .optional => |o| forType(o.child),
                         else => null,
                     };
                 },
