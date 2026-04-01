@@ -390,12 +390,25 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     }
 
     // Functions
+    var needs_ref_unreference_mb = false;
     for (class.functions.values()) |*function| {
         if (function.skip) continue;
 
         if (function.mode != .final) continue;
         try writeClassFunction(w, class, function, ctx);
         try w.writeLine("");
+
+        // Track if any function returns a RefCounted class (needs unreference fixup)
+        if (function.return_type == .class) {
+            if (ctx.isRefCounted(function.return_type.class)) {
+                needs_ref_unreference_mb = true;
+            }
+        }
+    }
+
+    // Shared method bind for unreferencing ptrcall Ref<T> returns
+    if (needs_ref_unreference_mb) {
+        try w.writeLine("var _ref_unreference_mb: c.GDExtensionMethodBindPtr = null;");
     }
 
     // TODO: write properties and signals
@@ -555,6 +568,26 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
             else
                 "null",
         });
+    }
+
+    // ptrcall for methods returning Ref<T> (RefCounted classes) transfers an
+    // owned reference via PtrToArg<Ref<T>>::encode. godot-zig receives a raw
+    // Object* pointer — drop the extra reference so the caller gets a borrowed
+    // pointer. Without this, every ptrcall return of a RefCounted object leaks.
+    // See: https://github.com/godot-rust/gdext/issues/108
+    if (function.return_type == .class) {
+        if (ctx.isRefCounted(function.return_type.class)) {
+            try w.writeLine(
+                \\if (result) |r| {
+                \\    if (_ref_unreference_mb == null) {
+                \\        _ref_unreference_mb = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("RefCounted")), @ptrCast(&StringName.fromComptimeLatin1("unreference")), 2240911060);
+                \\    }
+                \\    var _unreference_args: [0]c.GDExtensionConstTypePtr = undefined;
+                \\    var _unreference_ret: bool = false;
+                \\    raw.objectMethodBindPtrcall(_ref_unreference_mb, @ptrCast(r), @ptrCast(&_unreference_args), @ptrCast(&_unreference_ret));
+                \\}
+            );
+        }
     }
 
     try writeFunctionFooter(w, function);
