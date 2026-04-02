@@ -8,6 +8,14 @@ pub fn register(r: *Registry) void {
     r.addModule(SignalNode);
 }
 
+pub fn unregister(r: *Registry) void {
+    r.removeModule(SignalNode);
+    r.removeModule(GuiNode);
+    r.removeModule(ExampleNode);
+
+    r.removeClass(SpriteNode);
+}
+
 test "godot version is 4.x" {
     // Tests run inside Godot via `zig build test`
     try std.testing.expectEqual(4, godot.version.major);

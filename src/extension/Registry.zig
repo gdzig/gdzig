@@ -61,6 +61,19 @@ pub fn addModule(self: *Registry, comptime Module: type) void {
     Module.register(self);
 }
 
+/// Remove a module. The module must have a `pub fn unregister(r: *Registry) void` function.
+pub fn removeModule(self: *Registry, comptime Module: type) void {
+    Module.unregister(self);
+}
+
+/// Explicitly unregister a class from Godot's ClassDB.
+/// Inheritors must be unregistered before their parents.
+pub fn removeClass(self: *Registry, comptime T: type) void {
+    _ = self;
+    const class_name: StringName = .fromType(T);
+    classdb.unregisterClass(&class_name);
+}
+
 /// Add lifecycle callbacks.
 pub fn addCallbacks(self: *Registry, comptime T: type, userdata: T, options: Callbacks(T).CreateOptions) void {
     const alloc = self.arena.allocator();

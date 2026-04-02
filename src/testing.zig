@@ -64,6 +64,14 @@ pub fn loadModule(comptime Module: type) void {
     registry.enter(.editor);
 }
 
+pub fn unloadModule(comptime Module: type) void {
+    registry.exit(.editor);
+    registry.exit(.scene);
+    registry.exit(.servers);
+    registry.exit(.core);
+    Module.unregister(&registry);
+}
+
 const builtin = @import("builtin");
 
 const common = @import("common");

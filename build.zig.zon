@@ -23,8 +23,8 @@
             .hash = "godot-0.0.0-Nast2tZgBgC6uBE0ft9hVjtKn_BoDWqYo7mQ6BGGZWZf",
         },
         .oopz = .{
-            .url = "git+https://github.com/gdzig/oopz#a02a3eb8d0914437ecf317d36fca426fee300e72",
-            .hash = "oopz-0.0.0-pFJy_dFQAABLysrK6k4nKiYCQZ3ttXIg55pgLuEmTHrC",
+            .url = "git+https://github.com/gdzig/oopz#e37ece30bdafc185e88a4bb5d9869115c8d8503f",
+            .hash = "oopz-0.0.0-pFJy_ddWAAABM-zKPi6ChgcCRYMOuWKbEFwEqsfNU-4U",
         },
         .temp = .{
             .url = "git+https://github.com/abhinav/temp.zig#7f0a9697d3d46d06c4f84fc3bc5199b7779fab33",

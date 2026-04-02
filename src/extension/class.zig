@@ -145,8 +145,6 @@ fn makeClassCallbacks(comptime T: type) struct {
         }
     }
 
-    const Base = class.BaseOf(T);
-
     const Userdata = ClassUserdataOf(T);
 
     const Callbacks = struct {
@@ -260,7 +258,7 @@ fn makeClassCallbacks(comptime T: type) struct {
         }
 
         fn getVirtualImpl(name: *const StringName) ?*const classdb.CallVirtual(T) {
-            const UserVTable = Base.VTable.extend(T, virtualMethodNames(T));
+            const UserVTable = comptime UserClassVTable(T);
             var buf: [256]u8 = undefined;
             const name_str = String.fromStringName(name.*).toLatin1Buf(buf[0..]);
             const result = UserVTable.get(name_str);
@@ -436,6 +434,42 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
     }
 
     return names[0..count];
+}
+
+/// Build a VTable for a user-defined class by chaining `.extend()` calls
+/// from the nearest Godot (opaque) ancestor through each intermediate user
+/// struct class. For example, given ClassC -> ClassB -> ClassA -> Object:
+///
+///   Object.VTable.extend(ClassA, ...).extend(ClassB, ...).extend(ClassC, ...)
+///
+/// This ensures that each level's virtual methods are accumulated and any
+/// class can override methods defined by any ancestor.
+fn UserClassVTable(comptime T: type) type {
+    comptime {
+        const ancestors = class.selfAndAncestorsOf(T);
+
+        // Find the nearest opaque (Godot) ancestor — it has the root VTable.
+        var godot_idx: usize = 0;
+        for (ancestors, 0..) |Ancestor, i| {
+            if (class.isOpaqueClass(Ancestor)) {
+                godot_idx = i;
+                break;
+            }
+        } else {
+            @compileError("Type '" ++ @typeName(T) ++ "' has no Godot (opaque) class in its ancestry");
+        }
+
+        // Chain .extend() calls from the Godot class back down to T.
+        // ancestors is [T, ..., GodotClass, ...] so we iterate from
+        // godot_idx-1 down to 0 (inclusive).
+        var Result = ancestors[godot_idx].VTable;
+        var i: usize = godot_idx;
+        while (i > 0) {
+            i -= 1;
+            Result = Result.extend(ancestors[i], virtualMethodNames(ancestors[i]));
+        }
+        return Result;
+    }
 }
 
 const std = @import("std");
