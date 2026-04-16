@@ -26,6 +26,7 @@ const TestMapping = struct {
 const Runner = struct {
     allocator: Allocator,
     server: ZigServer,
+    io: Io,
     test_mappings: std.ArrayListUnmanaged(TestMapping),
     string_bytes: std.ArrayListUnmanaged(u8),
     test_name_indices: std.ArrayListUnmanaged(u32),
@@ -40,6 +41,7 @@ const Runner = struct {
         return .{
             .allocator = allocator,
             .server = server,
+            .io = undefined,
             .test_mappings = .empty,
             .string_bytes = .empty,
             .test_name_indices = .empty,
@@ -103,7 +105,7 @@ const Runner = struct {
         // Spawn Godot with stdin/stdout piped
         var child = try self.spawnGodot(folder);
         defer {
-            _ = child.wait() catch {};
+            _ = child.wait(self.io) catch {};
         }
 
         // Send query_metadata command
@@ -157,7 +159,7 @@ const Runner = struct {
         if (global_index >= self.test_mappings.items.len) {
             try self.server.serveTestResults(.{
                 .index = global_index,
-                .flags = .{ .fail = true, .skip = false, .leak = false, .fuzz = false },
+                .flags = .{ .status = .fail, .fuzz = false, .log_err_count = 0, .leak_count = 0 },
             });
             return;
         }
@@ -165,11 +167,11 @@ const Runner = struct {
         const mapping = self.test_mappings.items[global_index];
         const folder = options.test_folders[mapping.folder_index];
 
+        // Notify build system that the test has started
+        try self.server.serveStringMessage(.test_started, &.{});
+
         // Spawn Godot
         var child = try self.spawnGodot(folder);
-        defer {
-            _ = child.wait() catch {};
-        }
 
         // Send run_test command
         try self.sendCommand(&child, .{ .run_test = mapping.local_index });
@@ -198,31 +200,33 @@ const Runner = struct {
         self.sendCommand(&child, .exit) catch {};
 
         // Wait for child to exit
-        _ = child.wait() catch {};
+        _ = child.wait(self.io) catch {};
 
         // If test failed, print Godot's output to stderr so user sees stack trace
         if (failed and godot_output.items.len > 0) {
-            std.fs.File.stderr().writeAll(godot_output.items) catch {};
+            var stderr_buf: [4096]u8 = undefined;
+            var stderr_writer = std.Io.File.Writer.initStreaming(std.Io.File.stderr(), self.io, &stderr_buf);
+            stderr_writer.interface.writeAll(godot_output.items) catch {};
+            stderr_writer.interface.flush() catch {};
         }
 
         // Send result to build system
         try self.server.serveTestResults(.{
             .index = global_index,
             .flags = .{
-                .fail = failed,
-                .skip = false,
-                .leak = false,
+                .status = if (failed) .fail else .pass,
                 .fuzz = false,
+                .log_err_count = 0,
+                .leak_count = 0,
             },
         });
     }
 
     /// Send a command to the child process stdin
     fn sendCommand(self: *Runner, child: *std.process.Child, cmd: protocol.Command) !void {
-        _ = self;
         const stdin = child.stdin orelse return error.NoStdin;
         var buf: [4096]u8 = undefined;
-        var writer = std.fs.File.Writer.initStreaming(stdin, &buf);
+        var writer = std.Io.File.Writer.initStreaming(stdin, self.io, &buf);
         try protocol.writeCommand(&writer.interface, cmd);
         try writer.interface.flush();
     }
@@ -232,29 +236,20 @@ const Runner = struct {
     /// Uses direct read() to avoid Windows pipe issues with pread/overlapped I/O.
     /// See: https://github.com/ziglang/zig/issues/25291
     fn readResponse(self: *Runner, child: *std.process.Child, godot_output: *std.ArrayListUnmanaged(u8)) !?protocol.Response {
-        const stdout = child.stdout orelse return null;
+        const stdout_file = child.stdout orelse return null;
+        var read_buf: [4096]u8 = undefined;
+        var stdout_reader = std.Io.File.Reader.initStreaming(stdout_file, self.io, &read_buf);
         var line_buf: std.ArrayListUnmanaged(u8) = .empty;
         defer line_buf.deinit(self.allocator);
-
-        var read_buf: [4096]u8 = undefined;
-        var buf_start: usize = 0;
-        var buf_end: usize = 0;
 
         while (true) {
             // Read bytes until we find a newline
             line_buf.clearRetainingCapacity();
             while (true) {
-                // Refill buffer if empty
-                if (buf_start >= buf_end) {
-                    const n = stdout.read(&read_buf) catch return null;
-                    if (n == 0) return null; // EOF
-                    buf_start = 0;
-                    buf_end = n;
-                }
-
-                const byte = read_buf[buf_start];
-                buf_start += 1;
-
+                const byte = stdout_reader.interface.takeByte() catch |err| {
+                    if (err == error.EndOfStream) return null;
+                    return err;
+                };
                 if (byte == '\n') break;
                 try line_buf.append(self.allocator, byte);
             }
@@ -276,38 +271,34 @@ const Runner = struct {
 
     fn spawnGodot(self: *Runner, folder: []const u8) !std.process.Child {
         // Copy existing environment and add test mode flag
-        var env_map = std.process.getEnvMap(self.allocator) catch return error.EnvironmentError;
+        var env_map = try std.process.Environ.createMap(.{ .block = .global }, self.allocator);
         defer env_map.deinit();
 
         try env_map.put("GDZIG_TEST_MODE", "1");
 
-        var child = std.process.Child.init(
-            &.{ options.godot_exe, "--headless", "--path", folder, "--quit-after", "60" },
-            self.allocator,
-        );
-        child.env_map = &env_map;
-        child.stdin_behavior = .Pipe;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Pipe;
-
-        try child.spawn();
-        return child;
+        return try std.process.spawn(self.io, .{
+            .argv = &.{ options.godot_exe, "--headless", "--path", folder, "--quit-after", "60" },
+            .environ_map = &env_map,
+            .stdin = .pipe,
+            .stdout = .pipe,
+            .stderr = .pipe,
+        });
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
 
     var stdin_buf: [4096]u8 = undefined;
     var stdout_buf: [4096]u8 = undefined;
 
-    var stdin_reader = std.fs.File.Reader.initStreaming(std.fs.File.stdin(), &stdin_buf);
-    var stdout_writer = std.fs.File.Writer.initStreaming(std.fs.File.stdout(), &stdout_buf);
+    var stdin_reader = std.Io.File.Reader.initStreaming(std.Io.File.stdin(), io, &stdin_buf);
+    var stdout_writer = std.Io.File.Writer.initStreaming(std.Io.File.stdout(), io, &stdout_buf);
 
     var runner = try Runner.init(allocator, &stdin_reader.interface, &stdout_writer.interface);
     defer runner.deinit();
+    runner.io = io;
 
     try runner.run();
 }

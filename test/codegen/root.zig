@@ -1,5 +1,7 @@
 test "call builtin method with void return type" {
     var arr: Array = .init();
+    // Resize array to have at least one element before setting
+    _ = arr.resize(1);
     arr.set(0, .init(bool, true));
 }
 

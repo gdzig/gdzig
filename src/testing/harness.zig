@@ -51,26 +51,23 @@ fn exit(_: ?*anyopaque, _: gdzig.c.GDExtensionInitializationLevel) callconv(.c) 
 /// Run the test server. Reads commands from stdin, writes responses to stdout.
 fn run() void {
     // Check if we should run (env var signals test mode)
-    const test_mode = std.process.getEnvVarOwned(gdzig.engine_allocator, "GDZIG_TEST_MODE") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => return,
-        else => return,
-    };
-    defer gdzig.engine_allocator.free(test_mode);
+    if (!std.process.Environ.containsUnemptyConstant(.{ .block = .global }, "GDZIG_TEST_MODE")) return;
 
     runImpl() catch {};
 }
 
 fn runImpl() !void {
     const allocator = gdzig.engine_allocator;
+    const io = std.Io.Threaded.global_single_threaded.io();
 
     // Get stdin and stdout with buffering
-    const stdin_file = std.fs.File.stdin();
-    const stdout_file = std.fs.File.stdout();
+    const stdin_file = std.Io.File.stdin();
+    const stdout_file = std.Io.File.stdout();
 
     var stdin_buf: [4096]u8 = undefined;
     var stdout_buf: [4096]u8 = undefined;
-    var stdin = std.fs.File.Reader.initStreaming(stdin_file, &stdin_buf);
-    var stdout = std.fs.File.Writer.initStreaming(stdout_file, &stdout_buf);
+    var stdin = std.Io.File.Reader.initStreaming(stdin_file, io, &stdin_buf);
+    var stdout = std.Io.File.Writer.initStreaming(stdout_file, io, &stdout_buf);
 
     var line_buf: std.ArrayListUnmanaged(u8) = .empty;
     defer line_buf.deinit(allocator);
@@ -148,9 +145,6 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
     if (test_fn.func()) |_| {
         return .{ .passed = true, .message = null };
     } else |err| {
-        if (@errorReturnTrace()) |trace| {
-            std.debug.dumpStackTrace(trace.*);
-        }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
         return .{ .passed = false, .message = null };
     }

@@ -223,7 +223,11 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     const lib = b.addLibrary(.{
         .name = options.name,
         .linkage = .dynamic,
-        .root_module = b.createModule(.{ .target = options.target, .optimize = options.optimize }),
+        .root_module = b.createModule(.{
+            .target = options.target,
+            .optimize = options.optimize,
+            .link_libc = true,
+        }),
     });
     lib.root_module.addObjectFile(obj.getEmittedBin());
 
