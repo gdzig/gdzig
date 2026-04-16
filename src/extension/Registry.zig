@@ -9,8 +9,8 @@ pub fn init(backing_allocator: Allocator) Registry {
     return .{
         .allocator = backing_allocator,
         .arena = .init(backing_allocator),
-        .classes = .{},
-        .callbacks = .{},
+        .classes = .empty,
+        .callbacks = .empty,
     };
 }
 
@@ -165,11 +165,11 @@ pub fn Class(comptime T: type) type {
                 },
                 .registry = registry,
                 .userdata = userdata,
-                .methods = .{},
-                .signals = .{},
-                .groups = .{},
-                .ungrouped_properties = .{},
-                .constants = .{},
+                .methods = .empty,
+                .signals = .empty,
+                .groups = .empty,
+                .ungrouped_properties = .empty,
+                .constants = .empty,
                 .level = options.level,
                 .is_virtual = options.is_virtual,
                 .is_abstract = options.is_abstract,
@@ -757,7 +757,7 @@ pub fn Group(comptime T: type) type {
             return .{
                 .class = class,
                 .name = name,
-                .entries = .{},
+                .entries = .empty,
             };
         }
 
@@ -831,7 +831,7 @@ pub fn Subgroup(comptime T: type) type {
             return .{
                 .class = class,
                 .name = subgroup_name,
-                .properties = .{},
+                .properties = .empty,
             };
         }
 

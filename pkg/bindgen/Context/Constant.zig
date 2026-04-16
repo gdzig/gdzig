@@ -38,7 +38,7 @@ pub fn fromBuiltin(allocator: Allocator, builtin: *const Builtin, api: GodotApi.
                 const arg_count = args.len;
 
                 if (builtin.findConstructorByArgumentCount(arg_count)) |function| {
-                    var output = std.Io.Writer.Allocating.init(allocator);
+                    var output = Writer.Allocating.init(allocator);
                     var writer = &output.writer;
                     try writer.writeAll(function.name);
 
@@ -142,6 +142,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const Ast = std.zig.Ast;
 const NodeIndex = Ast.Node.Index;
+const Writer = std.Io.Writer;
 const build_options = @import("build_options");
 
 const casez = @import("casez");

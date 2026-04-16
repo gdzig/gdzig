@@ -74,7 +74,7 @@ pub fn printLine(this: *CodeWriter, comptime fmt: []const u8, args: anytype) !vo
 }
 
 test "indents" {
-    var out = std.Io.Writer.Allocating.init(testing.allocator);
+    var out = Writer.Allocating.init(testing.allocator);
     defer out.deinit();
 
     var w = CodeWriter.init(&out.writer);
@@ -114,5 +114,7 @@ test "indents" {
 
 const std = @import("std");
 const testing = std.testing;
-const Writer = std.Io.Writer;
+
+const Io = std.Io;
+const Writer = Io.Writer;
 pub const Error = Writer.Error;

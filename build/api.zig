@@ -223,9 +223,12 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     const lib = b.addLibrary(.{
         .name = options.name,
         .linkage = .dynamic,
-        .root_module = b.createModule(.{ .target = options.target, .optimize = options.optimize }),
+        .root_module = b.createModule(.{
+            .target = options.target,
+            .optimize = options.optimize,
+        }),
     });
-    lib.addObject(obj);
+    lib.root_module.addObject(obj);
 
     const install_subdir = b.fmt("test/{s}", .{options.name});
     const install_ext = b.addInstallArtifact(lib, .{

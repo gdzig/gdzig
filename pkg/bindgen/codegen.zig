@@ -11,10 +11,10 @@ fn writeBuiltins(ctx: *const Context) !void {
 
     // builtin.zig
     {
-        const file = try ctx.config.output.createFile("builtin.zig", .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,"builtin.zig", .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w: CodeWriter = .init(writer);
 
@@ -42,14 +42,14 @@ fn writeBuiltins(ctx: *const Context) !void {
     }
 
     // builtin/[name].zig
-    try ctx.config.output.makePath("builtin");
+    try ctx.config.output.createDirPath(ctx.config.io,"builtin");
 
     for (ctx.builtins.values()) |*builtin| {
         const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "builtin/{s}.zig", .{builtin.module});
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var cw = CodeWriter.init(writer);
 
@@ -295,10 +295,10 @@ fn writeClasses(ctx: *const Context) !void {
 
     // class.zig
     {
-        const file = try ctx.config.output.createFile("class.zig", .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,"class.zig", .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
@@ -322,15 +322,15 @@ fn writeClasses(ctx: *const Context) !void {
     }
 
     // class/[name].zig
-    try ctx.config.output.makePath("class");
+    try ctx.config.output.createDirPath(ctx.config.io,"class");
     for (ctx.classes.values()) |*class| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "class/{s}.zig", .{class.module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
@@ -845,10 +845,10 @@ fn writeGlobals(ctx: *const Context) !void {
 
     // global.zig
     {
-        const file = try ctx.config.output.createFile("global.zig", .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,"global.zig", .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
@@ -879,15 +879,15 @@ fn writeGlobals(ctx: *const Context) !void {
     }
 
     // global/[name].zig
-    try ctx.config.output.makePath("global");
+    try ctx.config.output.createDirPath(ctx.config.io,"global");
     for (ctx.enums.values()) |*@"enum"| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{@"enum".module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
@@ -900,10 +900,10 @@ fn writeGlobals(ctx: *const Context) !void {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{flag.module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
@@ -1353,57 +1353,29 @@ fn writeClassMixins(w: *CodeWriter, class: *const Context.Class, ctx: *const Con
 }
 
 fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {
-    const filename = try std.fmt.allocPrint(ctx.arena.allocator(), fmt, args);
-    const file: ?std.fs.File = ctx.config.input.openFile(filename, .{}) catch null;
-    if (file) |f| {
-        defer f.close();
+    const arena = ctx.arena.allocator();
+    const filename = try std.fmt.allocPrint(arena, fmt, args);
+    const file = ctx.config.input.openFile(ctx.config.io, filename, .{}) catch return;
+    defer file.close(ctx.config.io);
 
-        var buf: [1024]u8 = undefined;
-        var file_reader = f.reader(&buf);
-        var reader = &file_reader.interface;
+    var buf: [1024]u8 = undefined;
+    var file_reader = file.readerStreaming(ctx.config.io, &buf);
+    const contents = try file_reader.interface.allocRemaining(arena, .unlimited);
 
-        // Skip lines until we find @mixin start (or copy from beginning if not found)
-        var found_start = false;
-        while (true) {
-            const line = reader.takeDelimiterInclusive('\n') catch |err| switch (err) {
-                error.EndOfStream => break,
-                else => return err,
-            };
+    const start_marker = "// @mixin start\n";
+    const start_idx = if (std.mem.indexOf(u8, contents, start_marker)) |idx| idx + start_marker.len else 0;
+    const stop_idx = if (std.mem.indexOf(u8, contents[start_idx..], "// @mixin stop")) |idx| start_idx + idx else contents.len;
 
-            if (std.mem.startsWith(u8, line, "// @mixin start")) {
-                found_start = true;
-                break;
-            }
-        }
-
-        // If no @mixin start found, reopen file to read from beginning
-        if (!found_start) {
-            file_reader.seekTo(0) catch return;
-        }
-
-        // Copy lines until we find @mixin stop
-        while (true) {
-            const line = reader.takeDelimiterInclusive('\n') catch |err| switch (err) {
-                error.EndOfStream => break,
-                else => return err,
-            };
-
-            if (std.mem.startsWith(u8, line, "// @mixin stop")) {
-                break;
-            }
-
-            try w.writeAll(line);
-        }
-    }
+    try w.writeAll(contents[start_idx..stop_idx]);
 }
 
 fn writeDispatchTable(ctx: *Context) !void {
     var buf: [1024]u8 = undefined;
 
-    const file = try ctx.config.output.createFile("DispatchTable.zig", .{});
-    defer file.close();
+    const file = try ctx.config.output.createFile(ctx.config.io,"DispatchTable.zig", .{});
+    defer file.close(ctx.config.io);
 
-    var file_writer = file.writer(&buf);
+    var file_writer = file.writerStreaming(ctx.config.io, &buf);
     var writer = &file_writer.interface;
     var w = CodeWriter.init(writer);
 
@@ -1477,7 +1449,7 @@ fn writeDispatchTable(ctx: *Context) !void {
     );
 
     try writer.flush();
-    try file.sync();
+    try file.sync(ctx.config.io);
 }
 
 fn writeModules(ctx: *const Context) !void {
@@ -1487,10 +1459,10 @@ fn writeModules(ctx: *const Context) !void {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        defer file.close(ctx.config.io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writerStreaming(ctx.config.io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 

@@ -11,6 +11,9 @@ const gdzig = @import("gdzig");
 const options = @import("options");
 const protocol = @import("protocol.zig");
 
+const Io = std.Io;
+const File = Io.File;
+const Writer = Io.Writer;
 const Os = gdzig.class.Os;
 
 // Export the GDExtension entrypoint
@@ -51,11 +54,7 @@ fn exit(_: ?*anyopaque, _: gdzig.c.GDExtensionInitializationLevel) callconv(.c) 
 /// Run the test server. Reads commands from stdin, writes responses to stdout.
 fn run() void {
     // Check if we should run (env var signals test mode)
-    const test_mode = std.process.getEnvVarOwned(gdzig.engine_allocator, "GDZIG_TEST_MODE") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => return,
-        else => return,
-    };
-    defer gdzig.engine_allocator.free(test_mode);
+    if (std.c.getenv("GDZIG_TEST_MODE") == null) return;
 
     runImpl() catch {};
 }
@@ -64,13 +63,16 @@ fn runImpl() !void {
     const allocator = gdzig.engine_allocator;
 
     // Get stdin and stdout with buffering
-    const stdin_file = std.fs.File.stdin();
-    const stdout_file = std.fs.File.stdout();
+    const stdin_file = File.stdin();
+    const stdout_file = File.stdout();
+
+    var threaded_io = Io.Threaded.init(std.mem.Allocator.failing, .{});
+    const io = threaded_io.io();
 
     var stdin_buf: [4096]u8 = undefined;
     var stdout_buf: [4096]u8 = undefined;
-    var stdin = std.fs.File.Reader.initStreaming(stdin_file, &stdin_buf);
-    var stdout = std.fs.File.Writer.initStreaming(stdout_file, &stdout_buf);
+    var stdin = stdin_file.readerStreaming(io, &stdin_buf);
+    var stdout = stdout_file.writerStreaming(io, &stdout_buf);
 
     var line_buf: std.ArrayListUnmanaged(u8) = .empty;
     defer line_buf.deinit(allocator);
@@ -110,7 +112,7 @@ fn quit() void {
     _ = Os.kill(pid);
 }
 
-fn handleQueryMetadata(writer: *std.Io.Writer) !void {
+fn handleQueryMetadata(writer: *Writer) !void {
     const test_fns = builtin.test_functions;
     var names: [256][]const u8 = undefined;
     const count = @min(test_fns.len, names.len);
@@ -123,7 +125,7 @@ fn handleQueryMetadata(writer: *std.Io.Writer) !void {
     try writer.flush();
 }
 
-fn handleRunTest(writer: *std.Io.Writer, index: u32) !void {
+fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fns = builtin.test_functions;
 
     if (index >= test_fns.len) {
@@ -149,7 +151,7 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
         return .{ .passed = true, .message = null };
     } else |err| {
         if (@errorReturnTrace()) |trace| {
-            std.debug.dumpStackTrace(trace.*);
+            std.debug.dumpErrorReturnTrace(trace);
         }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
         return .{ .passed = false, .message = null };

@@ -76,7 +76,7 @@ pub const PropertyListInstanceBinding = struct {
 
     var gpa: GeneralPurposeAllocator = .init;
     const allocator = gpa.allocator();
-    var pool: MemoryPool(PropertyListInstanceBinding) = .init(allocator);
+    var pool: MemoryPool(PropertyListInstanceBinding) = .empty;
 
     pub const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
@@ -84,7 +84,7 @@ pub const PropertyListInstanceBinding = struct {
     };
 
     fn create(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
-        return @ptrCast(pool.create() catch return null);
+        return @ptrCast(pool.create(allocator) catch return null);
     }
 
     fn free(_: ?*anyopaque, _: ?*anyopaque, binding: ?*anyopaque) callconv(.c) void {
@@ -92,7 +92,7 @@ pub const PropertyListInstanceBinding = struct {
     }
 
     pub fn cleanup() void {
-        pool.deinit();
+        pool.deinit(allocator);
         assert(gpa.deinit() == .ok);
     }
 };
@@ -104,7 +104,7 @@ pub const DestroyInstanceBinding = struct {
 
     var gpa: GeneralPurposeAllocator = .init;
     const allocator = gpa.allocator();
-    var pool: MemoryPool(PropertyListInstanceBinding) = .init(allocator);
+    var pool: MemoryPool(PropertyListInstanceBinding) = .empty;
 
     pub const callbacks: c.GDExtensionInstanceBindingCallbacks = .{
         .create_callback = &create,
@@ -112,7 +112,7 @@ pub const DestroyInstanceBinding = struct {
     };
 
     fn create(_: ?*anyopaque, _: ?*anyopaque) callconv(.c) ?*anyopaque {
-        return @ptrCast(pool.create() catch return null);
+        return @ptrCast(pool.create(allocator) catch return null);
     }
 
     fn free(_: ?*anyopaque, _: ?*anyopaque, binding: ?*anyopaque) callconv(.c) void {
@@ -125,7 +125,7 @@ pub const DestroyInstanceBinding = struct {
     }
 
     pub fn cleanup() void {
-        pool.deinit();
+        pool.deinit(allocator);
         assert(gpa.deinit() == .ok);
     }
 };
