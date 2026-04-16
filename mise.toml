@@ -3,8 +3,8 @@ godot = "latest"
 pre-commit = "latest"
 zlint = "latest"
 usage = "latest"
-zig = "0.15.2"
-zls = "0.15.0"
+zig = "0.16.0"
+zls = "0.16.0"
 
 [tool_alias]
 godot = "asdf:https://github.com/mkungla/asdf-godot"
