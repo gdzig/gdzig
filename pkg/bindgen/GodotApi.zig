@@ -319,5 +319,5 @@ pub fn parseFromReader(arena: *ArenaAllocator, reader: *Reader) !Parsed(GodotApi
 const std = @import("std");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Parsed = std.json.Parsed;
-const Reader = std.io.Reader;
+const Reader = std.Io.Reader;
 const JsonReader = std.json.Reader;
