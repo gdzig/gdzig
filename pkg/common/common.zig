@@ -45,19 +45,20 @@ const dictionary: Config.Dictionary = .{
     },
 };
 
-/// Format helper for use with std.fmt
+/// Format helper for use with std.fmt (Zig 0.16.0 compatible)
 pub fn Fmt(comptime config: Config) type {
     return struct {
-        pub fn format(str: []const u8, writer: *std.io.Writer) std.io.Writer.Error!void {
+        data: []const u8,
+        pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
             var buf: [256]u8 = undefined;
-            const result = casez.bufConvert(&buf, config, str) catch return error.WriteFailed;
+            const result = casez.bufConvert(&buf, config, self.data) catch return error.WriteFailed;
             try writer.writeAll(result);
         }
     };
 }
 
 /// Returns a formatter for use with std.fmt.allocPrint and friends
-pub fn fmt(comptime config: Config, str: []const u8) std.fmt.Alt([]const u8, Fmt(config).format) {
+pub fn fmt(comptime config: Config, str: []const u8) Fmt(config) {
     return .{ .data = str };
 }
 

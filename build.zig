@@ -1,3 +1,7 @@
+const std = @import("std");
+const Build = std.Build;
+const LazyPath = std.Build.LazyPath;
+
 const latest_version = "4.6";
 
 pub fn build(b: *Build) !void {
@@ -159,11 +163,11 @@ pub fn build(b: *Build) !void {
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
 
-        var tests_dir = try std.fs.cwd().openDir(b.path("test").getPath2(b, null), .{ .iterate = true });
-        defer tests_dir.close();
+        var tests_dir = try std.Io.Dir.cwd().openDir(b.graph.io, b.path("test").getPath2(b, null), .{ .iterate = true });
+        defer tests_dir.close(b.graph.io);
 
         var iter = tests_dir.iterate();
-        while (iter.next() catch null) |entry| {
+        while (iter.next(b.graph.io) catch null) |entry| {
             if (entry.kind != .directory) continue;
 
             const test_mod = b.createModule(.{
@@ -215,12 +219,16 @@ pub fn build(b: *Build) !void {
     });
 }
 
-fn getGodotVersion(b: *Build, p: Build.LazyPath) []const u8 {
-    const result = std.process.Child.run(.{
-        .allocator = b.allocator,
+fn getGodotVersion(b: *Build, p: LazyPath) []const u8 {
+    const result = std.process.run(b.allocator, b.graph.io, .{
         .argv = &.{ p.getPath2(b, null), "--version" },
     }) catch @panic("Failed to run godot --version");
-    const output = std.mem.trim(u8, result.stdout, &std.ascii.whitespace);
+    var output = result.stdout;
+    while (output.len > 0 and std.ascii.isWhitespace(output[output.len - 1])) output.len -= 1;
+    while (output.len > 0 and std.ascii.isWhitespace(output[0])) {
+        output.ptr += 1;
+        output.len -= 1;
+    }
 
     var parts = std.mem.splitScalar(u8, output, '.');
     const major = parts.next() orelse @panic("Failed to parse major version");
@@ -245,9 +253,6 @@ fn getGodotVersion(b: *Build, p: Build.LazyPath) []const u8 {
 
     return b.fmt("{s}.{s}.{d}", .{ major, minor, patch_num });
 }
-
-const std = @import("std");
-const Build = std.Build;
 
 const godot = @import("godot");
 

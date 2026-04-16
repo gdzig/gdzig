@@ -9,11 +9,11 @@ size: usize = 0,
 
 has_destructor: bool = false,
 
-constants: StringArrayHashMap(Constant) = .empty,
-constructors: StringArrayHashMap(Function) = .empty,
-enums: StringArrayHashMap(Enum) = .empty,
-fields: StringArrayHashMap(Field) = .empty,
-methods: StringArrayHashMap(Function) = .empty,
+constants: std.StringArrayHashMapUnmanaged(Constant) = .empty,
+constructors: std.StringArrayHashMapUnmanaged(Function) = .empty,
+enums: std.StringArrayHashMapUnmanaged(Enum) = .empty,
+fields: std.StringArrayHashMapUnmanaged(Field) = .empty,
+methods: std.StringArrayHashMapUnmanaged(Function) = .empty,
 operators: ArrayList(Function) = .empty,
 
 imports: Imports = .empty,
@@ -130,23 +130,23 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
     return self;
 }
 
-pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, input_dir: std.fs.Dir) !void {
+pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, io: std.Io, input_dir: std.Io.Dir) !void {
     const mixin_file_path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name});
     defer allocator.free(mixin_file_path);
 
-    const file = input_dir.openFile(mixin_file_path, .{}) catch |err| {
+    const file = input_dir.openFile(io, mixin_file_path, .{}) catch |err| {
         if (err == error.FileNotFound) return;
         std.log.err("Failed to open mixin file '{s}': {}", .{ mixin_file_path, err });
         return err;
     };
 
     var buf: [4096]u8 = undefined;
-    var file_reader = file.reader(&buf);
+    var file_reader = file.reader(io, &buf);
 
-    const contents = try allocator.allocSentinel(u8, @intCast(try file.getEndPos()), 0);
+    const file_size = @as(usize, @intCast(try std.Io.File.length(file, io)));
+    const contents = try allocator.allocSentinel(u8, file_size, 0);
     try file_reader.interface.readSliceAll(contents);
-
-    // find the @mixin start/stop markers and only parse that section
+    defer file.close(io);
     const parse_contents: [:0]const u8 = blk: {
         const start_marker = "// @mixin start\n";
         const start_idx = if (std.mem.indexOf(u8, contents, start_marker)) |idx| idx + start_marker.len else 0;

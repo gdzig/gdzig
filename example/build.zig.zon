@@ -7,8 +7,8 @@
             .path = "../",
         },
         .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions#07c199a34f4c6414afb513026cd1f225f6751913",
-            .hash = "godot-0.0.0-Nast2hpTBgBNoGXh_OiQ50wnJGvOX9kSuDmIRL4Z8Kne",
+            .url = "git+https://github.com/gdzig/godot-versions#refs/heads/zig-0.16",
+            .hash = "godot-0.0.0-Nast2j23BgBhYeXm_8jcTuFT0N5B44EvLKt-YzEiOqcp",
         },
     },
     .paths = .{

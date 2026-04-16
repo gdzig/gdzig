@@ -1,15 +1,13 @@
 const std = @import("std");
 const build_options = @import("build_options");
-const fs = std.fs;
-const Dir = std.fs.Dir;
 
 const Config = @This();
 
 arch: Arch,
-extension_api: fs.File,
-gdextension_interface: fs.File,
-input: fs.Dir,
-output: fs.Dir,
+extension_api: std.Io.File,
+gdextension_interface: std.Io.File,
+input: std.Io.Dir,
+output: std.Io.Dir,
 precision: Precision,
 verbosity: Verbosity,
 
@@ -28,16 +26,16 @@ pub const Verbosity = enum {
     verbose,
 };
 
-pub fn loadFromArgs(args: [][:0]u8) !Config {
-    const cwd = std.fs.cwd();
+pub fn loadFromArgs(io: std.Io, args: []const [:0]const u8) !Config {
+    const cwd = std.Io.Dir.cwd();
 
     // args[1]: path to gdextension_interface.h
     // args[2]: path to extension_api.json
-    const gdextension_interface = try cwd.openFile(args[1], .{});
-    const extension_api = try cwd.openFile(args[2], .{});
+    const gdextension_interface = try cwd.openFile(io, args[1], .{});
+    const extension_api = try cwd.openFile(io, args[2], .{});
 
-    const input = try cwd.makeOpenPath(args[3], .{});
-    const output = try cwd.makeOpenPath(args[4], .{});
+    const input = try cwd.createDirPathOpen(io, args[3], .{});
+    const output = try cwd.createDirPathOpen(io, args[4], .{});
 
     const arch = std.meta.stringToEnum(Config.Arch, args[5]) orelse std.debug.panic("Invalid architecture {s}, expected {any}", .{ args[5], std.meta.tags(Config.Arch) });
     const precision = std.meta.stringToEnum(Config.Precision, args[6]) orelse std.debug.panic("Invalid precision {s}, expected {any}", .{ args[6], std.meta.tags(Config.Precision) });
@@ -67,24 +65,24 @@ pub fn buildConfiguration(self: *Config) []const u8 {
     };
 }
 
-pub fn deinit(self: *Config) void {
-    self.gdextension_interface.close();
-    self.extension_api.close();
-    self.input.close();
-    self.output.close();
+pub fn deinit(self: *Config, io: std.Io) void {
+    self.gdextension_interface.close(io);
+    self.extension_api.close(io);
+    self.input.close(io);
+    self.output.close(io);
 }
 
-pub fn testConfig(output: Dir) !Config {
-    var headers = std.fs.openDirAbsolute(build_options.headers, .{}) catch |err| {
+pub fn testConfig(io: std.Io, output: std.Io.Dir) !Config {
+    var headers = output.openDir(io, build_options.headers, .{}) catch |err| {
         std.debug.print("Failed to open headers dir: {s}\n", .{@errorName(err)});
         return err;
     };
-    defer headers.close();
+    defer headers.close(io);
 
     return Config{
         .arch = .float,
-        .extension_api = try headers.openFile("extension_api.json", .{}),
-        .gdextension_interface = try headers.openFile("gdextension_interface.h", .{}),
+        .extension_api = try headers.openFile(io, "extension_api.json", .{}),
+        .gdextension_interface = try headers.openFile(io, "gdextension_interface.h", .{}),
         .input = output,
         .output = output,
         .precision = .@"32",

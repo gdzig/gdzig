@@ -2,12 +2,12 @@
     .name = .godot,
     .version = "0.0.0-dev",
     .fingerprint = 0x74a61aa48e9841ab,
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.16.0",
 
     .dependencies = .{
         .bbcodez = .{
-            .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
-            .hash = "bbcodez-0.0.1-dev-YlrOBo-iAQBWdgFSZ5eINgMNAZlmrHLQ35zKSZEEqgS2",
+            .url = "git+https://github.com/gdzig/bbcodez#refs/heads/zig-0.16",
+            .hash = "bbcodez-0.0.1-dev-YlrOBjShAQDJCxJOom-ZTHH5YynVnnPTnHCOtm4Vad3X",
         },
         .casez = .{
             .url = "git+https://github.com/gdzig/casez#9732adbfd8c591ddd6e9c3feab016bf9af779d6c",
@@ -19,8 +19,8 @@
             .lazy = true,
         },
         .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions.git#4f787c5e8765906359911a64d4fb1c8b1ea6c061",
-            .hash = "godot-0.0.0-Nast2tZgBgC6uBE0ft9hVjtKn_BoDWqYo7mQ6BGGZWZf",
+            .url = "git+https://github.com/gdzig/godot-versions#refs/heads/zig-0.16",
+            .hash = "godot-0.0.0-Nast2j23BgBhYeXm_8jcTuFT0N5B44EvLKt-YzEiOqcp",
         },
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#e37ece30bdafc185e88a4bb5d9869115c8d8503f",

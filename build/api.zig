@@ -115,7 +115,7 @@ fn addExtensionWeb(
     activate_emsdk.step.dependOn(&install_emsdk.step);
 
     lib.step.dependOn(&activate_emsdk.step);
-    lib.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
+    lib.root_module.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
     // Run emcc to produce final .wasm
     const optimize = options.optimize;
@@ -225,7 +225,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
         .linkage = .dynamic,
         .root_module = b.createModule(.{ .target = options.target, .optimize = options.optimize }),
     });
-    lib.addObject(obj);
+    lib.root_module.addObjectFile(obj.getEmittedBin());
 
     const install_subdir = b.fmt("test/{s}", .{options.name});
     const install_ext = b.addInstallArtifact(lib, .{

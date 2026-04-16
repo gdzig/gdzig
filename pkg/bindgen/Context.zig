@@ -10,6 +10,7 @@ pub const Symbol = struct {
 arena: *ArenaAllocator,
 api: GodotApi,
 config: Config,
+io: std.Io,
 
 all_engine_classes: ArrayList([]const u8) = .empty,
 depends: ArrayList([]const u8) = .empty,
@@ -48,11 +49,12 @@ const base_type_map = std.StaticStringMap([]const u8).initComptime(.{
     .{ "double", "f64" },
 });
 
-pub fn build(arena: *ArenaAllocator, api: GodotApi, config: Config) !Context {
+pub fn build(arena: *ArenaAllocator, api: GodotApi, config: Config, io: std.Io) !Context {
     var self = Context{
         .arena = arena,
         .api = api,
         .config = config,
+        .io = io,
     };
 
     try self.buildSymbolLookupTable();
@@ -214,7 +216,7 @@ fn parseSingletons(self: *Context) !void {
 
 fn parseGdExtensionHeaders(self: *Context) !void {
     var buf: [1024]u8 = undefined;
-    var gdextension_reader = self.config.gdextension_interface.reader(&buf);
+    var gdextension_reader = self.config.gdextension_interface.reader(self.io, &buf);
     var reader = &gdextension_reader.interface;
 
     const name_doc = "@name";
@@ -223,8 +225,8 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     var fp_type: ?[]const u8 = null;
     const safe_ident_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
 
-    var doc_stream: std.ArrayListUnmanaged(u8) = .empty;
-    const doc_writer: std.ArrayListUnmanaged(u8).Writer = doc_stream.writer(self.allocator());
+var doc_aw = std.Io.Writer.Allocating.init(self.arena.allocator());
+    const doc_writer: *std.Io.Writer = &doc_aw.writer;
 
     var doc_start: ?usize = null;
     var doc_end: ?usize = null;
@@ -232,13 +234,13 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     var doc_line_temp: [1024]u8 = undefined;
 
     while (true) {
-        const line: []const u8 = std.mem.trimRight(u8, (reader.takeDelimiterInclusive('\n') catch break), "\n");
+        const line: []const u8 = std.mem.trimEnd(u8, (reader.takeDelimiterInclusive('\n') catch break), "\n");
 
         const contains_name_doc = std.mem.indexOf(u8, line, name_doc) != null;
 
         // getting function docs
         if (std.mem.indexOf(u8, line, "/*")) |i| if (i >= 0) {
-            doc_start = doc_stream.items.len;
+            doc_start = doc_aw.writer.end;
 
             if (line.len <= 4) {
                 continue;
@@ -265,7 +267,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 }
 
                 if (is_last_line) {
-                    doc_end = doc_stream.items.len - 1;
+                    doc_end = doc_aw.writer.end - 1;
                 }
             }
         }
@@ -296,7 +298,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             const docs: ?[]const u8 = blk: {
                 if (doc_start) |start_index| {
                     if (doc_end) |end_index| {
-                        break :blk try self.allocator().dupe(u8, doc_stream.items[start_index..end_index]);
+                        break :blk try self.allocator().dupe(u8, doc_aw.writer.buffered()[start_index..end_index]);
                     }
                 }
                 break :blk null;
@@ -358,7 +360,7 @@ fn castBuiltins(self: *Context) !void {
         if (util.shouldSkipClass(api.name)) continue;
 
         var builtin: Builtin = try .fromApi(self.allocator(), api, self);
-        try builtin.loadMixinIfExists(self.allocator(), self.config.input);
+        try builtin.loadMixinIfExists(self.allocator(), self.io, self.config.input);
 
         try self.builtins.put(self.allocator(), builtin.name_api, builtin);
     }

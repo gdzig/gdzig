@@ -46,7 +46,7 @@ pub fn randfRange(self: SpriteNode, comptime T: type, min: T, max: T) T {
 pub fn _ready(self: *SpriteNode) void {
     if (Engine.isEditorHint()) return;
 
-    var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+    var prng = std.Random.DefaultPrng.init(@intCast(@intFromPtr(self)));
     self.rng = prng.random();
 
     var logo_path: String = .fromLatin1("res://textures/logo.png");

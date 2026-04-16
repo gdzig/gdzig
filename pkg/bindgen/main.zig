@@ -13,7 +13,7 @@ pub const std_options: std.Options = .{
 
 fn logFn(
     comptime level: std.log.Level,
-    comptime scope: @Type(.enum_literal),
+    comptime scope: @EnumLiteral(),
     comptime format: []const u8,
     args: anytype,
 ) void {
@@ -22,14 +22,11 @@ fn logFn(
     std.log.defaultLog(level, scope, format, args);
 }
 
-pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.gpa;
+    const io = init.io;
 
-    const allocator = arena.allocator();
-
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (args.len < 6) {
         std.debug.print("Usage: bindgen <gdextension_interface.h> <extension_api.json> <mixins_root> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
@@ -37,39 +34,44 @@ pub fn main() !void {
     }
 
     // Assemble the bindgen configuration
-    var config = try Config.loadFromArgs(args);
-    defer config.deinit();
+    var config = try Config.loadFromArgs(io, args);
+    defer config.deinit(io);
 
     verbose = config.verbosity == .verbose;
 
     var buf: [4096]u8 = undefined;
-    var reader = config.extension_api.reader(&buf);
+    var reader = config.extension_api.reader(io, &buf);
 
     // Parse the extension_api.json
-    const parser_start = std.time.nanoTimestamp();
-    const godot_api = try GodotApi.parseFromReader(&arena, &reader.interface);
+    const parser_start = std.Io.Timestamp.now(io, .awake);
+    const godot_api = try GodotApi.parseFromReader(init.arena, &reader.interface);
     defer godot_api.deinit();
-    const parser_time = std.time.nanoTimestamp() - parser_start;
+    const parser_end = std.Io.Timestamp.now(io, .awake);
+    const parser_time = std.Io.Timestamp.durationTo(parser_start, parser_end).nanoseconds;
 
     // Build the codegen context
-    const context_start = std.time.nanoTimestamp();
-    var ctx = try Context.build(&arena, godot_api.value, config);
-    const context_time = std.time.nanoTimestamp() - context_start;
+    const context_start = std.Io.Timestamp.now(io, .awake);
+    var ctx = try Context.build(init.arena, godot_api.value, config, io);
+    const context_end = std.Io.Timestamp.now(io, .awake);
+    const context_time = std.Io.Timestamp.durationTo(context_start, context_end).nanoseconds;
 
     // Generate the code
-    const codegen_start = std.time.nanoTimestamp();
+    const codegen_start = std.Io.Timestamp.now(io, .awake);
     try codegen.generate(&ctx);
-    const codegen_time = std.time.nanoTimestamp() - codegen_start;
+    const codegen_end = std.Io.Timestamp.now(io, .awake);
+    const codegen_time = std.Io.Timestamp.durationTo(codegen_start, codegen_end).nanoseconds;
 
     // Format the code
-    const format_start = std.time.nanoTimestamp();
-    _ = try std.process.Child.run(.{
-        .allocator = allocator,
-        .cwd_dir = config.output,
+    const format_start = std.Io.Timestamp.now(io, .awake);
+    const fmt_result = try std.process.run(gpa, io, .{
         .argv = &.{ "zig", "fmt" },
-        .max_output_bytes = 1024 * 1024,
+        .stdout_limit = .limited(1024 * 1024),
+        .stderr_limit = .limited(1024 * 1024),
     });
-    const format_time = std.time.nanoTimestamp() - format_start;
+    gpa.free(fmt_result.stdout);
+    gpa.free(fmt_result.stderr);
+    const format_end = std.Io.Timestamp.now(io, .awake);
+    const format_time = std.Io.Timestamp.durationTo(format_start, format_end).nanoseconds;
 
     if (config.verbosity == .verbose) {
         if (config.verbosity == .verbose) {

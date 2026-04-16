@@ -1,9 +1,12 @@
 .vs/
+.arts/
 .idea/
+.codeartsdoer/
 .vscode
 .DS_Store
 .zig-cache
 zig-out
+zig-pkg
 gen
 project/lib/
 **/.godot/**
