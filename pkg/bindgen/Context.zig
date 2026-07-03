@@ -395,13 +395,44 @@ fn castEnums(self: *Context) !void {
 
 /// Resolves the backing type name ("u32" or "u64") for a flag, searching
 /// global flags first, then class-level flags for qualified names like "Mesh.ArrayFormat".
+///
+/// The maps are empty while classes are being cast (castClasses runs before
+/// castEnums/castFlags in build()), so method parameter defaults resolved
+/// during class casting fall back to scanning the raw API. A wrong fallback
+/// produces `@bitCast(@as(u64, 0))` into a packed struct(u32) — a compile
+/// error in every generated class whose flag has < 33 bit positions.
 pub fn flagRepr(self: *const Context, flag_name: []const u8) []const u8 {
     if (self.flags.get(flag_name)) |f| return f.representation.name();
     if (std.mem.indexOfScalar(u8, flag_name, '.')) |dot| {
         if (self.classes.get(flag_name[0..dot])) |class|
             if (class.flags.get(flag_name[dot + 1 ..])) |f| return f.representation.name();
+        for (self.api.classes) |api_class| {
+            if (!std.mem.eql(u8, api_class.name, flag_name[0..dot])) continue;
+            const enums = api_class.enums orelse break;
+            for (enums) |e| {
+                if (!e.is_bitfield or !std.mem.eql(u8, e.name, flag_name[dot + 1 ..])) continue;
+                return apiEnumRepr(e.values);
+            }
+            break;
+        }
+    } else {
+        for (self.api.global_enums) |e| {
+            if (!e.is_bitfield or !std.mem.eql(u8, e.name, flag_name)) continue;
+            return apiEnumRepr(e.values);
+        }
     }
     return "u64";
+}
+
+/// Mirrors the representation rule in Flag.fromGlobalEnum: u64 iff any
+/// power-of-two value occupies a bit position >= 32.
+fn apiEnumRepr(values: anytype) []const u8 {
+    for (values) |v| {
+        if (v.value > 0 and std.math.isPowerOfTwo(v.value) and @ctz(@as(u64, @intCast(v.value))) >= 32) {
+            return "u64";
+        }
+    }
+    return "u32";
 }
 
 fn castFlags(self: *Context) !void {
