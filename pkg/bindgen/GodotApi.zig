@@ -223,7 +223,9 @@ pub const Class = struct {
 
 pub const GlobalConstant = struct {
     name: []const u8,
-    value: []const u8,
+    // Numeric since Godot 4.7 populates global_constants (was always empty
+    // before, with a string-typed placeholder here).
+    value: i64,
 };
 
 pub const GlobalEnum = struct {
@@ -313,7 +315,11 @@ pub fn findParent(self: @This(), class: Class) ?Class {
 pub fn parseFromReader(arena: *ArenaAllocator, reader: *Reader) !Parsed(GodotApi) {
     var json_reader: JsonReader = .init(arena.allocator(), reader);
 
-    return try std.json.parseFromTokenSource(GodotApi, arena.allocator(), &json_reader, .{});
+    return try std.json.parseFromTokenSource(GodotApi, arena.allocator(), &json_reader, .{
+        // Newer Godot releases add fields to extension_api.json (e.g. 4.7);
+        // tolerate them instead of failing the whole parse.
+        .ignore_unknown_fields = true,
+    });
 }
 
 const std = @import("std");
