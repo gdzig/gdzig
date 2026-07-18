@@ -387,13 +387,34 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Constructor
     if (class.is_instantiable) {
-        try w.printLine(
-            \\/// Allocates an empty {0s}.
-            \\pub fn init() *{0s} {{
-            \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(&StringName.fromComptimeLatin1("{1s}"))).?);
-            \\}}
-            \\
-        , .{ class.name, class.name_api });
+        if (class.is_refcounted) {
+            // Godot leaves a freshly constructed RefCounted's initial reference
+            // "pending": refcount is 1, but nothing has claimed it yet. The
+            // first time engine code wraps the raw pointer in a Ref<T> (e.g. as
+            // a temporary inside some unrelated method call), it silently
+            // consumes that pending ref without incrementing the count, so
+            // releasing that temporary drops the count to zero and frees the
+            // object out from under the caller. Consuming the pending ref here
+            // (mirroring Ref<T>::instantiate()) makes init() return an object
+            // that is plainly owned at refcount 1, like everything else.
+            try w.printLine(
+                \\/// Allocates an empty {0s} with a refcount of 1, plainly owned by the caller.
+                \\pub fn init() *{0s} {{
+                \\    const self: *{0s} = @ptrCast(raw.classdbConstructObject(@ptrCast(&StringName.fromComptimeLatin1("{1s}"))).?);
+                \\    _ = self.initRef();
+                \\    return self;
+                \\}}
+                \\
+            , .{ class.name, class.name_api });
+        } else {
+            try w.printLine(
+                \\/// Allocates an empty {0s}.
+                \\pub fn init() *{0s} {{
+                \\    return @ptrCast(raw.classdbConstructObject(@ptrCast(&StringName.fromComptimeLatin1("{1s}"))).?);
+                \\}}
+                \\
+            , .{ class.name, class.name_api });
+        }
     }
 
     // Functions
