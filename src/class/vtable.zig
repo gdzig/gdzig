@@ -49,8 +49,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                                     method(instance);
                                 } else {
                                     const result = method(instance);
-                                    const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
-                                    ret.* = result;
+                                    ptrcall.writeReturn(ReturnType, p_ret, result);
                                 }
                             }
                         };
@@ -64,14 +63,13 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                                 args[0] = instance;
                                 inline for (1..param_count) |j| {
                                     const Arg = fn_info.params[j].type.?;
-                                    args[j] = @as(*const Arg, @ptrCast(@alignCast(p_args[j - 1]))).*;
+                                    args[j] = ptrcall.readArg(Arg, p_args[j - 1]);
                                 }
                                 if (ReturnType == void) {
                                     @call(.always_inline, method, args);
                                 } else {
                                     const result = @call(.always_inline, method, args);
-                                    const ret: *ReturnType = @ptrCast(@alignCast(p_ret));
-                                    ret.* = result;
+                                    ptrcall.writeReturn(ReturnType, p_ret, result);
                                 }
                             }
                         };
@@ -179,6 +177,182 @@ test "VTable extend combines method names" {
     try std.testing.expect(Derived.has("_enter_tree")); // new in derived
 }
 
+// The integer/enum/flag assertions below are over-read/portability defense: on a
+// little-endian host, a narrow 4-byte read of a valid int64 slot's low word happens to
+// reproduce the value anyway, so those cases can't actually fail here. The f32 case is the
+// one that discriminates: a narrow read there would misinterpret the low 4 bytes of the
+// double-width slot as bit pattern, so it's the regression guard that actually exercises
+// the width handling.
+test "VTable ptrcall marshals virtual params at engine width" {
+    const ProbeEnum = enum(i32) {
+        zero = 0,
+        one = 1,
+        negative = -7,
+    };
+
+    const Flags = packed struct(u32) {
+        alpha: bool = false,
+        beta: bool = false,
+        _padding: u30 = 0,
+    };
+
+    const Probe = struct {
+        got_i32: i32 = 0,
+        got_u32: u32 = 0,
+        got_f32: f32 = 0,
+        got_bool: bool = false,
+        got_enum: ProbeEnum = .zero,
+        got_flags: Flags = .{},
+
+        pub fn _probeParams(self: *@This(), a: i32, b: u32, c_: f32, d: bool, e: ProbeEnum, f: Flags) void {
+            self.got_i32 = a;
+            self.got_u32 = b;
+            self.got_f32 = c_;
+            self.got_bool = d;
+            self.got_enum = e;
+            self.got_flags = f;
+        }
+    };
+
+    const ProbeVTable = VTable(Probe, .{"_probeParams"});
+    const wrapper = ProbeVTable.get("_probe_params").?;
+
+    // Simulate the engine's ptrcall argument slots: every scalar travels in
+    // a full 8-byte slot (int64/double/uint8), with unused high bytes left
+    // as stack garbage. Poison everything first so a narrow read/write
+    // would be caught reading (or leaving) garbage.
+    var slot_i32: [8]u8 align(8) = .{0xAA} ** 8;
+    std.mem.writeInt(i64, &slot_i32, -12345, .little);
+
+    var slot_u32: [8]u8 align(8) = .{0xAA} ** 8;
+    std.mem.writeInt(i64, &slot_u32, 4_000_000_000, .little); // > i32 max
+
+    var slot_f32: [8]u8 align(8) = .{0xAA} ** 8;
+    std.mem.writeInt(u64, &slot_f32, @as(u64, @bitCast(@as(f64, 3.5))), .little);
+
+    var slot_bool: [8]u8 align(8) = .{0xAA} ** 8;
+    slot_bool[0] = 1;
+
+    var slot_enum: [8]u8 align(8) = .{0xAA} ** 8;
+    std.mem.writeInt(i64, &slot_enum, -7, .little);
+
+    var slot_flags: [8]u8 align(8) = .{0xAA} ** 8;
+    std.mem.writeInt(i64, &slot_flags, 0b10, .little); // beta set, alpha clear
+
+    var args: [6]c.GDExtensionConstTypePtr = .{
+        @ptrCast(&slot_i32),
+        @ptrCast(&slot_u32),
+        @ptrCast(&slot_f32),
+        @ptrCast(&slot_bool),
+        @ptrCast(&slot_enum),
+        @ptrCast(&slot_flags),
+    };
+
+    var probe: Probe = .{};
+    var ret_slot: [8]u8 align(8) = .{0xAA} ** 8;
+
+    wrapper(@ptrCast(&probe), &args, @ptrCast(&ret_slot));
+
+    try std.testing.expectEqual(@as(i32, -12345), probe.got_i32);
+    try std.testing.expectEqual(@as(u32, 4_000_000_000), probe.got_u32);
+    try std.testing.expectEqual(@as(f32, 3.5), probe.got_f32);
+    try std.testing.expectEqual(true, probe.got_bool);
+    try std.testing.expectEqual(ProbeEnum.negative, probe.got_enum);
+    try std.testing.expect(probe.got_flags.beta);
+    try std.testing.expect(!probe.got_flags.alpha);
+}
+
+test "VTable ptrcall marshals virtual returns at engine width" {
+    const ProbeEnum = enum(i16) {
+        neg = -300,
+    };
+
+    const Flags = packed struct(u16) {
+        a: bool = false,
+        b: bool = false,
+        _padding: u14 = 0,
+    };
+
+    const Returns = struct {
+        pub fn _retI32(_: *@This()) i32 {
+            return -123456;
+        }
+        pub fn _retU32(_: *@This()) u32 {
+            return 4_111_222_333;
+        }
+        pub fn _retF32(_: *@This()) f32 {
+            return -2.5;
+        }
+        pub fn _retBool(_: *@This()) bool {
+            return true;
+        }
+        pub fn _retEnum(_: *@This()) ProbeEnum {
+            return .neg;
+        }
+        pub fn _retFlags(_: *@This()) Flags {
+            return .{ .b = true };
+        }
+        pub fn _retU64(_: *@This()) u64 {
+            return 0xFFFF_FFFF_FFFF_FFFF;
+        }
+        pub fn _addAndReturn(_: *@This(), x: i32) i32 {
+            return x + 1;
+        }
+    };
+
+    const ReturnsVTable = VTable(Returns, .{
+        "_retI32", "_retU32", "_retF32", "_retBool", "_retEnum", "_retFlags", "_retU64", "_addAndReturn",
+    });
+    var instance: Returns = .{};
+    const instance_ptr: c.GDExtensionClassInstancePtr = @ptrCast(&instance);
+    var no_args: [0]c.GDExtensionConstTypePtr = .{};
+
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_i32").?(instance_ptr, &no_args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(i64, -123456), std.mem.readInt(i64, &ret, .little));
+    }
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_u32").?(instance_ptr, &no_args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(i64, 4_111_222_333), std.mem.readInt(i64, &ret, .little));
+    }
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_f32").?(instance_ptr, &no_args, @ptrCast(&ret));
+        const bits = std.mem.readInt(u64, &ret, .little);
+        try std.testing.expectEqual(@as(f64, -2.5), @as(f64, @bitCast(bits)));
+    }
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_bool").?(instance_ptr, &no_args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(u8, 1), ret[0]);
+    }
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_enum").?(instance_ptr, &no_args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(i64, -300), std.mem.readInt(i64, &ret, .little));
+    }
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_flags").?(instance_ptr, &no_args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(i64, 0b10), std.mem.readInt(i64, &ret, .little));
+    }
+    {
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_ret_u64").?(instance_ptr, &no_args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(u64, 0xFFFF_FFFF_FFFF_FFFF), std.mem.readInt(u64, &ret, .little));
+    }
+    {
+        var arg_slot: [8]u8 align(8) = .{0xAA} ** 8;
+        std.mem.writeInt(i64, &arg_slot, 41, .little);
+        var args: [1]c.GDExtensionConstTypePtr = .{@ptrCast(&arg_slot)};
+        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        ReturnsVTable.get("_add_and_return").?(instance_ptr, &args, @ptrCast(&ret));
+        try std.testing.expectEqual(@as(i64, 42), std.mem.readInt(i64, &ret, .little));
+    }
+}
+
 const std = @import("std");
 
 const c = @import("gdextension");
@@ -187,3 +361,4 @@ const gdzig = @import("gdzig");
 const common = @import("common");
 const godot_case = common.godot_case;
 const class = gdzig.class;
+const ptrcall = @import("ptrcall.zig");

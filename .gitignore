@@ -18,6 +18,7 @@ src/class/*.zig
 src/global/*.zig
 !src/builtin/variant.zig
 !src/class/vtable.zig
+!src/class/ptrcall.zig
 !src/**/*.mixin.zig
 !src/**/*.replace.zig
 src/builtin.zig
