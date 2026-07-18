@@ -19,12 +19,17 @@ pub inline fn assumeFromUtf8(str: []const u8) String {
 ///
 /// - **cstr**: A slice of UTF-8 encoded bytes.
 ///
-/// **Since Godot 4.3**
+/// On Godot 4.1-4.2, falls back to the (always valid-UTF-8-assuming) deprecated
+/// constructor, which cannot report encoding errors.
 pub inline fn fromUtf8(cstr: []const u8) !String {
     var result: String = undefined;
-    const err = raw.stringNewWithUtf8CharsAndLen2(result.ptr(), @ptrCast(cstr.ptr), @intCast(cstr.len));
-    if (err != 0) {
-        return error.Full;
+    if (raw.stringNewWithUtf8CharsAndLen2) |func| {
+        const err = func(result.ptr(), @ptrCast(cstr.ptr), @intCast(cstr.len));
+        if (err != 0) {
+            return error.Full;
+        }
+    } else {
+        raw.stringNewWithUtf8CharsAndLen(result.ptr(), @ptrCast(cstr.ptr), @intCast(cstr.len));
     }
     return result;
 }
@@ -82,12 +87,17 @@ pub inline fn assumeFromUtf16(utf16: []const u16) String {
 /// - **utf16**: A slice of UTF-16 encoded characters.
 /// - **default_little_endian**: If true, UTF-16 use little endian.
 ///
-/// **Since Godot 4.3**
+/// On Godot 4.1-4.2, falls back to the deprecated constructor (native byte order,
+/// `default_little_endian` is ignored, and encoding errors cannot be reported).
 pub inline fn fromUtf16(utf16: []const u16, default_little_endian: bool) !String {
     var result: String = undefined;
-    const err = raw.stringNewWithUtf16CharsAndLen2(result.ptr(), @ptrCast(utf16.ptr), utf16.len, @intFromBool(default_little_endian));
-    if (err != 0) {
-        return error.Full;
+    if (raw.stringNewWithUtf16CharsAndLen2) |func| {
+        const err = func(result.ptr(), @ptrCast(utf16.ptr), utf16.len, @intFromBool(default_little_endian));
+        if (err != 0) {
+            return error.Full;
+        }
+    } else {
+        raw.stringNewWithUtf16CharsAndLen(result.ptr(), @ptrCast(utf16.ptr), @intCast(utf16.len));
     }
     return result;
 }

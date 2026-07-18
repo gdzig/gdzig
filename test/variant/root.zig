@@ -26,6 +26,29 @@ test "basic construction - string" {
     try testing.expectEqual(Variant.Tag.string, str_var.tag);
 }
 
+test "basic construction - string from utf8" {
+    const input = "h\u{e9}llo \u{2728} \u{65e5}\u{672c}\u{8a9e}";
+
+    var str = try String.fromUtf8(input);
+    defer str.deinit();
+
+    var buf: [128]u8 = undefined;
+    const slice = str.toUtf8Buf(&buf);
+    try testing.expectEqualStrings(input, slice);
+}
+
+test "basic construction - string from utf16" {
+    const arr = [_]u16{ 'h', 'i', 0x2728 }; // "hi✨"
+    const input: []const u16 = arr[0..];
+
+    var str = try String.fromUtf16(input, true);
+    defer str.deinit();
+
+    var buf: [16]u16 = undefined;
+    const slice = str.toUtf16Buf(&buf);
+    try testing.expectEqualSlices(u16, input, slice);
+}
+
 test "clone" {
     const original = Variant.init(i64, 123);
     defer original.deinit();
