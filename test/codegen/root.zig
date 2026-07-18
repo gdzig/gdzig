@@ -40,8 +40,41 @@ test "enums with duplicate values alias the first declared member" {
     try std.testing.expectEqual(RenderingDevice.DriverResource.driver_resource_physical_device, RenderingDevice.DriverResource.driver_resource_vulkan_physical_device);
 }
 
+// Bug A: omitting an optional argument whose default is a nullable heap builtin
+// (String/StringName/Array/Dictionary/...) must materialize a real empty value.
+// Pre-fix the generated code passed `&opt.name` where the `?T` field was null, so
+// Godot dereferenced a null Array/Dictionary internal pointer -> segfault.
+test "Bug A: omitting nullable Array optional arg does not segfault" {
+    const node = Node.init();
+    defer node.destroy();
+
+    // addUserSignal(signal, opt: { arguments: ?Array = null }); omit arguments.
+    var name: String = .fromLatin1("my_signal");
+    defer name.deinit();
+    node.addUserSignal(name, .{});
+
+    var sig: StringName = .fromLatin1("my_signal", false);
+    defer sig.deinit();
+    try testing.expect(node.hasUserSignal(sig));
+}
+
+test "Bug A: omitting nullable String optional arg materializes empty default" {
+    var s: String = .fromLatin1("a,b,c");
+    defer s.deinit();
+
+    var parts = s.split(.{});
+    defer parts.deinit();
+
+    try testing.expect(parts.size() >= 1);
+}
+
 const std = @import("std");
+const testing = std.testing;
+
 const gdzig = @import("gdzig");
 const Array = gdzig.builtin.Array;
+const String = gdzig.builtin.String;
+const StringName = gdzig.builtin.StringName;
 const ArrayMesh = gdzig.class.ArrayMesh;
 const RenderingDevice = gdzig.class.RenderingDevice;
+const Node = gdzig.class.Node;

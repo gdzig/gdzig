@@ -1127,6 +1127,13 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
                 try w.print("const actual_{s} = opt.{s} orelse ", .{ param.name, param.name });
                 try writeValue(w, param.default.?, ctx);
                 try w.writeLine(";");
+            } else if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
+                if (optNullMaterializer(&param, ctx)) |init_expr| {
+                    try w.print("var actual_{s}: ", .{param.name});
+                    try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
+                    try w.printLine(" = opt.{s} orelse {s};", .{ param.name, init_expr });
+                    try w.printLine("defer if (opt.{0s} == null) actual_{0s}.deinit();", .{param.name});
+                }
             }
         }
     }
@@ -1138,7 +1145,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
             try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
-            if (param.needsRuntimeInit(ctx)) {
+            if (param.needsRuntimeInit(ctx) or optNullMaterializer(&param, ctx) != null) {
                 try w.printLine("args[{d}] = @ptrCast(&actual_{s});", .{ i, param.name });
             } else {
                 try w.printLine("args[{d}] = @ptrCast(&opt.{s});", .{ i, param.name });
@@ -1222,6 +1229,24 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
             }
         }
     }
+}
+
+/// For an optional parameter whose nullable default (empty String/Array/Dictionary/...)
+/// maps to a by-value builtin, returns the initializer expression used to materialize a
+/// real empty value at call time. Godot dereferences these builtins' internal pointers, so
+/// a null/undefined optional payload passed as `&opt.name` is a dangling pointer -> segfault.
+/// Returns null when the field is safe to pass by address as-is: object/raw pointers (a null
+/// ptrcall slot is valid) and concrete-value defaults (non-nullable, already materialized).
+fn optNullMaterializer(param: *const Context.Function.Parameter, ctx: *const Context) ?[]const u8 {
+    if (param.needsRuntimeInit(ctx)) return null;
+    const default = param.default orelse return null;
+    if (!default.isNullable()) return null;
+    return switch (param.type) {
+        .array, .string, .string_name, .node_path => ".init()",
+        .variant => ".nil",
+        .basic => param.type.getDefaultInitializer(ctx) orelse ".init()",
+        else => null, // .class, .pointer: a null ptrcall slot is a valid null object
+    };
 }
 
 fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
