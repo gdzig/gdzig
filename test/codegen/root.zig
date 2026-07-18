@@ -68,6 +68,38 @@ test "Bug A: omitting nullable String optional arg materializes empty default" {
     try testing.expect(parts.size() >= 1);
 }
 
+noinline fn poisonStack() void {
+    var buf: [8192]u8 = undefined;
+    for (&buf) |*b| b.* = 0xAA;
+    std.mem.doNotOptimizeAway(&buf);
+}
+
+// Bug B: sub-8-byte scalar/enum/flag args and returns must be marshalled through int64
+// temporaries to match the ptrcall ABI (godot-cpp method_ptrcall.h). These round-trips
+// exercise the widened arg-encode and return-narrow paths under a poisoned stack, guarding
+// against the out-of-bounds arg read / return-slot overwrite the narrow marshalling caused.
+test "Bug B: enum arg and return round-trip under poisoned stack" {
+    poisonStack();
+
+    const node = Node.init();
+    defer node.destroy();
+
+    node.setProcessMode(.process_mode_disabled);
+
+    poisonStack();
+    try testing.expectEqual(Node.ProcessMode.process_mode_disabled, node.getProcessMode());
+}
+
+test "Bug B: i32 return under poisoned stack" {
+    poisonStack();
+
+    const node = Node.init();
+    defer node.destroy();
+
+    poisonStack();
+    try testing.expectEqual(@as(i32, 0), node.getChildCount(.{}));
+}
+
 const std = @import("std");
 const testing = std.testing;
 
