@@ -29,8 +29,16 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     self.name_api = api.name;
     self.module = try casez.allocConvert(allocator, gdzig_case.file, self.name);
 
+    // Godot's extension_api.json does not guarantee that power-of-two flag
+    // values are listed in ascending bit order (e.g. RenderingDevice's
+    // TextureUsageBits lists bit 12 before bit 3). Collect the bitfield
+    // members first (recording the _DEFAULT value along the way; Godot
+    // bitfields carry exactly one), then lay them out sorted by bit
+    // position so each field lands at exactly @ctz(its value).
     var default: i64 = 0;
-    var position: u8 = 0;
+
+    var bit_values: std.ArrayListUnmanaged(GodotApi.GlobalEnum.Value) = .empty;
+    defer bit_values.deinit(allocator);
 
     for (api.values) |value| {
         if (std.mem.endsWith(u8, value.name, "_DEFAULT")) {
@@ -40,25 +48,36 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
         }
 
         if (value.value > 0 and std.math.isPowerOfTwo(value.value)) {
-            const expected_position = @ctz(value.value);
-
-            // Fill in any missing bit positions with placeholder fields
-            while (position < expected_position) : (position += 1) {
-                if (ctx.config.verbosity == .verbose) {
-                    std.debug.print("{s} expected position: {} Actual: {}\n", .{ self.name, expected_position, position });
-                }
-                const name = try std.fmt.allocPrint(allocator, "@\"{d}\"", .{position});
-                try self.fields.put(allocator, name, .{
-                    .name = name,
-                });
-            }
-
-            // Add the field at the correct bit position
-            try self.fields.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx, default));
-            position += 1;
+            try bit_values.append(allocator, value);
         } else {
             try self.consts.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx));
         }
+    }
+
+    std.mem.sort(GodotApi.GlobalEnum.Value, bit_values.items, {}, struct {
+        fn lessThan(_: void, a: GodotApi.GlobalEnum.Value, b: GodotApi.GlobalEnum.Value) bool {
+            return a.value < b.value;
+        }
+    }.lessThan);
+
+    var position: u8 = 0;
+    for (bit_values.items) |value| {
+        const expected_position = @ctz(value.value);
+
+        // Fill in any missing bit positions with placeholder fields
+        while (position < expected_position) : (position += 1) {
+            if (ctx.config.verbosity == .verbose) {
+                std.debug.print("{s} expected position: {} Actual: {}\n", .{ self.name, expected_position, position });
+            }
+            const name = try std.fmt.allocPrint(allocator, "@\"{d}\"", .{position});
+            try self.fields.put(allocator, name, .{
+                .name = name,
+            });
+        }
+
+        // Add the field at the correct bit position
+        try self.fields.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx, default));
+        position += 1;
     }
 
     if (position > 32) {
