@@ -7,6 +7,7 @@ const godot_case = common.godot_case;
 
 const gdzig = @import("gdzig");
 const class = gdzig.class;
+const ptrcall = @import("../class/ptrcall.zig");
 const classdb = gdzig.class.ClassDb;
 const MethodFlags = gdzig.global.MethodFlags;
 const StringName = gdzig.builtin.StringName;
@@ -116,7 +117,7 @@ pub fn MethodConfig(comptime Class: type) type {
                     } else {
                         const result = @call(.auto, method, call_args);
                         if (ret) |r| {
-                            @as(*ReturnType, @ptrCast(@alignCast(r))).* = result;
+                            ptrcall.writeReturn(ReturnType, r, result);
                         }
                     }
                 }
@@ -128,7 +129,7 @@ pub fn MethodConfig(comptime Class: type) type {
                     } else if (comptime class.isOpaqueClassPtr(ArgType)) {
                         return @ptrCast(@constCast(p_arg));
                     } else {
-                        return @as(*const ArgType, @ptrCast(@alignCast(p_arg))).*;
+                        return ptrcall.readArg(ArgType, p_arg);
                     }
                 }
             };
@@ -161,7 +162,7 @@ pub fn MethodConfig(comptime Class: type) type {
 
                 fn ptrCall(instance: *Class, _: [*]const *const anyopaque, ret: ?*anyopaque) void {
                     if (ret) |r| {
-                        @as(*FieldType, @ptrCast(@alignCast(r))).* = @field(instance, field_name);
+                        ptrcall.writeReturn(FieldType, r, @field(instance, field_name));
                     }
                 }
             };
@@ -193,7 +194,7 @@ pub fn MethodConfig(comptime Class: type) type {
                 }
 
                 fn ptrCall(instance: *Class, args: [*]const *const anyopaque, _: ?*anyopaque) void {
-                    @field(instance, field_name) = @as(*const FieldType, @ptrCast(@alignCast(args[0]))).*;
+                    @field(instance, field_name) = ptrcall.readArg(FieldType, args[0]);
                 }
             };
 
