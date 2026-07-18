@@ -61,7 +61,21 @@ pub fn fromGlobalEnum(allocator: Allocator, class_name: ?[]const u8, api: GodotA
     }.lessThan);
 
     var position: u8 = 0;
+    var last_value: ?i64 = null;
     for (bit_values.items) |value| {
+        // Some Godot bitfields alias more than one name onto the same bit
+        // (e.g. Mesh.ArrayFormat's ARRAY_FORMAT_CUSTOM1_SHIFT colliding with
+        // ARRAY_FORMAT_TEX_UV2, or PropertyUsageFlags.NO_EDITOR aliasing an
+        // earlier flag). Only the first-declared name for a given value
+        // becomes a packed struct field; later names sharing that value are
+        // emitted as bitcast constants instead, same as non-power-of-two
+        // values.
+        if (last_value == value.value) {
+            try self.consts.put(allocator, value.name, try .fromGlobalEnum(allocator, class_name, value, ctx));
+            continue;
+        }
+        last_value = value.value;
+
         const expected_position = @ctz(value.value);
 
         // Fill in any missing bit positions with placeholder fields

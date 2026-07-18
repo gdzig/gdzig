@@ -4,7 +4,7 @@ doc: ?[]const u8 = null,
 module: []const u8 = "",
 name: []const u8 = "_",
 name_api: []const u8 = "_",
-values: StringHashMap(Value) = .empty,
+values: StringArrayHashMap(Value) = .empty,
 
 pub fn fromBuiltin(allocator: Allocator, api: GodotApi.Builtin.Enum) !Enum {
     var self: Enum = .{};
@@ -63,8 +63,7 @@ pub fn deinit(self: *Enum, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
     allocator.free(self.module);
     allocator.free(self.name);
-    var values = self.values.valueIterator();
-    while (values.next()) |value| {
+    for (self.values.values()) |*value| {
         value.deinit(allocator);
     }
     self.values.deinit(allocator);
@@ -98,7 +97,7 @@ pub const Value = struct {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const StringHashMap = std.StringHashMapUnmanaged;
+const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Context = @import("../Context.zig");
 
 const casez = @import("casez");

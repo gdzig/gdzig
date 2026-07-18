@@ -917,11 +917,38 @@ fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) 
     try writeDocBlock(w, @"enum".doc);
     try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
-    var values = @"enum".values.valueIterator();
-    while (values.next()) |value| {
-        try writeDocBlock(w, value.doc);
-        try w.printLine("{s} = {d},", .{ value.name, value.value });
+
+    // Godot enums sometimes alias multiple names onto the same value (e.g.
+    // RenderingDevice.ShaderStage's *_BIT members, or DriverResource's
+    // PHYSICAL_DEVICE/VULKAN_PHYSICAL_DEVICE pair). Zig enums can't have
+    // duplicate tag values, so only the first-declared name per value (in
+    // extension_api.json order) becomes a tag; later names sharing that
+    // value are emitted as alias constants instead. Zig requires all
+    // container fields before any decls, so alias entries are buffered
+    // during this single pass over values and flushed as decls afterward.
+    var seen: std.AutoArrayHashMapUnmanaged(i64, []const u8) = .empty;
+    defer seen.deinit(ctx.rawAllocator());
+
+    const Alias = struct { doc: ?[]const u8, name: []const u8, first_name: []const u8 };
+    var aliases: std.ArrayListUnmanaged(Alias) = .empty;
+    defer aliases.deinit(ctx.rawAllocator());
+
+    for (@"enum".values.values()) |value| {
+        if (seen.get(value.value)) |first_name| {
+            try aliases.append(ctx.rawAllocator(), .{ .doc = value.doc, .name = value.name, .first_name = first_name });
+        } else {
+            try seen.put(ctx.rawAllocator(), value.value, value.name);
+
+            try writeDocBlock(w, value.doc);
+            try w.printLine("{s} = {d},", .{ value.name, value.value });
+        }
     }
+
+    for (aliases.items) |alias| {
+        try writeDocBlock(w, alias.doc);
+        try w.printLine("pub const {s}: @This() = .{s};", .{ alias.name, alias.first_name });
+    }
+
     try writeMixin(w, "global/{s}.mixin.zig", .{@"enum".name}, ctx);
     w.indent -= 1;
     try w.writeLine("};");
