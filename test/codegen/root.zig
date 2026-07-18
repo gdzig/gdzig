@@ -26,6 +26,20 @@ test "flag bits are laid out by value, not declaration order" {
     );
 }
 
+test "enums with duplicate values alias the first declared member" {
+    // RenderingDevice.ShaderStage aliases bit-shifted values onto the plain stage
+    // enumerators (e.g. SHADER_STAGE_VERTEX_BIT == SHADER_STAGE_FRAGMENT == 1); only
+    // the first-declared name for each value may become an enum tag, later members
+    // with the same value must be alias constants equal to it.
+    try std.testing.expectEqual(@as(i32, 4), @intFromEnum(RenderingDevice.ShaderStage.shader_stage_compute));
+    try std.testing.expectEqual(RenderingDevice.ShaderStage.shader_stage_fragment, RenderingDevice.ShaderStage.shader_stage_vertex_bit);
+    try std.testing.expectEqual(RenderingDevice.ShaderStage.shader_stage_tesselation_control, RenderingDevice.ShaderStage.shader_stage_fragment_bit);
+
+    // RenderingDevice.DriverResource has DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE aliasing
+    // the earlier-declared DRIVER_RESOURCE_PHYSICAL_DEVICE (both == 1).
+    try std.testing.expectEqual(RenderingDevice.DriverResource.driver_resource_physical_device, RenderingDevice.DriverResource.driver_resource_vulkan_physical_device);
+}
+
 const std = @import("std");
 const gdzig = @import("gdzig");
 const Array = gdzig.builtin.Array;
