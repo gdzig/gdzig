@@ -1142,14 +1142,11 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
         try w.printLine("var args: [{d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
-            try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, param.name });
+            try writeArgSlot(w, i, &param, null, ctx);
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
-            if (param.needsRuntimeInit(ctx) or optNullMaterializer(&param, ctx) != null) {
-                try w.printLine("args[{d}] = @ptrCast(&actual_{s});", .{ i, param.name });
-            } else {
-                try w.printLine("args[{d}] = @ptrCast(&opt.{s});", .{ i, param.name });
-            }
+            const materialized = param.needsRuntimeInit(ctx) or optNullMaterializer(&param, ctx) != null;
+            try writeArgSlot(w, i, &param, materialized, ctx);
         }
     }
 
@@ -1213,6 +1210,10 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
             try w.writeAll("var result: ");
             if (function.return_type == .class) {
                 try w.writeLine("?*anyopaque = null;");
+            } else if (wideSlot(&function.return_type, ctx) != .none) {
+                // Widen sub-8-byte scalar/enum/flag returns to an int64 slot so the engine's
+                // 8-byte ptrcall write cannot overrun a narrow result; narrowed in the footer.
+                try w.writeLine("i64 = 0;");
             } else {
                 try writeTypeAtReturn(w, &function.return_type, class, ctx);
                 const return_type_initializer = function.return_type.getDefaultInitializer(ctx);
@@ -1247,6 +1248,56 @@ fn optNullMaterializer(param: *const Context.Function.Parameter, ctx: *const Con
         .basic => param.type.getDefaultInitializer(ctx) orelse ".init()",
         else => null, // .class, .pointer: a null ptrcall slot is a valid null object
     };
+}
+
+/// How a scalar/enum/flag must be marshalled through the ptrcall ABI, which passes every
+/// integer and enum as int64 and every bitfield as int64 (godot-cpp method_ptrcall.h). A
+/// sub-8-byte value needs a widened i64 temporary so the engine reads a full 8 bytes for an
+/// argument (instead of over-reading adjacent stack) and writes a full 8 bytes into a return
+/// slot (instead of over-writing memory past a narrow slot). Floats are already f64 in gdzig
+/// and bool is 1 byte (matches uint8_t), so both marshal as `.none`.
+///
+/// This is the emission-side half of the ABI width rule; `src/class/ptrcall.zig` is the
+/// runtime side, reading/writing the widened slots this function decides to emit.
+const WideSlot = enum { none, int, @"enum", flag };
+
+fn wideSlot(@"type": *const Context.Type, ctx: *const Context) WideSlot {
+    return switch (@"type".*) {
+        .int => |name| if (std.mem.eql(u8, name, "i64") or std.mem.eql(u8, name, "u64")) .none else .int,
+        // Unconditional: writeEnum always emits `enum(i32)`, so no 64-bit enum exists to guard
+        // against, unlike the .int/.flag arms above/below which check the representation width.
+        .@"enum" => .@"enum",
+        .flag => |api_name| if (std.mem.eql(u8, ctx.flagRepr(api_name), "u64")) .none else .flag,
+        else => .none,
+    };
+}
+
+/// Emits `args[i]`, widening sub-8-byte scalars/enums/flags into an int64 temporary whose
+/// address is passed instead of the narrow value's. `materialized` selects the value
+/// expression: `null` for a plain required parameter (`p_name`), `true`/`false` for an
+/// optional parameter's runtime-materialized (`actual_name`) or as-passed (`opt.name`) form.
+fn writeArgSlot(w: *CodeWriter, i: usize, param: *const Context.Function.Parameter, materialized: ?bool, ctx: *const Context) !void {
+    var buf: [128]u8 = undefined;
+    const src = if (materialized) |use_actual|
+        try std.fmt.bufPrint(&buf, "{s}{s}", .{ if (use_actual) "actual_" else "opt.", param.name })
+    else
+        param.name;
+
+    switch (wideSlot(&param.type, ctx)) {
+        .none => try w.printLine("args[{d}] = @ptrCast(&{s});", .{ i, src }),
+        .int => {
+            try w.printLine("const arg{d}_slot: i64 = @intCast({s});", .{ i, src });
+            try w.printLine("args[{d}] = @ptrCast(&arg{d}_slot);", .{ i, i });
+        },
+        .@"enum" => {
+            try w.printLine("const arg{d}_slot: i64 = @intFromEnum({s});", .{ i, src });
+            try w.printLine("args[{d}] = @ptrCast(&arg{d}_slot);", .{ i, i });
+        },
+        .flag => {
+            try w.printLine("const arg{d}_slot: i64 = @as({s}, @bitCast({s}));", .{ i, ctx.flagRepr(param.type.flag), src });
+            try w.printLine("args[{d}] = @ptrCast(&arg{d}_slot);", .{ i, i });
+        },
+    }
 }
 
 fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
@@ -1301,10 +1352,12 @@ fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, class:
             try w.writeAll("return result.as(");
             try writeTypeAtReturn(w, &function.return_type, class, ctx);
             try w.writeLine(").?;");
-        } else {
-            try w.writeLine(
-                \\return result;
-            );
+        } else switch (wideSlot(&function.return_type, ctx)) {
+            // Narrow the int64 result slot back to the declared sub-8-byte return type.
+            .none => try w.writeLine("return result;"),
+            .int => try w.writeLine("return @intCast(result);"),
+            .@"enum" => try w.writeLine("return @enumFromInt(result);"),
+            .flag => try w.printLine("return @bitCast(@as({s}, @intCast(result)));", .{ctx.flagRepr(function.return_type.flag)}),
         },
     }
 
