@@ -29,8 +29,28 @@ pub fn isRefCounted(comptime T: type) bool {
 ///
 /// Expects a pointer type, e.g. `*Node` or `*MyClass`, not `Node` or `MyClass`.
 pub fn isRefCountedPtr(comptime T: type) bool {
-    if (@typeInfo(T) != .pointer) return false;
-    return isRefCounted(std.meta.Child(T));
+    const Pointer = switch (@typeInfo(T)) {
+        .optional => |info| info.child,
+        else => T,
+    };
+    if (@typeInfo(Pointer) != .pointer) return false;
+    return isRefCounted(std.meta.Child(Pointer));
+}
+
+/// Returns true when `T` is an optional whose payload is a Godot class
+/// pointer, such as `?*Node` or `?*MyResource`.
+pub fn isNullableClassPtr(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .optional => |info| isClassPtr(info.child),
+        else => false,
+    };
+}
+
+/// Returns the non-optional class pointer carried by `T`.
+pub fn ClassPtrOf(comptime T: type) type {
+    if (isNullableClassPtr(T)) return @typeInfo(T).optional.child;
+    if (isClassPtr(T)) return T;
+    @compileError("expected a Godot class pointer, found '" ++ @typeName(T) ++ "'");
 }
 
 /// Downcast a value to a child type in the class hierarchy. Has some compile time checks, but returns null at runtime if the cast fails.

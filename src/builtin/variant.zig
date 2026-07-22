@@ -22,13 +22,18 @@ pub const Variant = extern struct {
         const tag = comptime Tag.forType(T);
 
         if (tag == .object) {
+            const Ptr = class.ClassPtrOf(T);
+            const object_value: Ptr = if (comptime class.isNullableClassPtr(T))
+                value orelse return .nil
+            else
+                value;
             // For RefCounted objects, manually construct the Variant and call reference()
             // to share ownership. We bypass variantFromType because it uses init_ref()
             // which only works correctly for first-time ownership transfer.
             if (comptime class.isRefCountedPtr(T)) {
-                _ = RefCounted.upcast(value).reference();
+                _ = RefCounted.upcast(object_value).reference();
             }
-            const obj = Object.upcast(value);
+            const obj = Object.upcast(object_value);
             return .{
                 .tag = .object,
                 .data = .{
@@ -65,6 +70,9 @@ pub const Variant = extern struct {
     /// Calling `deinit` on the returned value is illegal behavior.
     pub fn wrap(comptime T: type, value: *const T) Variant {
         const tag = comptime Tag.forType(T);
+        if (comptime class.isNullableClassPtr(T)) {
+            if (value.* == null) return .nil;
+        }
         return .{
             .tag = tag,
             .data = switch (tag) {
@@ -103,8 +111,8 @@ pub const Variant = extern struct {
                 // Object
                 .object => .{
                     .object = .{
-                        .id = @enumFromInt(Object.upcast(value.*).getInstanceId()),
-                        .object = Object.upcast(value.*),
+                        .id = @enumFromInt(Object.upcast(if (comptime class.isNullableClassPtr(T)) value.*.? else value.*).getInstanceId()),
+                        .object = Object.upcast(if (comptime class.isNullableClassPtr(T)) value.*.? else value.*),
                     },
                 },
 
@@ -137,6 +145,10 @@ pub const Variant = extern struct {
     pub fn as(self: Variant, comptime T: type) ?T {
         const tag = comptime Tag.forType(T);
 
+        if (comptime class.isNullableClassPtr(T)) {
+            if (self.tag == .nil) return @as(T, null);
+        }
+
         if (!self.isCompatibleCast(tag)) {
             return null;
         }
@@ -150,13 +162,19 @@ pub const Variant = extern struct {
         } else {
             var object: ?*Object = null;
             variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
-            if (object == null) return null;
-            if (comptime class.isOpaqueClassPtr(T)) {
-                return @ptrCast(@alignCast(object));
+            if (object == null) {
+                if (comptime class.isNullableClassPtr(T)) return @as(T, null);
+                return null;
+            }
+            const Ptr = class.ClassPtrOf(T);
+            if (comptime class.isOpaqueClassPtr(Ptr)) {
+                const result: Ptr = @ptrCast(@alignCast(object));
+                return @as(T, result);
             } else {
-                const Base = class.BaseOf(Child(T));
+                const Base = class.BaseOf(Child(Ptr));
                 const base: *Base = @ptrCast(object);
-                return base.asInstance(Child(T));
+                const result = base.asInstance(Child(Ptr)) orelse return null;
+                return @as(T, result);
             }
         }
     }
@@ -586,6 +604,7 @@ pub const Variant = extern struct {
                         .@"enum" => .int,
                         .@"struct" => |info| if (info.backing_integer != null) .int else null,
                         .pointer => |p| if (class.isClassPtr(T)) .object else forType(p.child),
+                        .optional => |info| if (class.isClassPtr(info.child)) .object else null,
                         else => null,
                     };
                 },
