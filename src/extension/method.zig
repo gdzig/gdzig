@@ -117,19 +117,8 @@ pub fn MethodConfig(comptime Class: type) type {
                     } else {
                         const result = @call(.auto, method, call_args);
                         if (ret) |r| {
-                            ptrcall.writeReturn(ReturnType, r, result);
+                            writePtrReturn(ReturnType, r, result);
                         }
-                    }
-                }
-
-                fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
-                    if (comptime class.isRefCountedPtr(ArgType) and class.isOpaqueClassPtr(ArgType)) {
-                        const obj = gdzig.raw.refGetObject(@ptrCast(p_arg));
-                        return @ptrCast(obj.?);
-                    } else if (comptime class.isOpaqueClassPtr(ArgType)) {
-                        return @ptrCast(@constCast(p_arg));
-                    } else {
-                        return ptrcall.readArg(ArgType, p_arg);
                     }
                 }
             };
@@ -162,7 +151,7 @@ pub fn MethodConfig(comptime Class: type) type {
 
                 fn ptrCall(instance: *Class, _: [*]const *const anyopaque, ret: ?*anyopaque) void {
                     if (ret) |r| {
-                        ptrcall.writeReturn(FieldType, r, @field(instance, field_name));
+                        writePtrReturn(FieldType, r, @field(instance, field_name));
                     }
                 }
             };
@@ -194,7 +183,7 @@ pub fn MethodConfig(comptime Class: type) type {
                 }
 
                 fn ptrCall(instance: *Class, args: [*]const *const anyopaque, _: ?*anyopaque) void {
-                    @field(instance, field_name) = ptrcall.readArg(FieldType, args[0]);
+                    @field(instance, field_name) = ptrToArg(FieldType, args[0]);
                 }
             };
 
@@ -207,4 +196,47 @@ pub fn MethodConfig(comptime Class: type) type {
             };
         }
     };
+}
+
+/// Decode one extension-method ptrcall argument. RefCounted values travel
+/// through Godot's Ref ABI, including extension classes and nullable Refs;
+/// their slot is not the raw object pointer represented by the Zig type.
+fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
+    if (comptime class.isRefCountedPtr(ArgType)) {
+        const Ptr = class.ClassPtrOf(ArgType);
+        const object = gdzig.raw.refGetObject(@ptrCast(p_arg)) orelse {
+            if (comptime class.isNullableClassPtr(ArgType)) return null;
+            @panic("non-null RefCounted ptrcall argument contained a null Ref");
+        };
+
+        const value: Ptr = if (comptime class.isOpaqueClassPtr(Ptr))
+            @ptrCast(@alignCast(object))
+        else blk: {
+            const Class = std.meta.Child(Ptr);
+            const Base = class.BaseOf(Class);
+            const base: *Base = @ptrCast(@alignCast(object));
+            break :blk base.asInstance(Class) orelse @panic("Ref ptrcall argument has the wrong extension class");
+        };
+        return @as(ArgType, value);
+    }
+
+    if (comptime class.isOpaqueClassPtr(ArgType)) {
+        return @ptrCast(@constCast(p_arg));
+    }
+    return ptrcall.readArg(ArgType, p_arg);
+}
+
+/// Encode one extension-method ptrcall return. Godot supplies storage for a
+/// Ref wrapper when the declared type is RefCounted, so populate that wrapper
+/// instead of writing the Zig object pointer directly into it.
+fn writePtrReturn(comptime ReturnType: type, p_ret: *anyopaque, value: ReturnType) void {
+    if (comptime class.isRefCountedPtr(ReturnType)) {
+        const object: ?*gdzig.class.Object = if (comptime class.isNullableClassPtr(ReturnType))
+            if (value) |object_value| .upcast(object_value) else null
+        else
+            .upcast(value);
+        gdzig.raw.refSetObject(@ptrCast(p_ret), if (object) |obj| @ptrCast(obj) else null);
+        return;
+    }
+    ptrcall.writeReturn(ReturnType, p_ret, value);
 }

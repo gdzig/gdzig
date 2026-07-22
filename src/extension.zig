@@ -12,6 +12,11 @@ pub const InitializationLevel = enum(c_int) {
 
 pub const Registry = @import("extension/Registry.zig");
 
+/// Low-level registration pieces exposed for binding integration tests.
+pub const testing = struct {
+    pub const MethodConfig = @import("extension/method.zig").MethodConfig;
+};
+
 const class = @import("extension/class.zig");
 pub const DestroyInstanceBinding = class.DestroyInstanceBinding;
 pub const PropertyListInstanceBinding = class.PropertyListInstanceBinding;
