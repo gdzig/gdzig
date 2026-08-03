@@ -1,3 +1,34 @@
+pub fn register(r: *gdzig.extension.Registry) void {
+    const class = r.createClass(RefReturnNode, {}, .auto);
+    class.addMethod("get_borrowed_resource", .auto);
+}
+
+fn ensureRegistered() void {
+    const S = struct {
+        var done: bool = false;
+    };
+    if (!S.done) {
+        S.done = true;
+        gdzig.testing.loadModule(@This());
+    }
+}
+
+test "Variant return from bound method holds a reference to borrowed RefCounted" {
+    ensureRegistered();
+
+    const node = try RefReturnNode.create();
+    defer node.base.destroy();
+
+    try testing.expectEqual(@as(i32, 1), node.resource.getReferenceCount());
+
+    var result = Object.call(.upcast(node), .fromComptimeLatin1("get_borrowed_resource"), .{});
+    try testing.expectEqual(node.resource, result.as(*Resource).?);
+    try testing.expectEqual(@as(i32, 2), node.resource.getReferenceCount());
+
+    result.deinit();
+    try testing.expectEqual(@as(i32, 1), node.resource.getReferenceCount());
+}
+
 test "engine object survives a temporary Ref taken by an engine call" {
     const resource = Resource.init();
     try testing.expectEqual(@as(i32, 1), resource.getReferenceCount());
@@ -36,11 +67,39 @@ test "variant reference counting" {
     object.destroy();
 }
 
+const RefReturnNode = struct {
+    base: *Node,
+    resource: *Resource,
+
+    pub fn create() !*RefReturnNode {
+        const self: *RefReturnNode = allocator.create(RefReturnNode) catch @panic("out of memory");
+        self.* = .{
+            .base = Node.init(),
+            .resource = Resource.init(),
+        };
+        self.base.setInstance(RefReturnNode, self);
+        return self;
+    }
+
+    pub fn destroy(self: *RefReturnNode) void {
+        if (!self.resource.unreference()) @panic("resource still has external references");
+        self.resource.destroy();
+        allocator.destroy(self);
+    }
+
+    pub fn getBorrowedResource(self: *RefReturnNode) *Resource {
+        return self.resource;
+    }
+};
+
 const std = @import("std");
 const testing = std.testing;
 
 const gdzig = @import("gdzig");
 const general = gdzig.general;
+const allocator = gdzig.testing.allocator;
+const Node = gdzig.class.Node;
+const Object = gdzig.class.Object;
 const RefCounted = gdzig.class.RefCounted;
 const Resource = gdzig.class.Resource;
 const ResourceSaver = gdzig.class.ResourceSaver;
