@@ -159,11 +159,11 @@ pub fn build(b: *Build) !void {
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
 
-        var tests_dir = try std.fs.cwd().openDir(b.path("test").getPath2(b, null), .{ .iterate = true });
-        defer tests_dir.close();
+        var tests_dir = try Dir.cwd().openDir(b.graph.io, b.path("test").getPath2(b, null), .{ .iterate = true });
+        defer tests_dir.close(b.graph.io);
 
         var iter = tests_dir.iterate();
-        while (iter.next() catch null) |entry| {
+        while (iter.next(b.graph.io) catch null) |entry| {
             if (entry.kind != .directory) continue;
 
             const test_mod = b.createModule(.{
@@ -232,6 +232,8 @@ fn getGodotVersion(b: *Build, p: Build.LazyPath) []const u8 {
 
 const std = @import("std");
 const Build = std.Build;
+const Io = std.Io;
+const Dir = Io.Dir;
 
 const godot = @import("godot");
 

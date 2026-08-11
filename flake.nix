@@ -1,11 +1,12 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
-    zig.url = "github:mitchellh/zig-overlay";
+    zig.url = "github:silversquirl/zig-flake/compat";
+    zls.url = "github:zigtools/zls?ref=0.16.0";
+
     zig.inputs.nixpkgs.follows = "nixpkgs";
-    zls.url = "github:zigtools/zls?ref=0.15.1";
     zls.inputs.nixpkgs.follows = "nixpkgs";
-    zls.inputs.zig-overlay.follows = "zig";
+    zls.inputs.zig-flake.follows = "zig";
   };
 
   outputs =
@@ -16,37 +17,16 @@
       ...
     }:
     let
-      supportedSystems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
-      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      nixpkgsFor = forAllSystems (
-        system:
-        import nixpkgs {
-          inherit system;
-          overlays = [ ];
-        }
-      );
+      forAllSystems = f: builtins.mapAttrs f nixpkgs.legacyPackages;
     in
     {
       devShells = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgsFor.${system};
-          zigPinned = zig.packages.${system}."0.15.2";
-          zlsPinned = zls.packages.${system}.zls.overrideAttrs (prev: {
-            buildInputs = [ zigPinned ];
-          });
-        in
-        {
+        system: pkgs: {
           default = pkgs.mkShell {
             buildInputs = [
               pkgs.lldb
-              zigPinned
-              zlsPinned
+              zig.packages.${system}."0.16.0"
+              zls.packages.${system}.zls
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [
               # Wine for cross-platform testing with -fwine

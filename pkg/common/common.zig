@@ -48,7 +48,7 @@ const dictionary: Config.Dictionary = .{
 /// Format helper for use with std.fmt
 pub fn Fmt(comptime config: Config) type {
     return struct {
-        pub fn format(str: []const u8, writer: *std.io.Writer) std.io.Writer.Error!void {
+        pub fn format(str: []const u8, writer: *Writer) Writer.Error!void {
             var buf: [256]u8 = undefined;
             const result = casez.bufConvert(&buf, config, str) catch return error.WriteFailed;
             try writer.writeAll(result);
@@ -123,6 +123,7 @@ test "signal name conversion" {
 
 const std = @import("std");
 const testing = std.testing;
+const Writer = std.Io.Writer;
 
 const casez = @import("casez");
 const Config = casez.Config;

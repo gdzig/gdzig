@@ -49,7 +49,7 @@ pub const DocumentContext = struct {
     current_class: ?[]const u8 = null,
     write_ctx: ?*const WriteContext = null,
     // SAFETY: will be initialized in fromWriteContext
-    writer: *std.io.Writer = undefined,
+    writer: *Writer = undefined,
     verbosity: Config.Verbosity = .verbose,
 
     pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
@@ -252,7 +252,7 @@ pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *cons
     });
     defer doc.deinit();
 
-    var output: std.io.Writer.Allocating = .init(allocator);
+    var output: Writer.Allocating = .init(allocator);
 
     try bbcodez.fmt.md.renderDocument(allocator, doc, &output.writer, .{
         .write_element_fn = writeElement,
@@ -320,6 +320,7 @@ const StringHashMap = std.StringHashMapUnmanaged;
 
 const std = @import("std");
 const testing = std.testing;
+const Writer = std.Io.Writer;
 const temp = @import("temp");
 const bbcodez = @import("bbcodez");
 
