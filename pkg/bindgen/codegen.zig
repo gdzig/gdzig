@@ -1,24 +1,24 @@
-pub fn generate(ctx: *Context) !void {
-    try writeBuiltins(ctx);
-    try writeClasses(ctx);
-    try writeGlobals(ctx);
-    try writeDispatchTable(ctx);
-    try writeModules(ctx);
+pub fn generate(ctx: *Context, io: std.Io) !void {
+    try writeBuiltins(ctx, io);
+    try writeClasses(ctx, io);
+    try writeGlobals(ctx, io);
+    try writeDispatchTable(ctx, io);
+    try writeModules(ctx, io);
 }
 
-fn writeBuiltins(ctx: *const Context) !void {
+fn writeBuiltins(ctx: *const Context, io: std.Io) !void {
     var buf: [1024]u8 = undefined;
 
     // builtin.zig
     {
-        const file = try ctx.config.output.createFile("builtin.zig", .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, "builtin.zig", .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w: CodeWriter = .init(writer);
 
-        try writeMixin(&w, "builtin.mixin.zig", .{}, ctx);
+        try writeMixin(&w, "builtin.mixin.zig", .{}, ctx, io);
 
         // Variant is a special case, since it is not a generated file.
         try w.writeLine(
@@ -42,24 +42,24 @@ fn writeBuiltins(ctx: *const Context) !void {
     }
 
     // builtin/[name].zig
-    try ctx.config.output.makePath("builtin");
+    try ctx.config.output.createDirPath(io, "builtin");
 
     for (ctx.builtins.values()) |*builtin| {
         const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "builtin/{s}.zig", .{builtin.module});
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, filename, .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var cw = CodeWriter.init(writer);
 
-        try writeBuiltin(&cw, builtin, ctx);
+        try writeBuiltin(&cw, builtin, ctx, io);
 
         try writer.flush();
     }
 }
 
-fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Context) !void {
+fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Context, io: std.Io) !void {
     try writeDocBlock(w, builtin.doc);
 
     // Declaration start
@@ -143,7 +143,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
 
     // Enums
     for (builtin.enums.values()) |*@"enum"| {
-        try writeEnum(w, @"enum", ctx);
+        try writeEnum(w, @"enum", ctx, io);
         try w.writeLine("");
     }
 
@@ -162,7 +162,7 @@ fn writeBuiltin(w: *CodeWriter, builtin: *const Context.Builtin, ctx: *const Con
     , .{builtin.name});
 
     // Mixin
-    try writeMixin(w, "builtin/{s}.mixin.zig", .{builtin.name}, ctx);
+    try writeMixin(w, "builtin/{s}.mixin.zig", .{builtin.name}, ctx, io);
 
     // Declaration end
     w.indent -= 1;
@@ -290,19 +290,19 @@ fn writeBuiltinOperator(w: *CodeWriter, builtin_name: []const u8, operator: *con
     , .{operator.name});
 }
 
-fn writeClasses(ctx: *const Context) !void {
+fn writeClasses(ctx: *const Context, io: std.Io) !void {
     var buf: [1024]u8 = undefined;
 
     // class.zig
     {
-        const file = try ctx.config.output.createFile("class.zig", .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, "class.zig", .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
-        try writeMixin(&w, "class.mixin.zig", .{}, ctx);
+        try writeMixin(&w, "class.mixin.zig", .{}, ctx, io);
 
         for (ctx.classes.values()) |class| {
             try w.printLine(
@@ -322,25 +322,25 @@ fn writeClasses(ctx: *const Context) !void {
     }
 
     // class/[name].zig
-    try ctx.config.output.makePath("class");
+    try ctx.config.output.createDirPath(io, "class");
     for (ctx.classes.values()) |*class| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "class/{s}.zig", .{class.module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, filename, .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
-        try writeClass(&w, class, ctx);
+        try writeClass(&w, class, ctx, io);
 
         try writer.flush();
     }
 }
 
-fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
+fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context, io: std.Io) !void {
     try writeDocBlock(w, class.doc);
 
     // Declaration start
@@ -445,13 +445,13 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Enums
     for (class.enums.values()) |*@"enum"| {
-        try writeEnum(w, @"enum", ctx);
+        try writeEnum(w, @"enum", ctx, io);
         try w.writeLine("");
     }
 
     // Flags
     for (class.flags.values()) |*flag| {
-        try writeFlag(w, flag, ctx);
+        try writeFlag(w, flag, ctx, io);
         try w.writeLine("");
     }
 
@@ -463,7 +463,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
     , .{class.name_api});
 
     // Mixins (include parent class mixins)
-    try writeClassMixins(w, class, ctx);
+    try writeClassMixins(w, class, ctx, io);
 
     // Declaration end
     w.indent -= 1;
@@ -861,19 +861,19 @@ fn writeDocBlock(w: *CodeWriter, docs: ?[]const u8) !void {
     }
 }
 
-fn writeGlobals(ctx: *const Context) !void {
+fn writeGlobals(ctx: *const Context, io: std.Io) !void {
     var buf: [1024]u8 = undefined;
 
     // global.zig
     {
-        const file = try ctx.config.output.createFile("global.zig", .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, "global.zig", .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
-        try writeMixin(&w, "global.mixin.zig", .{}, ctx);
+        try writeMixin(&w, "global.mixin.zig", .{}, ctx, io);
 
         for (ctx.enums.values()) |@"enum"| {
             try w.printLine(
@@ -900,19 +900,19 @@ fn writeGlobals(ctx: *const Context) !void {
     }
 
     // global/[name].zig
-    try ctx.config.output.makePath("global");
+    try ctx.config.output.createDirPath(io, "global");
     for (ctx.enums.values()) |*@"enum"| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{@"enum".module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, filename, .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
-        try writeEnum(&w, @"enum", ctx);
+        try writeEnum(&w, @"enum", ctx, io);
 
         try writer.flush();
     }
@@ -921,20 +921,20 @@ fn writeGlobals(ctx: *const Context) !void {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{flag.module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, filename, .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
-        try writeFlag(&w, flag, ctx);
+        try writeFlag(&w, flag, ctx, io);
 
         try writer.flush();
     }
 }
 
-fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) !void {
+fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context, io: std.Io) !void {
     try writeDocBlock(w, @"enum".doc);
     try w.printLine("pub const {s} = enum(i32) {{", .{@"enum".name});
     w.indent += 1;
@@ -970,7 +970,7 @@ fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) 
         try w.printLine("pub const {s}: @This() = .{s};", .{ alias.name, alias.first_name });
     }
 
-    try writeMixin(w, "global/{s}.mixin.zig", .{@"enum".name}, ctx);
+    try writeMixin(w, "global/{s}.mixin.zig", .{@"enum".name}, ctx, io);
     w.indent -= 1;
     try w.writeLine("};");
 }
@@ -985,7 +985,7 @@ fn writeField(w: *CodeWriter, field: *const Context.Field, class: ?*const Contex
     );
 }
 
-fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !void {
+fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context, io: std.Io) !void {
     try writeDocBlock(w, flag.doc);
     try w.printLine("pub const {s} = packed struct({s}) {{", .{
         flag.name, flag.representation.name(),
@@ -1002,7 +1002,7 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
         try writeDocBlock(w, @"const".doc);
         try w.printLine("pub const {s}: {s} = @bitCast(@as({s}, {d}));", .{ @"const".name, flag.name, flag.representation.name(), @"const".value });
     }
-    try writeMixin(w, "global/{s}.mixin.zig", .{flag.module}, ctx);
+    try writeMixin(w, "global/{s}.mixin.zig", .{flag.module}, ctx, io);
     w.indent -= 1;
     try w.writeLine("};");
 }
@@ -1470,22 +1470,22 @@ fn writeImports(w: *CodeWriter, imports: *const Context.Imports, class: ?*const 
 /// Writes mixins for a class and all its parent classes.
 /// Parent mixins are written first (from root to leaf), so child classes
 /// can override or extend parent mixin functionality.
-fn writeClassMixins(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
+fn writeClassMixins(w: *CodeWriter, class: *const Context.Class, ctx: *const Context, io: std.Io) !void {
     // Recurse to parent first (writes from root to leaf)
     if (class.getBasePtr(ctx)) |parent| {
-        try writeClassMixins(w, parent, ctx);
+        try writeClassMixins(w, parent, ctx, io);
     }
-    try writeMixin(w, "class/{s}.mixin.zig", .{class.name}, ctx);
+    try writeMixin(w, "class/{s}.mixin.zig", .{class.name}, ctx, io);
 }
 
-fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *const Context) !void {
+fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *const Context, io: std.Io) !void {
     const filename = try std.fmt.allocPrint(ctx.arena.allocator(), fmt, args);
-    const file: ?std.fs.File = ctx.config.input.openFile(filename, .{}) catch null;
+    const file: ?std.Io.File = ctx.config.input.openFile(io, filename, .{}) catch null;
     if (file) |f| {
-        defer f.close();
+        defer f.close(io);
 
         var buf: [1024]u8 = undefined;
-        var file_reader = f.reader(&buf);
+        var file_reader = f.reader(io, &buf);
         var reader = &file_reader.interface;
 
         // Skip lines until we find @mixin start (or copy from beginning if not found)
@@ -1523,13 +1523,13 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
     }
 }
 
-fn writeDispatchTable(ctx: *Context) !void {
+fn writeDispatchTable(ctx: *Context, io: std.Io) !void {
     var buf: [1024]u8 = undefined;
 
-    const file = try ctx.config.output.createFile("DispatchTable.zig", .{});
-    defer file.close();
+    const file = try ctx.config.output.createFile(io, "DispatchTable.zig", .{});
+    defer file.close(io);
 
-    var file_writer = file.writer(&buf);
+    var file_writer = file.writer(io, &buf);
     var writer = &file_writer.interface;
     var w = CodeWriter.init(writer);
 
@@ -1603,31 +1603,31 @@ fn writeDispatchTable(ctx: *Context) !void {
     );
 
     try writer.flush();
-    try file.sync();
+    try file.sync(io);
 }
 
-fn writeModules(ctx: *const Context) !void {
+fn writeModules(ctx: *const Context, io: std.Io) !void {
     var buf: [1024]u8 = undefined;
 
     for (ctx.modules.values()) |*module| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(filename, .{});
-        defer file.close();
+        const file = try ctx.config.output.createFile(io, filename, .{});
+        defer file.close(io);
 
-        var file_writer = file.writer(&buf);
+        var file_writer = file.writer(io, &buf);
         var writer = &file_writer.interface;
         var w = CodeWriter.init(writer);
 
-        try writeModule(&w, module, ctx);
+        try writeModule(&w, module, ctx, io);
 
         try writer.flush();
     }
 }
 
-fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Context) !void {
-    try writeMixin(w, "{s}.mixin.zig", .{module.name}, ctx);
+fn writeModule(w: *CodeWriter, module: *const Context.Module, ctx: *const Context, io: std.Io) !void {
+    try writeMixin(w, "{s}.mixin.zig", .{module.name}, ctx, io);
 
     for (module.functions) |*function| {
         if (function.skip) continue;

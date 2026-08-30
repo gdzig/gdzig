@@ -98,6 +98,7 @@ fn addExtensionWeb(
 
     mod.pic = true;
     mod.strip = false;
+    mod.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
     const lib = b.addLibrary(.{
         .linkage = .static,
@@ -115,7 +116,6 @@ fn addExtensionWeb(
     activate_emsdk.step.dependOn(&install_emsdk.step);
 
     lib.step.dependOn(&activate_emsdk.step);
-    lib.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
     // Run emcc to produce final .wasm
     const optimize = options.optimize;
@@ -219,13 +219,13 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
         .use_llvm = true,
     });
     obj.entry = .disabled;
+    mod.addObject(obj);
 
     const lib = b.addLibrary(.{
         .name = options.name,
         .linkage = .dynamic,
         .root_module = b.createModule(.{ .target = options.target, .optimize = options.optimize }),
     });
-    lib.addObject(obj);
 
     const install_subdir = b.fmt("test/{s}", .{options.name});
     const install_ext = b.addInstallArtifact(lib, .{
@@ -331,7 +331,7 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
 }
 
 fn generateMainScene() []const u8 {
-    return 
+    return
     \\[gd_scene format=3]
     \\
     \\[node name="Main" type="Node"]
