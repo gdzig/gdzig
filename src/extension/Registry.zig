@@ -2,15 +2,15 @@ const Registry = @This();
 
 allocator: Allocator,
 arena: ArenaAllocator,
-classes: std.ArrayListUnmanaged(*AnyClass),
-callbacks: std.ArrayListUnmanaged(*AnyCallbacks),
+classes: std.ArrayList(*AnyClass),
+callbacks: std.ArrayList(*AnyCallbacks),
 
 pub fn init(backing_allocator: Allocator) Registry {
     return .{
         .allocator = backing_allocator,
         .arena = .init(backing_allocator),
-        .classes = .{},
-        .callbacks = .{},
+        .classes = .empty,
+        .callbacks = .empty,
     };
 }
 
@@ -139,11 +139,11 @@ pub fn Class(comptime T: type) type {
         registry: *Registry,
         userdata: class_mod.ClassUserdataOf(T),
 
-        methods: std.ArrayListUnmanaged(*Method(T)),
-        signals: std.ArrayListUnmanaged(*AnySignal),
-        groups: std.ArrayListUnmanaged(*Group(T)),
-        ungrouped_properties: std.ArrayListUnmanaged(*AnyProperty),
-        constants: std.ArrayListUnmanaged(Constant),
+        methods: std.ArrayList(*Method(T)),
+        signals: std.ArrayList(*AnySignal),
+        groups: std.ArrayList(*Group(T)),
+        ungrouped_properties: std.ArrayList(*AnyProperty),
+        constants: std.ArrayList(Constant),
 
         /// Initialization level for this class. Default is `.scene`.
         level: InitializationLevel,
@@ -165,11 +165,11 @@ pub fn Class(comptime T: type) type {
                 },
                 .registry = registry,
                 .userdata = userdata,
-                .methods = .{},
-                .signals = .{},
-                .groups = .{},
-                .ungrouped_properties = .{},
-                .constants = .{},
+                .methods = .empty,
+                .signals = .empty,
+                .groups = .empty,
+                .ungrouped_properties = .empty,
+                .constants = .empty,
                 .level = options.level,
                 .is_virtual = options.is_virtual,
                 .is_abstract = options.is_abstract,
@@ -562,7 +562,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
         /// Resolve getter/setter methods (may create new methods for auto-detection).
         fn doResolve(any: *AnyProperty, methods_opaque: *anyopaque) void {
             const self: *Self = @alignCast(@fieldParentPtr("any", any));
-            const methods: *std.ArrayListUnmanaged(*Method(T)) = @ptrCast(@alignCast(methods_opaque));
+            const methods: *std.ArrayList(*Method(T)) = @ptrCast(@alignCast(methods_opaque));
             const alloc = self.class.allocator();
 
             // Indexed properties cannot use auto-detection
@@ -626,7 +626,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
         fn resolveGetter(
             getter: Accessor(T),
             alloc: Allocator,
-            methods: *std.ArrayListUnmanaged(*Method(T)),
+            methods: *std.ArrayList(*Method(T)),
         ) ?*const Method(T) {
             return switch (getter) {
                 .auto => if (can_auto_getter) autoDetectGetter(alloc, methods) else unreachable,
@@ -638,7 +638,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
         fn resolveSetter(
             setter: Accessor(T),
             alloc: Allocator,
-            methods: *std.ArrayListUnmanaged(*Method(T)),
+            methods: *std.ArrayList(*Method(T)),
         ) ?*const Method(T) {
             return switch (setter) {
                 .auto => if (can_auto_setter) autoDetectSetter(alloc, methods) else unreachable,
@@ -649,7 +649,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
 
         fn autoDetectGetter(
             alloc: Allocator,
-            methods: *std.ArrayListUnmanaged(*Method(T)),
+            methods: *std.ArrayList(*Method(T)),
         ) *const Method(T) {
             // Auto-detect: check for getX method, then field
             if (@hasDecl(T, getter_decl)) {
@@ -672,7 +672,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
 
         fn autoDetectSetter(
             alloc: Allocator,
-            methods: *std.ArrayListUnmanaged(*Method(T)),
+            methods: *std.ArrayList(*Method(T)),
         ) *const Method(T) {
             // Auto-detect: check for setX method, then field
             if (@hasDecl(T, setter_decl)) {
@@ -751,13 +751,13 @@ pub fn Group(comptime T: type) type {
 
         class: *Class(T),
         name: [:0]const u8,
-        entries: std.ArrayListUnmanaged(Entry),
+        entries: std.ArrayList(Entry),
 
         pub fn init(class: *Class(T), name: [:0]const u8) Self {
             return .{
                 .class = class,
                 .name = name,
-                .entries = .{},
+                .entries = .empty,
             };
         }
 
@@ -825,7 +825,7 @@ pub fn Subgroup(comptime T: type) type {
 
         class: *Class(T),
         name: [:0]const u8,
-        properties: std.ArrayListUnmanaged(*AnyProperty),
+        properties: std.ArrayList(*AnyProperty),
 
         pub fn init(class: *Class(T), subgroup_name: [:0]const u8) Self {
             return .{

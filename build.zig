@@ -159,11 +159,16 @@ pub fn build(b: *Build) !void {
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
 
-        var tests_dir = try std.fs.cwd().openDir(b.path("test").getPath2(b, null), .{ .iterate = true });
-        defer tests_dir.close();
+        const path = try b.path("test").getPath4(b, null);
+
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const io = threaded.io();
+
+        var tests_dir = try path.openDir(io, "", .{ .iterate = true });
+        defer tests_dir.close(io);
 
         var iter = tests_dir.iterate();
-        while (iter.next() catch null) |entry| {
+        while (iter.next(io) catch null) |entry| {
             if (entry.kind != .directory) continue;
 
             const test_mod = b.createModule(.{

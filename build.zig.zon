@@ -6,8 +6,8 @@
 
     .dependencies = .{
         .bbcodez = .{
-            .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
-            .hash = "bbcodez-0.0.1-dev-YlrOBo-iAQBWdgFSZ5eINgMNAZlmrHLQ35zKSZEEqgS2",
+            .url = "git+https://github.com/gdzig/bbcodez#7ca97c0738d274195bcb28ab5c789ee0579abbcf",
+            .hash = "bbcodez-0.0.1-dev-YlrOBmyhAQBdGQs5DI8s5xn5nlRg_KQP-aQfCa9eseZp",
         },
         .casez = .{
             .url = "git+https://github.com/gdzig/casez#9732adbfd8c591ddd6e9c3feab016bf9af779d6c",
@@ -19,8 +19,8 @@
             .lazy = true,
         },
         .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions.git#4f787c5e8765906359911a64d4fb1c8b1ea6c061",
-            .hash = "godot-0.0.0-Nast2tZgBgC6uBE0ft9hVjtKn_BoDWqYo7mQ6BGGZWZf",
+            .url = "git+https://github.com/gdzig/godot-versions#116979cfb99c8e39243bbf46f9e16f43eb6ea6bb",
+            .hash = "godot-0.0.0-Nast2odTBwC2exlCL7BOaBUNmU972XQrTXTy9x9ZA1lO",
         },
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#e37ece30bdafc185e88a4bb5d9869115c8d8503f",
