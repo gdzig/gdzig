@@ -35,3 +35,6 @@
 - **Type introspection**: `godot.meta` module provides runtime type hierarchy inspection
 - **Flexible header options**: Choose between generated, vendored, or custom headers
 - **Improved bindgen**: Completely rewritten and more robust code generation that allowed us to implement all of the above
+- **Fixed varcall return ownership**: A bound method returning a builtin (`Array`, `Dictionary`, `String`, etc.) now transfers ownership to the caller on both the `ptrcall` and `varcall` entry points; previously `varcall` copied the value into a `Variant` and leaked the callee's local
+  - **Breaking**: if your method returned a *borrowed* builtin (one whose handle you kept and reused), that call was only correct on `varcall` before — it is now a double-free. Return a fresh copy instead of a borrowed handle
+  - Full return contract: builtin returns are moved/adopted by the caller on both paths; `*RefCounted` object returns are borrowed on both paths (`Variant`/`varcall` and `ptrcall` both take their own reference for the caller, so the callee's is untouched)
