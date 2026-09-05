@@ -101,7 +101,9 @@ pub fn MethodConfig(comptime Class: type) type {
                         return Variant.nil;
                     } else {
                         const result = @call(.auto, method, call_args);
-                        return Variant.init(ReturnType, result);
+                        const variant = Variant.init(ReturnType, result);
+                        releaseVarReturn(ReturnType, result);
+                        return variant;
                     }
                 }
 
@@ -117,19 +119,8 @@ pub fn MethodConfig(comptime Class: type) type {
                     } else {
                         const result = @call(.auto, method, call_args);
                         if (ret) |r| {
-                            ptrcall.writeReturn(ReturnType, r, result);
+                            writePtrReturn(ReturnType, r, result);
                         }
-                    }
-                }
-
-                fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
-                    if (comptime class.isRefCountedPtr(ArgType) and class.isOpaqueClassPtr(ArgType)) {
-                        const obj = gdzig.raw.refGetObject(@ptrCast(p_arg));
-                        return @ptrCast(obj.?);
-                    } else if (comptime class.isOpaqueClassPtr(ArgType)) {
-                        return @ptrCast(@constCast(p_arg));
-                    } else {
-                        return ptrcall.readArg(ArgType, p_arg);
                     }
                 }
             };
@@ -162,7 +153,7 @@ pub fn MethodConfig(comptime Class: type) type {
 
                 fn ptrCall(instance: *Class, _: [*]const *const anyopaque, ret: ?*anyopaque) void {
                     if (ret) |r| {
-                        ptrcall.writeReturn(FieldType, r, @field(instance, field_name));
+                        writePtrReturn(FieldType, r, @field(instance, field_name));
                     }
                 }
             };
@@ -194,7 +185,7 @@ pub fn MethodConfig(comptime Class: type) type {
                 }
 
                 fn ptrCall(instance: *Class, args: [*]const *const anyopaque, _: ?*anyopaque) void {
-                    @field(instance, field_name) = ptrcall.readArg(FieldType, args[0]);
+                    @field(instance, field_name) = ptrToArg(FieldType, args[0]);
                 }
             };
 
@@ -207,4 +198,83 @@ pub fn MethodConfig(comptime Class: type) type {
             };
         }
     };
+}
+
+/// Decode one extension-method ptrcall argument. RefCounted values travel
+/// through Godot's Ref ABI, including extension classes and nullable Refs;
+/// their slot is not the raw object pointer represented by the Zig type.
+fn ptrToArg(comptime ArgType: type, p_arg: *const anyopaque) ArgType {
+    if (comptime class.isRefCountedPtr(ArgType)) {
+        const Ptr = class.ClassPtrOf(ArgType);
+        const object = gdzig.raw.refGetObject(@ptrCast(p_arg)) orelse {
+            if (comptime class.isNullableClassPtr(ArgType)) return null;
+            @panic("non-null RefCounted ptrcall argument contained a null Ref");
+        };
+
+        const value: Ptr = if (comptime class.isOpaqueClassPtr(Ptr))
+            @ptrCast(@alignCast(object))
+        else blk: {
+            const Class = std.meta.Child(Ptr);
+            const Base = class.BaseOf(Class);
+            const base: *Base = @ptrCast(@alignCast(object));
+            break :blk base.asInstance(Class) orelse @panic("Ref ptrcall argument has the wrong extension class");
+        };
+        return @as(ArgType, value);
+    }
+
+    if (comptime class.isOpaqueClassPtr(ArgType)) {
+        return @ptrCast(@constCast(p_arg));
+    }
+    return ptrcall.readArg(ArgType, p_arg);
+}
+
+/// Encode one extension-method ptrcall return. Godot supplies storage for a
+/// Ref wrapper when the declared type is RefCounted, so populate that wrapper
+/// instead of writing the Zig object pointer directly into it.
+fn writePtrReturn(comptime ReturnType: type, p_ret: *anyopaque, value: ReturnType) void {
+    if (comptime class.isRefCountedPtr(ReturnType)) {
+        const object: ?*gdzig.class.Object = if (comptime class.isNullableClassPtr(ReturnType))
+            if (value) |object_value| .upcast(object_value) else null
+        else
+            .upcast(value);
+        gdzig.raw.refSetObject(@ptrCast(p_ret), if (object) |obj| @ptrCast(obj) else null);
+        return;
+    }
+    ptrcall.writeReturn(ReturnType, p_ret, value);
+}
+
+/// Drop the callee's own reference to a value it just returned through the varcall path, so
+/// that both entry points registered for a bound method agree on who owns the return value.
+///
+/// `ptrcall` sets the convention for builtins: `ptrcall.writeReturn` writes the struct into
+/// the engine's return slot bitwise, which is a move — ownership transfers to the caller and
+/// the callee's local is dead afterwards. `varcall` cannot move, because `Variant.init` goes
+/// through Godot's copy constructor and takes a reference of its own. Without this call the
+/// callee's reference is never dropped, so a method returning a freshly built `Array` leaks
+/// it on `varcall` while being correct on `ptrcall`, and a method returning a borrowed one is
+/// a use-after-free on `ptrcall` — no return value is correct on both paths.
+///
+/// Only builtins with a Godot destructor are released. Godot reports that through
+/// `has_destructor`, and bindgen emits `deinit` exactly for those, so `@hasDecl` is the
+/// type-driven form of that flag: `Array`, `Dictionary`, `String`, `StringName`, `NodePath`,
+/// `Callable`, `Signal` and the `Packed*Array` family have one; `Vector2`, `Color`, `Rect2`,
+/// `Transform3d`, `Basis`, `Projection`, `Aabb` and friends do not. Restricting to structs
+/// keeps `@hasDecl` off scalars, enums and pointers, where it would not compile.
+///
+/// Object pointers are deliberately *not* released. Both paths already agree on them:
+/// `writePtrReturn` hands a RefCounted return to `refSetObject`, which calls Godot's
+/// `reference_ptr` and takes a reference for the caller, exactly as `Variant.init` does. They
+/// are both copies, so releasing here would leave the caller holding the only reference to an
+/// object the callee still believes it owns. Non-refcounted object pointers are never
+/// referenced by either path and own nothing.
+///
+/// `Variant` itself has a `deinit` and would match the struct-with-`deinit` predicate below, but
+/// it is unreachable as a `ReturnType` today because `Variant.Tag.forType` has no `Variant` case
+/// and `@compileError`s first. If a pass-through `Variant` return is ever added, releasing it
+/// here would double-free: exempt it explicitly, or re-derive its ownership from scratch.
+fn releaseVarReturn(comptime ReturnType: type, value: ReturnType) void {
+    if (comptime @typeInfo(ReturnType) == .@"struct" and @hasDecl(ReturnType, "deinit")) {
+        var owned: ReturnType = value;
+        owned.deinit();
+    }
 }
