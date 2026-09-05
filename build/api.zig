@@ -363,13 +363,15 @@ fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
         \\[libraries]
         \\linux.debug.x86_64 = "res://{s}"
         \\linux.release.x86_64 = "res://{s}"
+        \\linux.debug.arm64 = "res://{s}"
+        \\linux.release.arm64 = "res://{s}"
         \\windows.debug.x86_64 = "res://{s}"
         \\windows.release.x86_64 = "res://{s}"
         \\macos.debug.arm64 = "res://{s}"
         \\macos.release.arm64 = "res://{s}"
         \\macos.debug.x86_64 = "res://{s}"
         \\macos.release.x86_64 = "res://{s}"
-    , .{ lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name });
+    , .{ lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name });
 }
 
 const std = @import("std");
