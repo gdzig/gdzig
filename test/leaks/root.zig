@@ -92,6 +92,45 @@ const RefReturnNode = struct {
     }
 };
 
+test "varcall adopts a builtin return value" {
+    const Returner = struct {
+        payload: *RefCounted,
+
+        /// Builds a fresh `Array` holding one reference to `payload` and hands
+        /// ownership of it to the caller, the way `ptrcall` already expects.
+        pub fn makeArray(self: *@This()) Array {
+            var array = Array.init();
+            const boxed = Variant.init(*RefCounted, self.payload);
+            defer boxed.deinit();
+            array.append(boxed);
+            return array;
+        }
+    };
+
+    const object = RefCounted.init();
+    try testing.expectEqual(@as(i32, 1), object.getReferenceCount());
+
+    var returner: Returner = .{ .payload = object };
+    const config = gdzig.extension.testing.MethodConfig(Returner).fromName("make_array", "makeArray", .{});
+
+    const no_args: []const *const Variant = &.{};
+    const variant = try config.call.?(&returner, no_args);
+
+    // The Array now inside the Variant holds the only reference to `object`
+    // besides our own.
+    try testing.expectEqual(@as(i32, 2), object.getReferenceCount());
+
+    // Destroying the Variant has to destroy that Array, which it can only do if
+    // `call` released the callee's own handle after boxing it. `Variant.init`
+    // copies rather than moves, so without that release the Array outlives the
+    // Variant and keeps `object` referenced forever.
+    variant.deinit();
+    try testing.expectEqual(@as(i32, 1), object.getReferenceCount());
+
+    try testing.expect(object.unreference());
+    object.destroy();
+}
+
 const std = @import("std");
 const testing = std.testing;
 
@@ -100,6 +139,7 @@ const general = gdzig.general;
 const allocator = gdzig.testing.allocator;
 const Node = gdzig.class.Node;
 const Object = gdzig.class.Object;
+const Array = gdzig.builtin.Array;
 const RefCounted = gdzig.class.RefCounted;
 const Resource = gdzig.class.Resource;
 const ResourceSaver = gdzig.class.ResourceSaver;
