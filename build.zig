@@ -1,5 +1,3 @@
-const latest_version = "4.6";
-
 pub fn build(b: *Build) !void {
     //
     // Options
@@ -9,7 +7,6 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
-    const godot_version = b.option([]const u8, "godot-version", "Download and use this Godot version (e.g. `latest` or `4.5`)");
     const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
 
     //
@@ -30,48 +27,39 @@ pub fn build(b: *Build) !void {
     // Godot
     //
 
-    // Godot executable for the host (used for bindgen, running editor, etc.)
-    const godot_exe_host: ?Build.LazyPath = blk: {
+    const godot_cpp = b.dependency("godot_cpp", .{});
+    const python = b.findProgram(&.{ "python3", "python" }, &.{}) catch @panic("Python is required to generate gdextension_interface.h");
+    const generate_header = b.addSystemCommand(&.{python});
+    generate_header.addArgs(&.{
+        "-c",
+        \\import importlib.util, sys
+        \\out_path, script_path, source_path = sys.argv[1:4]
+        \\spec = importlib.util.spec_from_file_location("make_interface_header", script_path)
+        \\module = importlib.util.module_from_spec(spec)
+        \\spec.loader.exec_module(module)
+        \\module.generate_gdextension_interface_header(out_path, source_path)
+    });
+    const generated_interface_header = generate_header.addOutputFileArg("gdextension_interface.h");
+    generate_header.addFileArg(godot_cpp.path("make_interface_header.py"));
+    generate_header.addFileArg(godot_cpp.path("gdextension/gdextension_interface.json"));
+
+    const headers_write = b.addWriteFiles();
+    _ = headers_write.addCopyFile(generated_interface_header, "gdextension_interface.h");
+    _ = headers_write.addCopyFile(godot_cpp.path("gdextension/extension_api-4-7.json"), "extension_api.json");
+    const headers = headers_write.getDirectory();
+
+    // Godot executable for integration tests and examples.
+    const godot_exe: Build.LazyPath = blk: {
         if (godot_path) |p| {
             break :blk .{ .cwd_relative = p };
-        }
-        if (godot_version) |v| {
-            break :blk godot.executable(b, b.graph.host, v);
         }
         if (b.findProgram(&.{"godot"}, &.{}) catch null) |p| {
             break :blk .{ .cwd_relative = p };
         }
-        break :blk godot.executable(b, b.graph.host, latest_version);
+        @panic("Godot executable not found. Install godot on PATH or pass -Dgodot-path=<path>");
     };
 
-    // Godot executable for the target (used for running tests)
-    // This enables cross-platform testing with -fwine
-    const godot_exe_target: ?Build.LazyPath = blk: {
-        if (godot_path) |p| {
-            // If user specifies a path, assume it's for the target
-            break :blk .{ .cwd_relative = p };
-        }
-        const tgt = if (target.result.cpu.arch.isWasm()) b.graph.host else target;
-        if (godot_version) |v| {
-            break :blk godot.executable(b, tgt, v);
-        }
-        break :blk godot.executable(b, tgt, latest_version);
-    };
-
-    const headers = blk: {
-        const api_header_source: godot.HeaderSource = if (godot_path != null) .{ .exe = godot_exe_host.? } else if (godot_version) |v| .{ .version = v } else .{ .version = latest_version };
-        const gdextension_interface_h = godot.headers(b, b.graph.host, api_header_source).path(b, "gdextension_interface.h");
-        const extension_api_json = godot.headers(b, b.graph.host, api_header_source).path(b, "extension_api.json");
-
-        const write = b.addWriteFiles();
-        _ = write.addCopyFile(gdextension_interface_h, "gdextension_interface.h");
-        _ = write.addCopyFile(extension_api_json, "extension_api.json");
-        break :blk write.getDirectory();
-    };
-
-    if (godot_exe_target) |exe| {
-        b.addNamedLazyPath("godot", exe);
-    }
+    b.addNamedLazyPath("godot", godot_exe);
     b.addNamedLazyPath("gdextension_interface.h", headers.path(b, "gdextension_interface.h"));
     b.addNamedLazyPath("extension_api.json", headers.path(b, "extension_api.json"));
 
@@ -215,27 +203,10 @@ pub fn build(b: *Build) !void {
     });
 }
 
-fn getGodotVersion(b: *Build, p: Build.LazyPath) []const u8 {
-    const result = std.process.Child.run(.{
-        .allocator = b.allocator,
-        .argv = &.{ p.getPath2(b, null), "--version" },
-    }) catch @panic("Failed to run godot --version");
-    const output = std.mem.trim(u8, result.stdout, &std.ascii.whitespace);
-
-    var parts = std.mem.splitScalar(u8, output, '.');
-    const major = parts.next() orelse @panic("Failed to parse major version");
-    const minor = parts.next() orelse @panic("Failed to parse minor version");
-    const patch = parts.next() orelse @panic("Failed to parse patch version");
-
-    return b.fmt("{s}.{s}.{s}", .{ major, minor, patch });
-}
-
 const std = @import("std");
 const Build = std.Build;
 const Io = std.Io;
 const Dir = Io.Dir;
-
-const godot = @import("godot");
 
 const api = @import("build/api.zig");
 pub const addExtension = api.addExtension;
