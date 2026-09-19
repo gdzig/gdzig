@@ -14,6 +14,12 @@ expected until a stable version is released. Issue reports, feature requests, an
 
 **Note:** gdzig currently targets these exact Zig and Godot releases.
 
+### WebAssembly
+
+WebAssembly builds do not work with Zig 0.16.0 because of [ziglang/zig#31849](https://codeberg.org/ziglang/zig/issues/31849). Zig fixed the issue in [ziglang/zig#31850](https://codeberg.org/ziglang/zig/pulls/31850) after the 0.16.0 release.
+
+If you need WebAssembly, use a gdzig compatibility tag for Zig 0.15.x and the matching Zig release. Compatibility tags use the format `zig-{zig-version}-{date}`. Choose the latest tag whose name starts with `zig-0.15.`.
+
 ## Usage:
 
 See the [example](example/) folder for reference.
