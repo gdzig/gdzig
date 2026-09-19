@@ -11,7 +11,7 @@ fn writeBuiltins(ctx: *const Context) !void {
 
     // builtin.zig
     {
-        const file = try ctx.config.output.createFile(ctx.config.io,"builtin.zig", .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, "builtin.zig", .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -42,11 +42,11 @@ fn writeBuiltins(ctx: *const Context) !void {
     }
 
     // builtin/[name].zig
-    try ctx.config.output.createDirPath(ctx.config.io,"builtin");
+    try ctx.config.output.createDirPath(ctx.config.io, "builtin");
 
     for (ctx.builtins.values()) |*builtin| {
         const filename = try std.fmt.allocPrint(ctx.arena.allocator(), "builtin/{s}.zig", .{builtin.module});
-        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, filename, .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -295,7 +295,7 @@ fn writeClasses(ctx: *const Context) !void {
 
     // class.zig
     {
-        const file = try ctx.config.output.createFile(ctx.config.io,"class.zig", .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, "class.zig", .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -322,12 +322,12 @@ fn writeClasses(ctx: *const Context) !void {
     }
 
     // class/[name].zig
-    try ctx.config.output.createDirPath(ctx.config.io,"class");
+    try ctx.config.output.createDirPath(ctx.config.io, "class");
     for (ctx.classes.values()) |*class| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "class/{s}.zig", .{class.module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, filename, .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -866,7 +866,7 @@ fn writeGlobals(ctx: *const Context) !void {
 
     // global.zig
     {
-        const file = try ctx.config.output.createFile(ctx.config.io,"global.zig", .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, "global.zig", .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -900,12 +900,12 @@ fn writeGlobals(ctx: *const Context) !void {
     }
 
     // global/[name].zig
-    try ctx.config.output.createDirPath(ctx.config.io,"global");
+    try ctx.config.output.createDirPath(ctx.config.io, "global");
     for (ctx.enums.values()) |*@"enum"| {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{@"enum".module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, filename, .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -921,7 +921,7 @@ fn writeGlobals(ctx: *const Context) !void {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "global/{s}.zig", .{flag.module});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, filename, .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -1498,7 +1498,7 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
 fn writeDispatchTable(ctx: *Context) !void {
     var buf: [1024]u8 = undefined;
 
-    const file = try ctx.config.output.createFile(ctx.config.io,"DispatchTable.zig", .{});
+    const file = try ctx.config.output.createFile(ctx.config.io, "DispatchTable.zig", .{});
     defer file.close(ctx.config.io);
 
     var file_writer = file.writerStreaming(ctx.config.io, &buf);
@@ -1585,7 +1585,7 @@ fn writeModules(ctx: *const Context) !void {
         const filename = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}.zig", .{module.name});
         defer ctx.rawAllocator().free(filename);
 
-        const file = try ctx.config.output.createFile(ctx.config.io,filename, .{});
+        const file = try ctx.config.output.createFile(ctx.config.io, filename, .{});
         defer file.close(ctx.config.io);
 
         var file_writer = file.writerStreaming(ctx.config.io, &buf);

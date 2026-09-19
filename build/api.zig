@@ -334,7 +334,7 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
 }
 
 fn generateMainScene() []const u8 {
-    return 
+    return
     \\[gd_scene format=3]
     \\
     \\[node name="Main" type="Node"]
