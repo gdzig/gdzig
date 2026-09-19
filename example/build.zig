@@ -3,7 +3,6 @@ pub fn build(b: *Build) !void {
     var target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const godot_version = b.option([]const u8, "godot-version", "Download and use this Godot version (e.g. `latest` or `4.5`)");
     const godot_path = b.option([]const u8, "godot-path", "Directory containing Godot executable [default: $PATH]");
     const single_threaded = b.option(bool, "single_threaded", "Target single threaded GdExtension [default: false]") orelse false;
 
@@ -16,7 +15,6 @@ pub fn build(b: *Build) !void {
     const gdzig_dep = b.dependency("gdzig", .{
         .target = target,
         .optimize = optimize,
-        .@"godot-version" = godot_version,
         .@"godot-path" = godot_path,
     });
 
@@ -67,4 +65,3 @@ const std = @import("std");
 const Build = std.Build;
 
 const gdzig = @import("gdzig");
-const godot = @import("godot");
