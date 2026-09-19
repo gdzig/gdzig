@@ -1,9 +1,3 @@
-const std = @import("std");
-const build_options = @import("build_options");
-const Io = std.Io;
-const Dir = Io.Dir;
-const File = Io.File;
-
 const Config = @This();
 
 arch: Arch,
@@ -95,3 +89,10 @@ pub fn testConfig(io: Io, output: Dir) !Config {
         .io = io,
     };
 }
+
+const std = @import("std");
+const build_options = @import("build_options");
+
+const Io = std.Io;
+const Dir = Io.Dir;
+const File = Io.File;

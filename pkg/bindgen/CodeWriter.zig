@@ -74,7 +74,7 @@ pub fn printLine(this: *CodeWriter, comptime fmt: []const u8, args: anytype) !vo
 }
 
 test "indents" {
-    var out = Writer.Allocating.init(testing.allocator);
+    var out: Writer.Allocating = .init(testing.allocator);
     defer out.deinit();
 
     var w = CodeWriter.init(&out.writer);

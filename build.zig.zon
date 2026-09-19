@@ -35,6 +35,7 @@
     .paths = .{
         "LICENSE",
         "README.md",
+        "CODE_STYLE.md",
         "gdzig",
         "gdzig_common",
         "gdzig_bindgen",

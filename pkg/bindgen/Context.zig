@@ -237,7 +237,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
 
         // getting function docs
         if (std.mem.indexOf(u8, line, "/*")) |i| if (i >= 0) {
-            doc_start = doc_writer.writer.buffer[0..doc_writer.writer.end].len;
+            doc_start = doc_writer.written().len;
 
             if (line.len <= 4) {
                 continue;
@@ -264,7 +264,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 }
 
                 if (is_last_line) {
-                    doc_end = doc_writer.writer.buffer[0..doc_writer.writer.end].len - 1;
+                    doc_end = doc_writer.written().len - 1;
                 }
             }
         }
@@ -295,7 +295,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             const docs: ?[]const u8 = blk: {
                 if (doc_start) |start_index| {
                     if (doc_end) |end_index| {
-                        break :blk try self.allocator().dupe(u8, doc_writer.writer.buffer[0..doc_writer.writer.end][start_index..end_index]);
+                        break :blk try self.allocator().dupe(u8, doc_writer.written()[start_index..end_index]);
                     }
                 }
                 break :blk null;
