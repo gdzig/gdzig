@@ -11,7 +11,7 @@ jobs:
   test-pr:
     name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
+    timeout-minutes: 15
     if: github.event_name == 'pull_request'
     strategy:
       matrix:
@@ -31,7 +31,8 @@ jobs:
   test-full:
     name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
@@ -41,7 +42,7 @@ jobs:
         include:
           - os: macos-latest
             godot: "4.7.2"
-          # Temporarily disabled while we figure out hanging
+          # Temporarily non-blocking while Windows CI is stabilized
           - os: windows-latest
             godot: "4.7.2"
 
