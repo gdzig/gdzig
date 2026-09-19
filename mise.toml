@@ -1,5 +1,5 @@
 [tools]
-godot = "latest"
+godot = "4.7.2-stable"
 pre-commit = "latest"
 zlint = "latest"
 usage = "latest"
