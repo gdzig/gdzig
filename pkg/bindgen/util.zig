@@ -75,6 +75,24 @@ pub fn shouldSkipClass(class_name: []const u8) bool {
         std.mem.eql(u8, class_name, "int") or
         std.mem.eql(u8, class_name, "float");
 }
+pub fn mixinContents(contents: []const u8) []const u8 {
+    const start_marker = "// @mixin start";
+    const start_idx = if (std.mem.indexOf(u8, contents, start_marker)) |idx| blk: {
+        var marker_end = idx + start_marker.len;
+        if (marker_end < contents.len and contents[marker_end] == '\r') marker_end += 1;
+        if (marker_end < contents.len and contents[marker_end] == '\n') marker_end += 1;
+        break :blk marker_end;
+    } else 0;
+
+    const stop_marker = "// @mixin stop";
+    const stop_idx = if (std.mem.indexOf(u8, contents[start_idx..], stop_marker)) |idx| start_idx + idx else contents.len;
+    return contents[start_idx..stop_idx];
+}
+
+test "mixinContents handles CRLF markers" {
+    const contents = "before\r\n// @mixin start\r\npub fn f() void {}\r\n// @mixin stop\r\nafter";
+    try std.testing.expectEqualStrings("pub fn f() void {}\r\n", mixinContents(contents));
+}
 
 const std = @import("std");
 

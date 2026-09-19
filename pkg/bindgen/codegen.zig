@@ -1488,11 +1488,7 @@ fn writeMixin(w: *CodeWriter, comptime fmt: []const u8, args: anytype, ctx: *con
     var file_reader = file.readerStreaming(ctx.config.io, &buf);
     const contents = try file_reader.interface.allocRemaining(arena, .unlimited);
 
-    const start_marker = "// @mixin start\n";
-    const start_idx = if (std.mem.indexOf(u8, contents, start_marker)) |idx| idx + start_marker.len else 0;
-    const stop_idx = if (std.mem.indexOf(u8, contents[start_idx..], "// @mixin stop")) |idx| start_idx + idx else contents.len;
-
-    try w.writeAll(contents[start_idx..stop_idx]);
+    try w.writeAll(util.mixinContents(contents));
 }
 
 fn writeDispatchTable(ctx: *Context) !void {
