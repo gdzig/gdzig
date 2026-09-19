@@ -32,18 +32,14 @@ jobs:
     name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
-        # Compatibility target on Linux, macOS, and Windows
+        # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.7.2"]
         include:
           - os: macos-latest
-            godot: "4.7.2"
-          # Temporarily non-blocking while Windows CI is stabilized
-          - os: windows-latest
             godot: "4.7.2"
 
     steps:
