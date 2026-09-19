@@ -17,6 +17,15 @@ runs:
       with:
         cache-key: ${{ inputs.cache-key }}
 
+    - name: Setup mise
+      uses: jdx/mise-action@v2
+      with:
+        install: false
+
+    - name: Install Godot
+      shell: bash
+      run: mise install godot@${{ inputs.godot-version }}-stable
+
     - name: Run tests
       shell: bash
-      run: zig build test -Dgodot-version=${{ inputs.godot-version }}
+      run: mise exec godot@${{ inputs.godot-version }}-stable -- bash -c 'zig build test -Dgodot-path="$(command -v godot)"'
