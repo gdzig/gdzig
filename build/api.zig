@@ -115,7 +115,7 @@ fn addExtensionWeb(
     activate_emsdk.step.dependOn(&install_emsdk.step);
 
     lib.step.dependOn(&activate_emsdk.step);
-    lib.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
+    mod.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
     // Run emcc to produce final .wasm
     const optimize = options.optimize;
