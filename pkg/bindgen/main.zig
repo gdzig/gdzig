@@ -28,7 +28,8 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator = arena.allocator();
 
-    var args_iter = std.process.Args.Iterator.init(init.minimal.args);
+    var args_iter = try std.process.Args.Iterator.initAllocator(init.minimal.args, allocator);
+    defer args_iter.deinit();
     var args_list: std.ArrayListUnmanaged([]const u8) = .empty;
     while (args_iter.next()) |arg| {
         try args_list.append(allocator, arg);
