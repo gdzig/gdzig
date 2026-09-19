@@ -18,7 +18,7 @@ runs:
         cache-key: ${{ inputs.cache-key }}
 
     - name: Setup mise
-      uses: jdx/mise-action@v2
+      uses: jdx/mise-action@v4
       with:
         install: false
 
