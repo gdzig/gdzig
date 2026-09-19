@@ -18,9 +18,9 @@
             .hash = "N-V-__8AADn0DwBtrxa-qJrkru1KtGp4EA9dRIuW2x70KtFc",
             .lazy = true,
         },
-        .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions.git#92c55bacea96516419b3cac21d1e6b4d9ee674a0",
-            .hash = "godot-0.0.0-Nast2j23BgBhYeXm_8jcTuFT0N5B44EvLKt-YzEiOqcp",
+        .godot_cpp = .{
+            .url = "https://github.com/godotengine/godot-cpp/archive/refs/tags/10.0.0-stable.tar.gz",
+            .hash = "N-V-__8AAPiBDgI4ZFSc7fNDjGwiILwckhuE6UrxqNraBX0S",
         },
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#e37ece30bdafc185e88a4bb5d9869115c8d8503f",
