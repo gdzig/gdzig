@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Quick test for PRs - only latest Godot on Linux
+  # Quick test for PRs - Godot compatibility target on Linux
   test-pr:
     name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        godot: ["4.5"]
+        godot: ["4.7.2"]
 
     steps:
       - name: Checkout
@@ -35,16 +35,15 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
       matrix:
-        # All Godot versions on Linux, latest on macOS/Windows
+        # Compatibility target on Linux, macOS, and Windows
         os: [ubuntu-latest]
-        godot: ["4.1", "4.2", "4.3", "4.4", "4.5"]
+        godot: ["4.7.2"]
         include:
-          # Add macOS and Windows for latest Godot only
           - os: macos-latest
-            godot: "4.5"
+            godot: "4.7.2"
           # Temporarily disabled while we figure out hanging
           - os: windows-latest
-            godot: "4.5"
+            godot: "4.7.2"
 
     steps:
       - name: Checkout
