@@ -185,11 +185,13 @@ pub fn build(b: *Build) !void {
     // Default step
     //
 
-    b.installDirectory(.{
+    const install_bindings = b.addInstallDirectory(.{
         .source_dir = bindings,
         .install_dir = .{ .custom = "../" },
         .install_subdir = "src",
     });
+    install_bindings.step.dependOn(&gdzig_lib.step);
+    b.getInstallStep().dependOn(&install_bindings.step);
     b.installArtifact(bindgen_exe);
     b.installDirectory(.{
         .source_dir = gdzig_lib.getEmittedDocs(),
