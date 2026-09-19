@@ -231,7 +231,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     var doc_line_temp: [1024]u8 = undefined;
 
     while (true) {
-        const line: []const u8 = std.mem.trim(u8, (reader.takeDelimiterInclusive('\n') catch break), "\n");
+        const line = trimLineEnding(reader.takeDelimiterInclusive('\n') catch break);
 
         const contains_name_doc = std.mem.indexOf(u8, line, name_doc) != null;
 
@@ -649,6 +649,18 @@ fn parseSinceVersion(docs: ?[]const u8) ?[]const u8 {
 
     // Return "X.Y" slice
     return doc_str[version_start..][0..3];
+}
+
+fn trimLineEnding(line: []const u8) []const u8 {
+    return std.mem.trimEnd(u8, line, "\r\n");
+}
+
+test "trimLineEnding normalizes header line endings" {
+    const expected = " * @name get_godot_version";
+
+    try std.testing.expectEqualStrings(expected, trimLineEnding(expected ++ "\n"));
+    try std.testing.expectEqualStrings(expected, trimLineEnding(expected ++ "\r\n"));
+    try std.testing.expectEqualStrings(expected, trimLineEnding(expected));
 }
 
 const std = @import("std");
