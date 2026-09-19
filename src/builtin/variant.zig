@@ -109,11 +109,15 @@ pub const Variant = extern struct {
                 .dictionary => .{ .dictionary = @constCast(value) },
 
                 // Object
-                .object => .{
-                    .object = .{
-                        .id = @enumFromInt(Object.upcast(if (comptime class.isNullableClassPtr(T)) value.*.? else value.*).getInstanceId()),
-                        .object = Object.upcast(if (comptime class.isNullableClassPtr(T)) value.*.? else value.*),
-                    },
+                .object => blk: {
+                    const object_value = if (comptime class.isNullableClassPtr(T)) value.*.? else value.*;
+                    const object = Object.upcast(object_value);
+                    break :blk .{
+                        .object = .{
+                            .id = @enumFromInt(object.getInstanceId()),
+                            .object = object,
+                        },
+                    };
                 },
 
                 // Packed arrays cannot be wrapped - they require heap-allocated PackedArrayRef
