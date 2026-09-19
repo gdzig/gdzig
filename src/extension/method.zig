@@ -243,35 +243,16 @@ fn writePtrReturn(comptime ReturnType: type, p_ret: *anyopaque, value: ReturnTyp
     ptrcall.writeReturn(ReturnType, p_ret, value);
 }
 
-/// Drop the callee's own reference to a value it just returned through the varcall path, so
-/// that both entry points registered for a bound method agree on who owns the return value.
+/// Releases callee-owned builtin returns after `Variant.init` copies them into a varcall `Variant`.
 ///
-/// `ptrcall` sets the convention for builtins: `ptrcall.writeReturn` writes the struct into
-/// the engine's return slot bitwise, which is a move — ownership transfers to the caller and
-/// the callee's local is dead afterwards. `varcall` cannot move, because `Variant.init` goes
-/// through Godot's copy constructor and takes a reference of its own. Without this call the
-/// callee's reference is never dropped, so a method returning a freshly built `Array` leaks
-/// it on `varcall` while being correct on `ptrcall`, and a method returning a borrowed one is
-/// a use-after-free on `ptrcall` — no return value is correct on both paths.
+/// Ptrcall moves builtin structs into the engine return slot. Varcall copies them, so the
+/// callback still owns its local handle after boxing. Releasing that local keeps freshly built
+/// `Array`, `Dictionary`, `String`, and other destructor-backed builtins from retaining an
+/// extra reference. Plain math builtins and object pointers own nothing here and are left alone.
 ///
-/// Only builtins with a Godot destructor are released. Godot reports that through
-/// `has_destructor`, and bindgen emits `deinit` exactly for those, so `@hasDecl` is the
-/// type-driven form of that flag: `Array`, `Dictionary`, `String`, `StringName`, `NodePath`,
-/// `Callable`, `Signal` and the `Packed*Array` family have one; `Vector2`, `Color`, `Rect2`,
-/// `Transform3d`, `Basis`, `Projection`, `Aabb` and friends do not. Restricting to structs
-/// keeps `@hasDecl` off scalars, enums and pointers, where it would not compile.
-///
-/// Object pointers are deliberately *not* released. Both paths already agree on them:
-/// `writePtrReturn` hands a RefCounted return to `refSetObject`, which calls Godot's
-/// `reference_ptr` and takes a reference for the caller, exactly as `Variant.init` does. They
-/// are both copies, so releasing here would leave the caller holding the only reference to an
-/// object the callee still believes it owns. Non-refcounted object pointers are never
-/// referenced by either path and own nothing.
-///
-/// `Variant` itself has a `deinit` and would match the struct-with-`deinit` predicate below, but
-/// it is unreachable as a `ReturnType` today because `Variant.Tag.forType` has no `Variant` case
-/// and `@compileError`s first. If a pass-through `Variant` return is ever added, releasing it
-/// here would double-free: exempt it explicitly, or re-derive its ownership from scratch.
+/// `Variant` also has `deinit`, but is not a supported `ReturnType` today because
+/// `Variant.Tag.forType` rejects it. If passthrough `Variant` returns become valid, revisit this
+/// rule first.
 fn releaseVarReturn(comptime ReturnType: type, value: ReturnType) void {
     if (comptime @typeInfo(ReturnType) == .@"struct" and @hasDecl(ReturnType, "deinit")) {
         var owned: ReturnType = value;
