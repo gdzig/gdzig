@@ -223,7 +223,7 @@ pub const Class = struct {
 
 pub const GlobalConstant = struct {
     name: []const u8,
-    value: []const u8,
+    value: i64,
 };
 
 pub const GlobalEnum = struct {
@@ -313,7 +313,7 @@ pub fn findParent(self: @This(), class: Class) ?Class {
 pub fn parseFromReader(arena: *ArenaAllocator, reader: *Reader) !Parsed(GodotApi) {
     var json_reader: JsonReader = .init(arena.allocator(), reader);
 
-    return try std.json.parseFromTokenSource(GodotApi, arena.allocator(), &json_reader, .{});
+    return try std.json.parseFromTokenSource(GodotApi, arena.allocator(), &json_reader, .{ .ignore_unknown_fields = true });
 }
 
 const std = @import("std");
