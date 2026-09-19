@@ -361,7 +361,7 @@ fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
     return b.fmt(
         \\[configuration]
         \\entry_symbol = "gdextension_entry"
-        \\compatibility_minimum = "4.1"
+        \\compatibility_minimum = "4.7"
         \\
         \\[libraries]
         \\linux.debug.x86_64 = "res://{0s}"
