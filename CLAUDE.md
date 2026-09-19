@@ -12,10 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `zig build test` - Run all tests (both bindgen and module tests)
 
 ### Build Options
-- `-Dgodot=<path>` - Path to Godot binary (default: "godot")
-- `-Dprecision=<float|double>` - Floating point precision (default: "float")
-- `-Darch=<32|64>` - Architecture bits (default: "64")
-- `-Dheaders=<GENERATED|VENDORED|DEPENDENCY|path>` - Source for Godot headers (default: GENERATED)
+- `-Dgodot-path=<path>` - Path to the Godot executable used by integration tests and examples. If omitted, `godot` must be on PATH.
+- `-Dprecision=<float|double>` - Floating point precision (default: `float`)
+- `-Darch=<32|64>` - Architecture bits (default: `64`)
 - `-Dtarget=<target>` - Cross-compilation target
 - `-Doptimize=<Debug|ReleaseSafe|ReleaseFast|ReleaseSmall>` - Optimization mode
 
@@ -75,7 +74,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Type System
 
-- Uses Zig 0.15.1 features including new Reader/Writer interfaces
+- Targets Zig 0.16.0 and Godot 4.7.2
 - Builtin types map to Zig equivalents based on precision setting (float/double)
 - Classes use oopz dependency for OOP-style inheritance
 - Supports both 32-bit and 64-bit architectures
@@ -98,7 +97,7 @@ Extensions define an entry point using `gdzig.entrypoint()` or `gdzig.entrypoint
 
 ## Current Status
 
-- Migrating to Zig 0.15.1 with updated Reader/Writer interfaces
-- Active development on branch `zig-0.15.1`
+- Migrating to Zig 0.16.0 with Godot 4.7.2 compatibility
+- Active development on branch `zig-0.16`
 - Main branch for PRs: `master`
 - To see the generated code: run `zig build generated`. The generated code will be in the `gdzig/` folder.
