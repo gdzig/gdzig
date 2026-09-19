@@ -148,9 +148,9 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, io: Io, input_dir
 
     // find the @mixin start/stop markers and only parse that section
     const parse_contents: [:0]const u8 = blk: {
-        const start_marker = "// @mixin start\n";
-        const start_idx = if (std.mem.indexOf(u8, contents, start_marker)) |idx| idx + start_marker.len else 0;
-        const stop_idx = if (std.mem.indexOf(u8, contents[start_idx..], "// @mixin stop")) |idx| start_idx + idx else contents.len;
+        const slice = util.mixinContents(contents);
+        const start_idx = @intFromPtr(slice.ptr) - @intFromPtr(contents.ptr);
+        const stop_idx = start_idx + slice.len;
         contents[stop_idx] = 0;
         break :blk contents[start_idx..stop_idx :0];
     };
@@ -254,4 +254,5 @@ const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
 const GodotApi = @import("../GodotApi.zig");
+const util = @import("../util.zig");
 const docs = @import("docs.zig");
