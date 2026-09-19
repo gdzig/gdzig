@@ -46,7 +46,12 @@ pub fn randfRange(self: SpriteNode, comptime T: type, min: T, max: T) T {
 pub fn _ready(self: *SpriteNode) void {
     if (Engine.isEditorHint()) return;
 
-    var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+    const seed = if (comptime builtin.target.cpu.arch.isWasm()) 0 else blk: {
+        var threaded: std.Io.Threaded = .init_single_threaded;
+        const timestamp = std.Io.Timestamp.now(threaded.io(), .real);
+        break :blk timestamp.nanoseconds;
+    };
+    var prng = std.Random.DefaultPrng.init(@intCast(seed));
     self.rng = prng.random();
 
     var logo_path: String = .fromLatin1("res://textures/logo.png");
@@ -104,6 +109,7 @@ pub fn _physicsProcess(self: *SpriteNode, delta: f64) void {
 }
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
