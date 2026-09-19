@@ -8,6 +8,7 @@ pub fn build(b: *Build) !void {
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
     const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
+    const regenerate_interface = b.option(bool, "regenerate-interface", "Regenerate the vendored GDExtension interface header (requires Python)") orelse false;
 
     //
     // Steps
@@ -28,23 +29,26 @@ pub fn build(b: *Build) !void {
     //
 
     const godot_cpp = b.dependency("godot_cpp", .{});
-    const python = b.findProgram(&.{ "python3", "python" }, &.{}) catch @panic("Python is required to generate gdextension_interface.h");
-    const generate_header = b.addSystemCommand(&.{python});
-    generate_header.addArgs(&.{
-        "-c",
-        \\import importlib.util, sys
-        \\out_path, script_path, source_path = sys.argv[1:4]
-        \\spec = importlib.util.spec_from_file_location("make_interface_header", script_path)
-        \\module = importlib.util.module_from_spec(spec)
-        \\spec.loader.exec_module(module)
-        \\module.generate_gdextension_interface_header(out_path, source_path)
-    });
-    const generated_interface_header = generate_header.addOutputFileArg("gdextension_interface.h");
-    generate_header.addFileArg(godot_cpp.path("make_interface_header.py"));
-    generate_header.addFileArg(godot_cpp.path("gdextension/gdextension_interface.json"));
+    const interface_header: Build.LazyPath = if (regenerate_interface) blk: {
+        const python = b.findProgram(&.{ "python3", "python" }, &.{}) catch @panic("Python is required to regenerate gdextension_interface.h");
+        const generate_header = b.addSystemCommand(&.{python});
+        generate_header.addArgs(&.{
+            "-c",
+            \\import importlib.util, sys
+            \\out_path, script_path, source_path = sys.argv[1:4]
+            \\spec = importlib.util.spec_from_file_location("make_interface_header", script_path)
+            \\module = importlib.util.module_from_spec(spec)
+            \\spec.loader.exec_module(module)
+            \\module.generate_gdextension_interface_header(out_path, source_path)
+        });
+        const generated_header = generate_header.addOutputFileArg("gdextension_interface.h");
+        generate_header.addFileArg(godot_cpp.path("make_interface_header.py"));
+        generate_header.addFileArg(godot_cpp.path("gdextension/gdextension_interface.json"));
+        break :blk generated_header;
+    } else b.path("vendor/gdextension_interface.h");
 
     const headers_write = b.addWriteFiles();
-    _ = headers_write.addCopyFile(generated_interface_header, "gdextension_interface.h");
+    _ = headers_write.addCopyFile(interface_header, "gdextension_interface.h");
     _ = headers_write.addCopyFile(godot_cpp.path("gdextension/extension_api-4-7.json"), "extension_api.json");
     const headers = headers_write.getDirectory();
 
