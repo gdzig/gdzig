@@ -361,17 +361,17 @@ fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
         \\compatibility_minimum = "4.1"
         \\
         \\[libraries]
-        \\linux.debug.x86_64 = "res://{s}"
-        \\linux.release.x86_64 = "res://{s}"
-        \\linux.debug.arm64 = "res://{s}"
-        \\linux.release.arm64 = "res://{s}"
-        \\windows.debug.x86_64 = "res://{s}"
-        \\windows.release.x86_64 = "res://{s}"
-        \\macos.debug.arm64 = "res://{s}"
-        \\macos.release.arm64 = "res://{s}"
-        \\macos.debug.x86_64 = "res://{s}"
-        \\macos.release.x86_64 = "res://{s}"
-    , .{ lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name, lib_name });
+        \\linux.debug.x86_64 = "res://{0s}"
+        \\linux.release.x86_64 = "res://{0s}"
+        \\linux.debug.arm64 = "res://{0s}"
+        \\linux.release.arm64 = "res://{0s}"
+        \\windows.debug.x86_64 = "res://{0s}"
+        \\windows.release.x86_64 = "res://{0s}"
+        \\macos.debug.arm64 = "res://{0s}"
+        \\macos.release.arm64 = "res://{0s}"
+        \\macos.debug.x86_64 = "res://{0s}"
+        \\macos.release.x86_64 = "res://{0s}"
+    , .{lib_name});
 }
 
 const std = @import("std");
