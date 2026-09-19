@@ -6,8 +6,8 @@
 
     .dependencies = .{
         .bbcodez = .{
-            .url = "git+https://github.com/gdzig/bbcodez#711dce8ae5e77a5a3f2db832a26426fa79348470",
-            .hash = "bbcodez-0.0.1-dev-YlrOBjShAQDJCxJOom-ZTHH5YynVnnPTnHCOtm4Vad3X",
+            .url = "git+https://github.com/gdzig/bbcodez#7ca97c0738d274195bcb28ab5c789ee0579abbcf",
+            .hash = "bbcodez-0.0.1-dev-YlrOBmyhAQBdGQs5DI8s5xn5nlRg_KQP-aQfCa9eseZp",
         },
         .casez = .{
             .url = "git+https://github.com/gdzig/casez#9732adbfd8c591ddd6e9c3feab016bf9af779d6c",
