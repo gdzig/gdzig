@@ -146,6 +146,20 @@ For vararg functions, gdzig provides two versions to help you:
 
 The non-allocating versions protect you from accidental allocations. If you need to pass a packed array, use the allocating version or box it in a `Variant` yourself and manage its lifetime.
 
+### Registered method arguments
+
+When Godot calls a registered gdzig method, builtin arguments are borrowed for the duration of the call. Do not call `deinit()` on the parameter itself. gdzig releases any temporary builtin value that it creates while decoding the call.
+
+If you need to mutate or keep a copy-on-write builtin such as `Array` or `Dictionary`, make an owned local copy and release that copy when done. A plain Zig assignment does not take a new Godot reference.
+
+```zig
+pub fn clearValues(_: *MyNode, values: Array) void {
+    var owned = values.copy();
+    defer owned.deinit();
+    owned.clear();
+}
+```
+
 ## Common Gotchas
 
 **Leaking Variants**: Any `Variant` returned from a vararg call must be `deinit()`ed. The compiler can't catch this.

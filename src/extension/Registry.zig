@@ -188,12 +188,20 @@ pub fn Class(comptime T: type) type {
         }
 
         /// Add a method by name. Auto-detects the Zig decl from snake_case name.
+        ///
+        /// Builtin arguments are borrowed for the duration of the call. Do not call `deinit()` on
+        /// an incoming parameter. To mutate or retain the value, create an owned value with
+        /// `.copy()` and deinitialize that copy when done.
         pub fn addMethod(self: *Self, comptime name: [:0]const u8, comptime options: Method(T).CreateOptions) void {
             _ = self.createMethod(name, options);
         }
 
         /// Create a method by name and return it for further configuration.
         /// Auto-detects the Zig decl from snake_case name.
+        ///
+        /// Builtin arguments are borrowed for the duration of the call. Do not call `deinit()` on
+        /// an incoming parameter. To mutate or retain the value, create an owned value with
+        /// `.copy()` and deinitialize that copy when done.
         pub fn createMethod(self: *Self, comptime name: [:0]const u8, comptime options: Method(T).CreateOptions) *Method(T) {
             const alloc = self.allocator();
             const method = alloc.create(Method(T)) catch @panic("OOM");

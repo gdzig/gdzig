@@ -90,10 +90,20 @@ pub fn MethodConfig(comptime Class: type) type {
                 fn call(instance: *Class, args: []const *const Variant) gdzig.CallError!Variant {
                     var call_args: std.meta.ArgsTuple(MethodType) = undefined;
                     call_args[0] = instance;
+
+                    var initialized_arg_count: usize = 0;
+                    defer inline for (1..Args.len) |i| {
+                        if (i <= initialized_arg_count) {
+                            const ArgType = Args[i].type.?;
+                            releaseVarValue(ArgType, call_args[i]);
+                        }
+                    };
+
                     inline for (1..Args.len) |i| {
                         const ArgType = Args[i].type.?;
                         if (i - 1 < args.len) {
                             call_args[i] = args[i - 1].as(ArgType) orelse return error.InvalidArgument;
+                            initialized_arg_count += 1;
                         }
                     }
                     if (ReturnType == void) {
@@ -102,7 +112,7 @@ pub fn MethodConfig(comptime Class: type) type {
                     } else {
                         const result = @call(.auto, method, call_args);
                         const variant = Variant.init(ReturnType, result);
-                        releaseVarReturn(ReturnType, result);
+                        releaseVarValue(ReturnType, result);
                         return variant;
                     }
                 }
@@ -243,19 +253,23 @@ fn writePtrReturn(comptime ReturnType: type, p_ret: *anyopaque, value: ReturnTyp
     ptrcall.writeReturn(ReturnType, p_ret, value);
 }
 
-/// Releases callee-owned builtin returns after `Variant.init` copies them into a varcall `Variant`.
+/// Releases varcall-owned builtin temporaries after the callback no longer needs them.
 ///
-/// Ptrcall moves builtin structs into the engine return slot. Varcall copies them, so the
-/// callback still owns its local handle after boxing. Releasing that local keeps freshly built
-/// `Array`, `Dictionary`, `String`, and other destructor-backed builtins from retaining an
-/// extra reference. Plain math builtins and object pointers own nothing here and are left alone.
+/// Varcall materializes destructor-backed builtin arguments with `Variant.as`, and boxes
+/// destructor-backed builtin returns with `Variant.init`. Both operations copy the value and leave
+/// this adapter owning a local handle. Releasing that local keeps `Array`, `Dictionary`, `String`,
+/// and other destructor-backed builtins from retaining an extra reference. Plain math builtins and
+/// object pointers own nothing here and are left alone.
 ///
-/// `Variant` also has `deinit`, but is not a supported `ReturnType` today because
-/// `Variant.Tag.forType` rejects it. If passthrough `Variant` returns become valid, revisit this
+/// Ptrcall arguments are deliberately excluded: ptrcall reads Godot-owned argument slots directly,
+/// so there is no adapter-owned temporary to release.
+///
+/// `Variant` also has `deinit`, but is not a supported method argument or return type today because
+/// `Variant.Tag.forType` rejects it. If passthrough `Variant` values become valid, revisit this
 /// rule first.
-fn releaseVarReturn(comptime ReturnType: type, value: ReturnType) void {
-    if (comptime @typeInfo(ReturnType) == .@"struct" and @hasDecl(ReturnType, "deinit")) {
-        var owned: ReturnType = value;
+fn releaseVarValue(comptime T: type, value: T) void {
+    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "deinit")) {
+        var owned: T = value;
         owned.deinit();
     }
 }
