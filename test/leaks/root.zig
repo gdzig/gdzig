@@ -1,6 +1,7 @@
 pub fn register(r: *gdzig.extension.Registry) void {
     const class = r.createClass(RefReturnNode, {}, .auto);
     class.addMethod("get_borrowed_resource", .auto);
+    class.addMethod("accept_array", .auto);
 }
 
 fn ensureRegistered() void {
@@ -26,6 +27,34 @@ test "Variant return from bound method holds a reference to borrowed RefCounted"
     try testing.expectEqual(@as(i32, 2), node.resource.getReferenceCount());
 
     result.deinit();
+    try testing.expectEqual(@as(i32, 1), node.resource.getReferenceCount());
+}
+
+test "varcall releases borrowed builtin arguments" {
+    const node = try RefReturnNode.create();
+    defer node.base.destroy();
+
+    var array: Array = .init();
+    errdefer array.deinit();
+
+    const boxed = Variant.init(*Resource, node.resource);
+    array.append(boxed);
+    boxed.deinit();
+
+    try testing.expectEqual(@as(i32, 2), node.resource.getReferenceCount());
+
+    var arg = Variant.init(Array, array);
+    errdefer arg.deinit();
+
+    const config = gdzig.extension.testing.MethodConfig(RefReturnNode).fromName("accept_array", "acceptArray", .{});
+    const args: []const *const Variant = &.{&arg};
+    const result = try config.call.?(node, args);
+    result.deinit();
+
+    try testing.expectEqual(@as(i32, 2), node.resource.getReferenceCount());
+
+    arg.deinit();
+    array.deinit();
     try testing.expectEqual(@as(i32, 1), node.resource.getReferenceCount());
 }
 
@@ -90,6 +119,8 @@ const RefReturnNode = struct {
     pub fn getBorrowedResource(self: *RefReturnNode) *Resource {
         return self.resource;
     }
+
+    pub fn acceptArray(_: *RefReturnNode, _: Array) void {}
 };
 
 test "varcall adopts a builtin return value" {

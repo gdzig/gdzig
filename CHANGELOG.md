@@ -38,3 +38,6 @@
 - **Fixed varcall return ownership**: A bound method returning a builtin (`Array`, `Dictionary`, `String`, etc.) now transfers ownership to the caller on both the `ptrcall` and `varcall` entry points; previously `varcall` copied the value into a `Variant` and leaked the callee's local
   - **Breaking**: if your method returned a *borrowed* builtin (one whose handle you kept and reused), that call was only correct on `varcall` before — it is now a double-free. Return a fresh copy instead of a borrowed handle
   - Full return contract: builtin returns are moved/adopted by the caller on both paths; `*RefCounted` object returns are borrowed on both paths (`Variant`/`varcall` and `ptrcall` both take their own reference for the caller, so the callee's is untouched)
+- **Fixed varcall argument ownership**: builtin arguments (`Array`, `Dictionary`, `String`, etc.) are borrowed for the duration of a registered method call; gdzig releases the temporary value after the method returns
+  - Do not call `deinit()` on an incoming method parameter
+  - To mutate or retain an incoming builtin argument, use `.copy()` to create an owned local value and call `deinit()` on that copy when done
