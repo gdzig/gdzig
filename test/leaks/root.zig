@@ -31,7 +31,7 @@ test "Variant return from bound method holds a reference to borrowed RefCounted"
 }
 
 test "varcall releases borrowed builtin arguments" {
-    const node = try RefReturnNode.create();
+    const node: *RefReturnNode = try .create();
     defer node.base.destroy();
 
     var array: Array = .init();
