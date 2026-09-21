@@ -37,16 +37,20 @@ test "varcall releases borrowed builtin arguments" {
     var array: Array = .init();
     errdefer array.deinit();
 
-    const boxed = Variant.init(*Resource, node.resource);
+    const boxed: Variant = .init(*Resource, node.resource);
     array.append(boxed);
     boxed.deinit();
 
     try testing.expectEqual(@as(i32, 2), node.resource.getReferenceCount());
 
-    var arg = Variant.init(Array, array);
+    const arg: Variant = .init(Array, array);
     errdefer arg.deinit();
 
-    const config = gdzig.extension.testing.MethodConfig(RefReturnNode).fromName("accept_array", "acceptArray", .{});
+    const config: gdzig.extension.testing.MethodConfig(RefReturnNode) = .fromName(
+        "accept_array",
+        "acceptArray",
+        .{},
+    );
     const args: []const *const Variant = &.{&arg};
     const result = try config.call.?(node, args);
     result.deinit();
