@@ -16,7 +16,6 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
 
     const bbcodez = b.dependency("bbcodez", .{ .target = target, .optimize = optimize });
     const casez = b.dependency("casez", .{ .target = target, .optimize = optimize });
-    const temp = b.dependency("temp", .{ .target = target, .optimize = optimize });
 
     const common_mod = common.build(b, .{
         .target = target,
@@ -50,7 +49,6 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
             .{ .name = "casez", .module = casez.module("casez") },
             .{ .name = "common", .module = common_mod },
             .{ .name = "gdextension", .module = gdextension_mod },
-            .{ .name = "temp", .module = temp.module("temp") },
         },
     });
 

@@ -536,7 +536,6 @@ const casez = @import("casez");
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
-const TempDir = @import("temp").TempDir;
 
 const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
