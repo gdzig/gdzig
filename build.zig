@@ -15,6 +15,7 @@ pub fn build(b: *Build) !void {
     //
 
     const check_step = b.step("check", "Check the build without installing artifacts");
+    const docs_step = b.step("docs", "Generate API documentation");
     const test_step = b.step("test", "Run unit tests");
 
     //
@@ -197,11 +198,14 @@ pub fn build(b: *Build) !void {
     install_bindings.step.dependOn(&gdzig_lib.step);
     b.getInstallStep().dependOn(&install_bindings.step);
     b.installArtifact(bindgen_exe);
-    b.installDirectory(.{
+    const install_docs = b.addInstallDirectory(.{
         .source_dir = gdzig_lib.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
+    install_docs.step.dependOn(&gdzig_lib.step);
+    docs_step.dependOn(&install_docs.step);
+    b.getInstallStep().dependOn(&install_docs.step);
     b.installDirectory(.{
         .source_dir = headers,
         .install_dir = .prefix,
