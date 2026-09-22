@@ -101,3 +101,18 @@ Extensions define an entry point using `gdzig.entrypoint()` or `gdzig.entrypoint
 - Active development on branch `zig-0.16`
 - Main branch for PRs: `master`
 - To see the generated code: run `zig build generated`. The generated code will be in the `gdzig/` folder.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are tracked in GitHub Issues for `gdzig/gdzig`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses a single-context domain documentation layout. See `docs/agents/domain.md`.
+
