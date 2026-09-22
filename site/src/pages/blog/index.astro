@@ -1,0 +1,22 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+
+const repositoryUrl = 'https://github.com/gdzig/gdzig';
+---
+
+<SiteLayout
+  title="Blog — Planned | GDZig"
+  description="Release notes and project updates for GDZig will live here."
+>
+  <section class="hero stub-page" aria-labelledby="blog-title">
+    <p class="eyebrow">Project updates</p>
+    <h1 id="blog-title">Blog — Planned</h1>
+    <p>
+      Release notes and project updates will live here. Until then, follow the
+      repository for current changes.
+    </p>
+    <div class="actions" aria-label="Blog actions">
+      <a href={repositoryUrl} role="button">Follow the repository</a>
+    </div>
+  </section>
+</SiteLayout>

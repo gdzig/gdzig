@@ -1,0 +1,22 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+
+const exampleUrl = 'https://github.com/gdzig/gdzig/tree/master/example';
+---
+
+<SiteLayout
+  title="Showcase — Planned | GDZig"
+  description="Community projects built with GDZig will appear here."
+>
+  <section class="hero stub-page" aria-labelledby="showcase-title">
+    <p class="eyebrow">Community projects</p>
+    <h1 id="showcase-title">Showcase — Planned</h1>
+    <p>
+      Community projects built with GDZig will appear here. Use the example
+      project while this section grows.
+    </p>
+    <div class="actions" aria-label="Showcase actions">
+      <a href={exampleUrl} role="button">View the example project</a>
+    </div>
+  </section>
+</SiteLayout>
