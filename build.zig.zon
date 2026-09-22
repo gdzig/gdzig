@@ -26,10 +26,6 @@
             .url = "git+https://github.com/gdzig/oopz#e37ece30bdafc185e88a4bb5d9869115c8d8503f",
             .hash = "oopz-0.0.0-pFJy_ddWAAABM-zKPi6ChgcCRYMOuWKbEFwEqsfNU-4U",
         },
-        .temp = .{
-            .url = "git+https://github.com/abhinav/temp.zig#7f0a9697d3d46d06c4f84fc3bc5199b7779fab33",
-            .hash = "temp-0.3.0-Ogl1Ff5-AABRtiHj_zDFI0CZVU8ORLPko6iQiw63Znrz",
-        },
     },
 
     .paths = .{

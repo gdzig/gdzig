@@ -305,7 +305,6 @@ const verbatim_tags = &[_][]const u8{
 };
 
 const Node = bbcodez.Node;
-const TempDir = temp.TempDir;
 const Document = bbcodez.Document;
 const Allocator = std.mem.Allocator;
 const Symbol = CodegenContext.Symbol;
@@ -321,7 +320,6 @@ const StringHashMap = std.StringHashMapUnmanaged;
 const std = @import("std");
 const testing = std.testing;
 const Writer = std.Io.Writer;
-const temp = @import("temp");
 const bbcodez = @import("bbcodez");
 
 const logger = std.log.scoped(.docs);

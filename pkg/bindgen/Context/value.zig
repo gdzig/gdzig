@@ -112,7 +112,6 @@ pub const Value = union(ValueType) {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const TempDir = @import("temp").TempDir;
 const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;
