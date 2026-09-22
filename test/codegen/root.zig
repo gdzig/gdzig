@@ -68,6 +68,39 @@ test "Bug A: omitting nullable String optional arg materializes empty default" {
     try testing.expect(parts.size() >= 1);
 }
 
+fn playStreamWithDefaults(playback: *AudioStreamPlaybackPolyphonic, stream: *AudioStream) i64 {
+    return playback.playStream(stream, .{});
+}
+
+test "non-empty StringName optional default compiles" {
+    _ = &playStreamWithDefaults;
+}
+
+test "non-empty String optional default preserves declared value" {
+    var input: String = .fromLatin1("x");
+    defer input.deinit();
+
+    var padded = input.lpad(3, .{});
+    defer padded.deinit();
+
+    var buf: [8]u8 = undefined;
+    try testing.expectEqualStrings("  x", padded.toUtf8Buf(&buf));
+}
+
+test "empty StringName optional default remains valid" {
+    const node = Node.init();
+    defer node.destroy();
+
+    var message: StringName = .fromLatin1("untranslated", false);
+    defer message.deinit();
+
+    var translated = node.tr(message, .{});
+    defer translated.deinit();
+
+    var buf: [32]u8 = undefined;
+    try testing.expectEqualStrings("untranslated", translated.toUtf8Buf(&buf));
+}
+
 noinline fn poisonStack() void {
     var buf: [8192]u8 = undefined;
     for (&buf) |*b| b.* = 0xAA;
@@ -107,6 +140,8 @@ const gdzig = @import("gdzig");
 const Array = gdzig.builtin.Array;
 const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
+const AudioStream = gdzig.class.AudioStream;
+const AudioStreamPlaybackPolyphonic = gdzig.class.AudioStreamPlaybackPolyphonic;
 const ArrayMesh = gdzig.class.ArrayMesh;
 const RenderingDevice = gdzig.class.RenderingDevice;
 const Node = gdzig.class.Node;

@@ -1,6 +1,7 @@
 const ValueType = enum {
     null,
     string,
+    string_name,
     boolean,
     primitive,
     constructor,
@@ -9,6 +10,7 @@ const ValueType = enum {
 pub const Value = union(ValueType) {
     null: void,
     string: []const u8,
+    string_name: []const u8,
     boolean: bool,
     primitive: []const u8,
     constructor: struct {
@@ -17,55 +19,45 @@ pub const Value = union(ValueType) {
     },
 
     pub fn isNullable(self: Value) bool {
-        return self == .null or self == .string;
+        return self == .null;
     }
 
     pub fn needsRuntimeInit(self: Value, ctx: *const Context) bool {
         switch (self) {
+            .string, .string_name => return true,
             .constructor => |c| {
-                // Extract the type name from the constructor type
                 const type_name = switch (c.type) {
                     .basic => |name| name,
-                    else => return false, // Only builtin types can have constructors
+                    else => return false,
                 };
 
-                // Look up the builtin type
                 const builtin = ctx.builtins.get(type_name) orelse return false;
-
-                // Find the constructor with matching argument count
                 const constructor = builtin.findConstructorByArgumentCount(c.args.len) orelse return false;
-
-                // Return true if the constructor cannot be initialized directly (needs runtime init)
                 return !constructor.can_init_directly;
             },
             else => return false,
         }
     }
 
+    pub fn runtimeInitNeedsDeinit(self: Value) bool {
+        return self == .string or self == .string_name;
+    }
+
     pub fn parse(arena: Allocator, value: []const u8, ctx: *const Context) !Value {
-        // null
-        if (value.len == 0) {
-            return .null;
-        }
-        if (std.mem.eql(u8, value, "null")) {
+        if (value.len == 0 or std.mem.eql(u8, value, "null")) {
             return .null;
         }
 
-        // string
+        if (std.mem.eql(u8, value, "\"\"") or std.mem.eql(u8, value, "&\"\"")) {
+            return .null;
+        }
         if (value[0] == '"') {
-            // empty string
-            if (value[1] == '"' and value.len == 2) {
-                return .null;
-            }
-
-            if (std.mem.lastIndexOf(u8, value, "\"")) |index| {
-                return .{ .string = try arena.dupe(u8, value[1..index]) };
-            }
-
-            unreachable;
+            return .{ .string = try std.zig.string_literal.parseAlloc(arena, value) };
+        }
+        if (std.mem.startsWith(u8, value, "&\"") and value[value.len - 1] == '"') {
+            return .{ .string_name = try std.zig.string_literal.parseAlloc(arena, value[1..]) };
         }
 
-        // boolean
         if (std.mem.eql(u8, value, "true")) {
             return .{ .boolean = true };
         }
@@ -73,7 +65,6 @@ pub const Value = union(ValueType) {
             return .{ .boolean = false };
         }
 
-        // constructor
         if (value[value.len - 1] == ')') {
             if (std.mem.indexOf(u8, value, "(")) |index| {
                 const c_name = value[0..index];
@@ -83,12 +74,11 @@ pub const Value = union(ValueType) {
 
                 var out_args: ?[]const []const u8 = null;
                 if (args_slice.len > 0) {
-                    var temp = try arena.alloc([]const u8, args_count);
+                    const temp = try arena.alloc([]const u8, args_count);
 
                     var it = std.mem.splitScalar(u8, args_slice, ',');
                     var i: usize = 0;
                     while (it.next()) |raw_arg| : (i += 1) {
-                        // trim whitespace + comma (the comma matters if you later switch this code)
                         temp[i] = std.mem.trim(u8, raw_arg, " \t\r\n,");
                     }
 
@@ -98,13 +88,12 @@ pub const Value = union(ValueType) {
                 return .{
                     .constructor = .{
                         .type = c_type,
-                        .args = out_args orelse &.{}, // empty when args_slice == ""
+                        .args = out_args orelse &.{},
                     },
                 };
             }
         }
 
-        // primitive
         return .{ .primitive = value };
     }
 };
@@ -112,7 +101,5 @@ pub const Value = union(ValueType) {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;
-const GodotApi = @import("../GodotApi.zig");

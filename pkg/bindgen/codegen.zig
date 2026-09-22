@@ -1124,9 +1124,17 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     if (opt < function.parameters.count()) {
         for (function.parameters.values()[opt..]) |param| {
             if (param.needsRuntimeInit(ctx)) {
-                try w.print("const actual_{s} = opt.{s} orelse ", .{ param.name, param.name });
-                try writeValue(w, param.default.?, ctx);
+                const default_value = param.default.?;
+                try w.print("{s} actual_{s} = opt.{s} orelse ", .{
+                    if (default_value.runtimeInitNeedsDeinit()) "var" else "const",
+                    param.name,
+                    param.name,
+                });
+                try writeValue(w, default_value, ctx);
                 try w.writeLine(";");
+                if (default_value.runtimeInitNeedsDeinit()) {
+                    try w.printLine("defer if (opt.{0s} == null) actual_{0s}.deinit();", .{param.name});
+                }
             } else if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
                 if (optNullMaterializer(&param, ctx)) |init_expr| {
                     try w.print("var actual_{s}: ", .{param.name});
@@ -1302,7 +1310,9 @@ fn writeArgSlot(w: *CodeWriter, i: usize, param: *const Context.Function.Paramet
 
 fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
     switch (value) {
-        inline .null, .string => try w.writeAll("null"),
+        .null => try w.writeAll("null"),
+        .string => |s| try w.print("String.fromNullTerminatedUtf8(\"{f}\")", .{std.zig.fmtString(s)}),
+        .string_name => |s| try w.print("StringName.fromNullTerminatedUtf8(\"{f}\")", .{std.zig.fmtString(s)}),
         .boolean => |b| try w.print("{}", .{b}),
         .primitive => |p| try w.writeAll(p),
         .constructor => |c| {
