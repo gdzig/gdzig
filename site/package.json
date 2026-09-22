@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "astro dev",
     "test": "bun test",
-    "build": "astro build",
+    "build": "bun run scripts/build.ts",
+    "build:astro": "astro build",
     "preview": "astro preview"
   },
   "dependencies": {

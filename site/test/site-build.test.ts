@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -32,7 +32,7 @@ beforeAll(() => {
       ['Site build failed.', result.stdout, result.stderr].filter(Boolean).join('\n'),
     );
   }
-}, 60_000);
+}, 180_000);
 
 describe('static site artifact', () => {
   test('contains the Astro landing page', async () => {
@@ -64,6 +64,25 @@ describe('static site artifact', () => {
     expect(css).toContain('--pico-font-family');
     expect(css).toContain('.pico');
   });
+
+  test('contains browseable generated Zig API documentation', async () => {
+    const apiDirectory = join(outputDirectory, 'api');
+    const indexHtml = await readFile(join(apiDirectory, 'index.html'), 'utf8');
+    const mainJavaScript = await readFile(join(apiDirectory, 'main.js'), 'utf8');
+    const [mainWasm, sources] = await Promise.all([
+      stat(join(apiDirectory, 'main.wasm')),
+      stat(join(apiDirectory, 'sources.tar')),
+    ]);
+
+    expect(indexHtml).toContain('<title>Zig Documentation</title>');
+    expect(indexHtml).toContain('<script src="main.js"></script>');
+    expect(indexHtml).not.toContain('starlight');
+    expect(mainJavaScript).toContain('fetch("main.wasm")');
+    expect(mainJavaScript).toContain('fetch("sources.tar")');
+    expect(mainWasm.size).toBeGreaterThan(0);
+    expect(sources.size).toBeGreaterThan(0);
+  });
+
 
   test('contains the Starlight docs landing page without Pico styles', async () => {
     const html = await readFile(join(outputDirectory, 'docs', 'index.html'), 'utf8');
