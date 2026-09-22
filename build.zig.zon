@@ -6,12 +6,12 @@
 
     .dependencies = .{
         .bbcodez = .{
-            .url = "git+https://github.com/gdzig/bbcodez#7ca97c0738d274195bcb28ab5c789ee0579abbcf",
-            .hash = "bbcodez-0.0.1-dev-YlrOBmyhAQBdGQs5DI8s5xn5nlRg_KQP-aQfCa9eseZp",
+            .url = "git+https://github.com/gdzig/bbcodez#35f389efd2d345549b633b9de9a4f1d77988684e",
+            .hash = "bbcodez-0.0.1-dev-YlrOBvmhAQAnZ6CPRwV8Ymt64t4GicfTA-75EbAKnooK",
         },
         .casez = .{
-            .url = "git+https://github.com/gdzig/casez#9732adbfd8c591ddd6e9c3feab016bf9af779d6c",
-            .hash = "casez-0.0.1-aTb4GruMAAB_mjFKqes-KoN2jNXSLpB856W-8ZL22krx",
+            .url = "git+https://github.com/gdzig/casez#6864e2e35066bfce8a4b2a55543c9123e8b19535",
+            .hash = "casez-0.0.1-aTb4Gu6NAAChJr9LaRo7T1o_7pTWjmyAbQdjaKZ3ilEk",
         },
         .emsdk = .{
             .url = "https://github.com/emscripten-core/emsdk/archive/refs/tags/4.0.20.tar.gz",
@@ -23,8 +23,8 @@
             .hash = "N-V-__8AAPiBDgI4ZFSc7fNDjGwiILwckhuE6UrxqNraBX0S",
         },
         .oopz = .{
-            .url = "git+https://github.com/gdzig/oopz#e37ece30bdafc185e88a4bb5d9869115c8d8503f",
-            .hash = "oopz-0.0.0-pFJy_ddWAAABM-zKPi6ChgcCRYMOuWKbEFwEqsfNU-4U",
+            .url = "git+https://github.com/gdzig/oopz#2a9fac7d3ffe134608ed56d3b49211f546c0b729",
+            .hash = "oopz-0.0.0-pFJy_QxZAABRjZk6dXmOZYLL8qIS-6guAChEFOP9BqTf",
         },
     },
 
