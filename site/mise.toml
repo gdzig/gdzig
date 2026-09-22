@@ -1,0 +1,28 @@
+[tools]
+bun = "1.4.2"
+
+[tasks.install]
+description = "Install site dependencies from the Bun lockfile"
+run = "bun install --frozen-lockfile"
+
+[tasks.dev]
+description = "Run the site development server"
+depends = ["install"]
+run = "bun run dev"
+raw = true
+
+[tasks.test]
+description = "Test the built site artifact"
+depends = ["install"]
+run = "bun test"
+
+[tasks.build]
+description = "Build the static site"
+depends = ["install"]
+run = "bun run build"
+
+[tasks.preview]
+description = "Preview the production site build"
+depends = ["build"]
+run = "bun run preview"
+raw = true

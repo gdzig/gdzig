@@ -1,0 +1,161 @@
+---
+import '@picocss/pico/css/pico.conditional.min.css';
+import '../styles/home.css';
+
+const repositoryUrl = 'https://github.com/gdzig/gdzig';
+const discordUrl = 'https://discord.gg/GEUZGRGeDj';
+const exampleUrl = 'https://github.com/gdzig/gdzig/tree/master/example';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="GDZig provides idiomatic Zig bindings for Godot 4."
+    />
+    <script is:inline>
+      (() => {
+        const storageKey = 'starlight-theme';
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+
+        const loadStoredTheme = () => {
+          try {
+            const theme = localStorage.getItem(storageKey);
+            return theme === 'light' || theme === 'dark' ? theme : null;
+          } catch {
+            return null;
+          }
+        };
+
+        const preferredTheme = () =>
+          loadStoredTheme() ?? (systemTheme.matches ? 'dark' : 'light');
+
+        const applyTheme = (theme) => {
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+
+          const toggle = document.querySelector('#theme-toggle');
+          if (toggle) {
+            const nextTheme = theme === 'dark' ? 'light' : 'dark';
+            const label = `Switch to ${nextTheme} theme`;
+            toggle.setAttribute('aria-label', label);
+            toggle.setAttribute('title', label);
+          }
+        };
+
+        applyTheme(preferredTheme());
+
+        document.addEventListener('DOMContentLoaded', () => {
+          applyTheme(preferredTheme());
+
+          document.querySelector('#theme-toggle')?.addEventListener('click', () => {
+            const nextTheme =
+              document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+
+            try {
+              localStorage.setItem(storageKey, nextTheme);
+            } catch {
+              // The selected theme still applies for this page view.
+            }
+
+            applyTheme(nextTheme);
+          });
+
+          systemTheme.addEventListener('change', () => {
+            if (!loadStoredTheme()) applyTheme(preferredTheme());
+          });
+        });
+      })();
+    </script>
+
+    <title>GDZig | Idiomatic Zig bindings for Godot 4</title>
+  </head>
+  <body class="pico home-page">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="container site-header">
+      <nav aria-label="Primary">
+        <ul>
+          <li><a class="wordmark" href="/" aria-label="GDZig home">GDZig</a></li>
+        </ul>
+        <ul>
+          <li><a href="/docs/">Docs</a></li>
+          <li><a href={repositoryUrl}>GitHub</a></li>
+          <li><a href={discordUrl}>Discord</a></li>
+
+          <li>
+            <button
+              id="theme-toggle"
+              class="theme-toggle secondary outline"
+              type="button"
+              aria-label="Switch color theme"
+              title="Switch color theme"
+            ></button>
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="main-content" class="container">
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow">Godot extensions in Zig</p>
+        <h1 id="hero-title">Idiomatic Zig bindings for Godot 4.</h1>
+        <p>
+          GDZig is under rapid development while the project shapes the API for
+          Godot 4.7.2 and Zig 0.16.0. Use it today with care, and expect bugs or
+          missing features before a stable release.
+        </p>
+        <div class="actions" aria-label="Primary actions">
+          <a href="/docs/" role="button">Read the docs</a>
+          <a class="secondary outline" href={exampleUrl} role="button">
+            View the example project
+          </a>
+        </div>
+      </section>
+
+      <section aria-labelledby="audiences-title">
+        <header class="section-heading">
+          <p class="eyebrow">Choose your path</p>
+          <h2 id="audiences-title">Start with the work you need to do.</h2>
+        </header>
+        <div class="grid">
+          <article>
+            <h3>For extension developers</h3>
+            <p>
+              Start here if you want to build a Godot extension in Zig. The first
+              guides will cover project setup, class registration, and generated
+              API lookup.
+            </p>
+          </article>
+          <article>
+            <h3>For game developers</h3>
+            <p>
+              Start here if you want to understand whether GDZig fits your Godot
+              project. Begin with the example project and project status notes.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <article class="status-panel" aria-labelledby="status-title">
+        <h2 id="status-title">A practical foundation for the site.</h2>
+        <p>
+          This first site slice keeps the public route small. It introduces the
+          home page and Starlight docs landing page, while later work adds API
+          docs, Blog, Showcase, and deeper documentation categories.
+        </p>
+      </article>
+    </main>
+
+    <footer class="container site-footer">
+      <p>Build Godot extensions with Zig.</p>
+      <nav aria-label="Footer">
+        <ul>
+          <li><a href={repositoryUrl}>GitHub</a></li>
+          <li><a href={discordUrl}>Discord</a></li>
+        </ul>
+      </nav>
+    </footer>
+  </body>
+</html>

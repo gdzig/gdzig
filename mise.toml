@@ -17,3 +17,25 @@ run = "zig build docs"
 dir = "zig-out/docs"
 depends = ["docs:build"]
 run = "mise exec bun -- bunx -y node-static ."
+
+[tasks."site:install"]
+description = "Install site dependencies from the Bun lockfile"
+run = "mise run -C site install"
+
+[tasks."site:dev"]
+description = "Run the site development server"
+run = "mise run -C site dev"
+raw = true
+
+[tasks."site:test"]
+description = "Test the built site artifact"
+run = "mise run -C site test"
+
+[tasks."site:build"]
+description = "Build the static site"
+run = "mise run -C site build"
+
+[tasks."site:preview"]
+description = "Preview the production site build"
+run = "mise run -C site preview"
+raw = true

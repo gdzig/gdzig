@@ -30,3 +30,6 @@ src/general.zig
 src/math.zig
 src/random.zig
 .claude/settings.local.json
+site/.astro/
+site/dist/
+site/node_modules/

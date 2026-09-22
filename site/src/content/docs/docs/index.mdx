@@ -1,0 +1,30 @@
+---
+title: GDZig documentation
+description: Human-written guides for building Godot extensions with Zig.
+template: splash
+hero:
+  tagline: Choose the path that matches what you want to build with GDZig.
+  actions:
+    - text: Back to GDZig
+      link: /
+      icon: left-arrow
+    - text: View the example project
+      link: https://github.com/gdzig/gdzig/tree/master/example
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Choose your path
+
+<CardGrid>
+  <Card title="For extension developers" icon="document">
+    Start here if you want to build a Godot extension in Zig. The first guides
+    will cover project setup, class registration, and generated API lookup.
+  </Card>
+  <Card title="For game developers" icon="rocket">
+    Start here if you want to understand whether GDZig fits your Godot project.
+    Begin with the example project and project status notes.
+  </Card>
+</CardGrid>
