@@ -1125,9 +1125,8 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
         for (function.parameters.values()[opt..]) |param| {
             if (param.needsRuntimeInit(ctx)) {
                 const default_value = param.default.?;
-                try w.print("{s} actual_{s} = opt.{s} orelse ", .{
+                try w.print("{0s} actual_{1s} = opt.{1s} orelse ", .{
                     if (default_value.runtimeInitNeedsDeinit()) "var" else "const",
-                    param.name,
                     param.name,
                 });
                 try writeValue(w, default_value, ctx);
