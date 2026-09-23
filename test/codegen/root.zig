@@ -133,6 +133,38 @@ test "Bug B: i32 return under poisoned stack" {
     try testing.expectEqual(@as(i32, 0), node.getChildCount(.{}));
 }
 
+test "float math helpers return the selected precision" {
+    const from_f32: f32 = 0.0;
+    const to_f32: f32 = 1.0;
+    const weight_f32: f32 = 0.5;
+    const mixed_target: f64 = 1.0;
+    const mixed_weight: f64 = 0.5;
+    const angle_f32: f32 = gdzig.math.lerpAngle(f32, from_f32, mixed_target, mixed_weight);
+    const lerp_f32: f32 = gdzig.math.lerpf(f32, from_f32, to_f32, weight_f32);
+
+    try testing.expectApproxEqAbs(@as(f32, 0.5), angle_f32, 0.000001);
+    try testing.expectApproxEqAbs(@as(f32, 0.5), lerp_f32, 0.000001);
+
+    const angle_f64: f64 = gdzig.math.lerpAngle(f64, from_f32, mixed_target, mixed_weight);
+    const lerp_f64: f64 = gdzig.math.lerpf(f64, from_f32, mixed_target, mixed_weight);
+
+    try testing.expectApproxEqAbs(@as(f64, 0.5), angle_f64, 0.000000000001);
+    try testing.expectApproxEqAbs(@as(f64, 0.5), lerp_f64, 0.000000000001);
+}
+
+test "integer math helpers return the selected width" {
+    const value_i32: i32 = -5;
+    const min_i64: i64 = 0;
+    const max_i32: i32 = 10;
+    const clamped_i32: i32 = gdzig.math.clampi(i32, value_i32, min_i64, max_i32);
+    const clamped_i64: i64 = gdzig.math.clampi(i64, value_i32, min_i64, max_i32);
+    const floored_i32: i32 = gdzig.math.floori(i32, @as(f32, 1.75));
+
+    try testing.expectEqual(@as(i32, 0), clamped_i32);
+    try testing.expectEqual(@as(i64, 0), clamped_i64);
+    try testing.expectEqual(@as(i32, 1), floored_i32);
+}
+
 const std = @import("std");
 const testing = std.testing;
 

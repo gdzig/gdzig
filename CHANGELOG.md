@@ -1,5 +1,6 @@
 # HEAD
 
+- **Breaking — type-selected scalar math**: The 62 fixed-arity `gdzig.math` helpers with scalar float/integer results now require a leading result type. Float-returning helpers accept `f32` or `f64` (for example, `gdzig.math.lerpAngle(f32, from, to, weight)`); integer-returning helpers accept `i32` or `i64` (for example, `gdzig.math.clampi(i32, value, min, max)`). Inputs are converted to Godot's `f64`/`i64` utility-function ABI and results are returned with the selected type. Existing untyped calls must add `f64` or `i64` to preserve their previous result type.
 - **Updated dependencies**: Zig 0.14.1 and Godot 4.4 support
 - **Fully commented bindgens**: All generated bindings include complete documentation from Godot's API for convenient ZLS hover docs
   - Comprehensive reference docs are also now available at https://gdzig.github.io/gdzig/

@@ -1025,6 +1025,10 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     }
 
     var is_first = true;
+    if (function.type_selected_scalar != .none) {
+        try w.writeAll("comptime T: type");
+        is_first = false;
+    }
 
     // Self parameter
     switch (function.self) {
@@ -1058,8 +1062,12 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
             try w.writeAll(", ");
         }
         try w.print("{s}: ", .{param.name});
-        // For vararg functions, allocating types are passed as Variant
-        if (function.is_vararg and param.type.allocatesAsVariant(ctx)) {
+        // For vararg functions, allocating types are passed as Variant.
+        // Type-selected scalar utility functions use generic caller-facing
+        // arguments, then marshal through metadata-selected ABI slots below.
+        if (function.type_selected_scalar != .none) {
+            try w.writeAll("anytype");
+        } else if (function.is_vararg and param.type.allocatesAsVariant(ctx)) {
             try w.writeAll("Variant");
         } else {
             try writeTypeAtParameter(w, &param.type, class, ctx);
@@ -1111,9 +1119,18 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
 
     // Return type
     try w.writeAll(") ");
-    try writeTypeAtReturn(w, &function.return_type, class, ctx);
+    if (function.type_selected_scalar != .none) {
+        try w.writeAll("T");
+    } else {
+        try writeTypeAtReturn(w, &function.return_type, class, ctx);
+    }
     try w.writeLine(" {");
     w.indent += 1;
+    switch (function.type_selected_scalar) {
+        .none => {},
+        .float => try w.writeLine("if (T != f32 and T != f64) @compileError(\"result type must be f32 or f64\");"),
+        .int => try w.writeLine("if (T != i32 and T != i64) @compileError(\"result type must be i32 or i64\");"),
+    }
 
     // Parameter comptime type checking
     for (function.parameters.values()) |_| {
@@ -1149,11 +1166,19 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
         try w.printLine("var args: [{d}]c.GDExtensionConstTypePtr = undefined;", .{function.parameters.count()});
         for (function.parameters.values()[0..opt], 0..) |param, i| {
-            try writeArgSlot(w, i, &param, null, ctx);
+            if (function.type_selected_scalar != .none) {
+                try writeTypeSelectedScalarArgSlot(w, i, &param);
+            } else {
+                try writeArgSlot(w, i, &param, null, ctx);
+            }
         }
         for (function.parameters.values()[opt..], opt..) |param, i| {
             const materialized = param.needsRuntimeInit(ctx) or optNullMaterializer(&param, ctx) != null;
-            try writeArgSlot(w, i, &param, materialized, ctx);
+            if (function.type_selected_scalar != .none) {
+                try writeTypeSelectedScalarArgSlot(w, i, &param);
+            } else {
+                try writeArgSlot(w, i, &param, materialized, ctx);
+            }
         }
     }
 
@@ -1213,6 +1238,12 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     if (function.return_type != .void) {
         if (function.is_vararg) {
             try w.writeLine("var result: Variant = .nil;");
+        } else if (function.type_selected_scalar != .none) {
+            switch (function.return_type) {
+                .float => try w.writeLine("var result: f64 = 0;"),
+                .int => try w.writeLine("var result: i64 = 0;"),
+                else => unreachable,
+            }
         } else {
             try w.writeAll("var result: ");
             if (function.return_type == .class) {
@@ -1307,6 +1338,21 @@ fn writeArgSlot(w: *CodeWriter, i: usize, param: *const Context.Function.Paramet
     }
 }
 
+fn writeTypeSelectedScalarArgSlot(w: *CodeWriter, i: usize, param: *const Context.Function.Parameter) !void {
+    switch (param.type) {
+        .float => try w.printLine(
+            "const arg{0d}_slot: f64 = if (@TypeOf({1s}) == f64) {1s} else @floatCast({1s});",
+            .{ i, param.name },
+        ),
+        .int => try w.printLine(
+            "const arg{0d}_slot: i64 = if (@TypeOf({1s}) == i64) {1s} else @intCast({1s});",
+            .{ i, param.name },
+        ),
+        else => unreachable,
+    }
+    try w.printLine("args[{0d}] = @ptrCast(&arg{0d}_slot);", .{i});
+}
+
 fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
     switch (value) {
         .null => try w.writeAll("null"),
@@ -1338,6 +1384,22 @@ fn writeValue(w: *CodeWriter, value: Context.Value, ctx: *const Context) !void {
 }
 
 fn writeFunctionFooter(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
+    switch (function.type_selected_scalar) {
+        .none => {},
+        .float => {
+            try w.writeLine("return @as(T, @floatCast(result));");
+            w.indent -= 1;
+            try w.writeLine("}");
+            return;
+        },
+        .int => {
+            try w.writeLine("return @as(T, @intCast(result));");
+            w.indent -= 1;
+            try w.writeLine("}");
+            return;
+        },
+    }
+
     switch (function.return_type) {
         // Class functions need to cast an object pointer
         .class => {

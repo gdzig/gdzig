@@ -31,6 +31,7 @@ self: union(enum) {
     value: []const u8,
 } = .static,
 is_vararg: bool = false,
+type_selected_scalar: TypeSelectedScalar = .none,
 
 /// When true, this constructor can be implemented via direct struct initialization
 /// instead of calling the GDExtension API, which enables comptime initialization.
@@ -411,6 +412,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
     self.hash = function.hash;
     self.self = .static;
     self.is_vararg = function.is_vararg;
+    self.type_selected_scalar = .fromUtilityFunction(function);
     for (function.arguments orelse &.{}) |arg| {
         try self.parameters.put(allocator, arg.name, try .fromNameType(allocator, arg.name, arg.type, false, ctx, .{}));
     }
@@ -430,6 +432,33 @@ pub fn deinit(self: *Function, allocator: Allocator) void {
 
     self.* = .{};
 }
+
+/// Classifies scalar math utility functions that expose a caller-selected result type.
+pub const TypeSelectedScalar = enum {
+    none,
+    float,
+    int,
+
+    pub fn fromUtilityFunction(function: GodotApi.UtilityFunction) TypeSelectedScalar {
+        if (function.is_vararg) return .none;
+        if (!std.mem.eql(u8, function.category, "math")) return .none;
+
+        const scalar = if (std.mem.eql(u8, function.return_type, "float"))
+            TypeSelectedScalar.float
+        else if (std.mem.eql(u8, function.return_type, "int"))
+            TypeSelectedScalar.int
+        else
+            return .none;
+
+        for (function.arguments orelse &.{}) |arg| {
+            if (!std.mem.eql(u8, arg.type, "float") and !std.mem.eql(u8, arg.type, "int")) {
+                return .none;
+            }
+        }
+
+        return scalar;
+    }
+};
 
 /// Describes the override behavior of a function in object-oriented inheritance.
 ///
