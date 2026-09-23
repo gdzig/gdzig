@@ -47,10 +47,11 @@ pub fn build(b: *Build) !void {
         generate_header.addFileArg(godot_cpp.path("gdextension/gdextension_interface.json"));
         break :blk generated_header;
     } else b.path("vendor/gdextension_interface.h");
+    const extension_api = b.path("vendor/extension_api.json");
 
     const headers_write = b.addWriteFiles();
     _ = headers_write.addCopyFile(interface_header, "gdextension_interface.h");
-    _ = headers_write.addCopyFile(godot_cpp.path("gdextension/extension_api-4-7.json"), "extension_api.json");
+    _ = headers_write.addCopyFile(extension_api, "extension_api.json");
     const headers = headers_write.getDirectory();
 
     // Godot executable for integration tests and examples.
