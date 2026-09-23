@@ -28,7 +28,17 @@ export default defineConfig({
             { label: 'Overview', link: '/docs/' },
             { label: 'Tutorials', link: '/docs/tutorials/' },
             { label: 'How-to guides', link: '/docs/how-to/' },
-            { label: 'Explanations', link: '/docs/explanations/' },
+            {
+              label: 'Explanations',
+              collapsed: false,
+              items: [
+                { label: 'Overview', link: '/docs/explanations/' },
+                {
+                  label: 'Choosing math and random APIs',
+                  link: '/docs/explanations/math-and-random-apis/',
+                },
+              ],
+            },
             { label: 'Reference', link: '/docs/reference/' },
           ],
         },
