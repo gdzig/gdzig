@@ -1,28 +1,29 @@
-/// Marshalling helpers for Godot's `ptrcall` ABI (used for virtual method
-/// dispatch and for extension methods bound through ClassDB).
-///
-/// Per godot-cpp's `method_ptrcall.h` conventions, ptrcall does not pass
-/// scalars at their declared C width. Instead:
-///
-/// - every integer type (bool included), and every enum or packed flag
-///   struct narrower than 64 bits, travels as a full `int64_t` (8 bytes)
-/// - `u64` (and enums/flags backed by `u64`) travels as `uint64_t`
-/// - `bool` travels as `uint8_t`
-/// - `f32` and `f64` both travel as `double` (8 bytes)
-///
-/// A Zig virtual method or bound method declared with a narrower type (say,
-/// `i32` or `f32`) must still read/write the full slot width, or it will
-/// read stack garbage out of the high bytes (params) or leave garbage in
-/// the high bytes for the engine to read back (returns).
-///
-/// Non-scalar types (structs like `String`/`Vector2`, object pointers,
-/// optionals of object pointers, etc.) are passed at their real, declared
-/// layout and are read/written directly.
-///
-/// This is the runtime-side half of the ABI width rule; `wideSlot` in
-/// `pkg/bindgen/codegen.zig` is the emission side, deciding which generated
-/// call sites need a widened slot in the first place.
+//! Marshalling helpers for Godot's `ptrcall` ABI (used for virtual method
+//! dispatch and for extension methods bound through ClassDB).
+//!
+//! Per godot-cpp's `method_ptrcall.h` conventions, ptrcall does not pass
+//! scalars at their declared C width. Instead:
+//!
+//! - every integer type (bool included), and every enum or packed flag
+//!   struct narrower than 64 bits, travels as a full `int64_t` (8 bytes)
+//! - `u64` (and enums/flags backed by `u64`) travels as `uint64_t`
+//! - `bool` travels as `uint8_t`
+//! - `f32` and `f64` both travel as `double` (8 bytes)
+//!
+//! A Zig virtual method or bound method declared with a narrower type (say,
+//! `i32` or `f32`) must still read/write the full slot width, or it will
+//! read stack garbage out of the high bytes (params) or leave garbage in
+//! the high bytes for the engine to read back (returns).
+//!
+//! Non-scalar types (structs like `String`/`Vector2`, object pointers,
+//! optionals of object pointers, etc.) are passed at their real, declared
+//! layout and are read/written directly.
+//!
+//! The width rule itself lives in `src/slot.zig`; `wideSlot` in
+//! `pkg/bindgen/codegen.zig` is the emission side, deciding which generated
+//! call sites need a widened slot in the first place.
 const std = @import("std");
+const slot = @import("../slot.zig");
 
 /// Reads a single ptrcall argument slot as `T`, applying the width conventions described
 /// above. `raw_p_arg` accepts both the optional `GDExtensionConstTypePtr` the engine hands us
@@ -68,17 +69,10 @@ pub fn writeReturn(comptime T: type, raw_p_ret: ?*anyopaque, value: T) void {
     }
 }
 
-/// `u64` is the only integer width that gets its own native slot; every
-/// other integer (regardless of signedness or width, up to 64 bits) travels
-/// as `int64_t`.
-fn isU64Like(bits: u16, signedness: std.builtin.Signedness) bool {
-    return bits == 64 and signedness == .unsigned;
-}
-
 fn readIntSlot(comptime Int: type, p_arg: *const anyopaque) i128 {
     const info = @typeInfo(Int).int;
     if (comptime info.bits > 64) @compileError("ptrcall does not support integers wider than 64 bits");
-    if (comptime isU64Like(info.bits, info.signedness)) {
+    if (comptime slot.isU64Like(Int)) {
         return @as(*const u64, @ptrCast(@alignCast(p_arg))).*;
     }
     return @as(*const i64, @ptrCast(@alignCast(p_arg))).*;
@@ -87,7 +81,7 @@ fn readIntSlot(comptime Int: type, p_arg: *const anyopaque) i128 {
 fn writeIntSlot(comptime Int: type, p_ret: *anyopaque, value: anytype) void {
     const info = @typeInfo(Int).int;
     if (comptime info.bits > 64) @compileError("ptrcall does not support integers wider than 64 bits");
-    if (comptime isU64Like(info.bits, info.signedness)) {
+    if (comptime slot.isU64Like(Int)) {
         @as(*u64, @ptrCast(@alignCast(p_ret))).* = @intCast(value);
     } else {
         @as(*i64, @ptrCast(@alignCast(p_ret))).* = @intCast(value);
