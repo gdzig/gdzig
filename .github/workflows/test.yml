@@ -41,11 +41,6 @@ jobs:
       - name: Test
         if: matrix.target == 'native'
         run: zig build test -Dgodot-path="$(command -v godot)"
-
-      # wasm legs are build-only (no Godot test run). Godot is still set up
-      # above because gdzig's build script resolves the Godot executable
-      # eagerly at configure time. The 0.16 leg exercises the #244 debug_io
-      # workaround; the master leg must build without it (#245).
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
@@ -95,11 +90,6 @@ jobs:
       - name: Test
         if: matrix.target == 'native'
         run: zig build test -Dgodot-path="$(command -v godot)"
-
-      # wasm legs are build-only (no Godot test run). Godot is still set up
-      # above because gdzig's build script resolves the Godot executable
-      # eagerly at configure time. The 0.16 leg exercises the #244 debug_io
-      # workaround; the master leg must build without it (#245).
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
