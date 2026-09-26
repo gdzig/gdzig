@@ -9,6 +9,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const compat = @import("compat");
 const protocol = @import("protocol.zig");
 const options = @import("runner_options");
 
@@ -34,11 +35,17 @@ const Runner = struct {
     environ_map: *std.process.Environ.Map,
 
     fn init(allocator: Allocator, io: Io, environ_map: *std.process.Environ.Map, in: *Io.Reader, out: *Io.Writer) !Runner {
-        const server = try ZigServer.init(.{
-            .in = in,
-            .out = out,
-            .zig_version = builtin.zig_version_string,
-        });
+        const server: ZigServer = if (comptime compat.zig_016)
+            try ZigServer.init(.{
+                .in = in,
+                .out = out,
+                .zig_version = builtin.zig_version_string,
+            })
+        else blk: {
+            var s: ZigServer = .{ .in = in, .out = out };
+            try s.serveStringMessage(.zig_version, builtin.zig_version_string);
+            break :blk s;
+        };
 
         return .{
             .allocator = allocator,

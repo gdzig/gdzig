@@ -60,10 +60,10 @@ pub fn ClassUserdataOf(comptime T: type) type {
     if (!@hasDecl(T, "create")) {
         @compileError("Type '" ++ @typeName(T) ++ "' must have a 'create' function");
     }
-    const params = @typeInfo(@TypeOf(T.create)).@"fn".params;
+    const params = compat.fnParamTypes(@TypeOf(T.create));
     return switch (params.len) {
         0 => void,
-        1 => params[0].type.?,
+        1 => params[0].?,
         inline else => @compileError("Type '" ++ @typeName(T) ++ "'.create must take zero or one parameters"),
     };
 }
@@ -411,29 +411,29 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
         "_validateProperty",
     };
 
-    const decls = @typeInfo(T).@"struct".decls;
+    const decls = compat.declNames(T);
     var names: [decls.len][]const u8 = undefined;
     var count: usize = 0;
 
     for (decls) |decl| {
         // Must start with _
-        if (decl.name.len == 0 or decl.name[0] != '_') continue;
+        if (decl.len == 0 or decl[0] != '_') continue;
 
         // Must be a function
-        const field = @field(T, decl.name);
+        const field = @field(T, decl);
         const field_type_info = @typeInfo(@TypeOf(field));
         if (field_type_info != .@"fn") continue;
 
         // Must have at least one parameter (self) to be a virtual method
-        if (field_type_info.@"fn".params.len == 0) continue;
+        if (compat.fnParamTypes(@TypeOf(field)).len == 0) continue;
 
         // Must not be a callback
         const is_callback = for (callbacks) |cb| {
-            if (std.mem.eql(u8, decl.name, cb)) break true;
+            if (std.mem.eql(u8, decl, cb)) break true;
         } else false;
         if (is_callback) continue;
 
-        names[count] = decl.name;
+        names[count] = decl;
         count += 1;
     }
 
@@ -477,6 +477,7 @@ fn UserClassVTable(comptime T: type) type {
 }
 
 const std = @import("std");
+const compat = @import("../compat.zig");
 const Allocator = std.mem.Allocator;
 const MemoryPool = std.heap.MemoryPool;
 const assert = std.debug.assert;
