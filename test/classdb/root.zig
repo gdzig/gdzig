@@ -1,5 +1,6 @@
 pub fn register(r: *gdzig.extension.Registry) void {
     const class = r.createClass(TestNode, {}, .auto);
+    class.addEnum(TestState);
     class.addMethod("increment", .auto);
     class.addMethod("get_counter", .auto);
     class.addMethod("add_value", .auto);
@@ -7,6 +8,9 @@ pub fn register(r: *gdzig.extension.Registry) void {
     class.addMethod("set_my_property", .auto);
     class.addMethod("get_indexed_value", .auto);
     class.addMethod("set_indexed_value", .auto);
+    class.addMethod("get_state", .auto);
+    class.addMethod("get_state_negative", .auto);
+    class.addMethod("echo_state", .auto);
 }
 
 fn ensureRegistered() void {
@@ -70,6 +74,60 @@ test "indexed properties" {
     try testing.expectEqual(@as(i64, 999), result.as(i64).?);
 }
 
+test "narrow enum return through varcall is widened to slot width" {
+    ensureRegistered();
+
+    const node = try TestNode.create();
+    defer node.base.destroy();
+
+    // Varcall boxes the enum(i32) return via Variant.init; the engine reads a
+    // full int64 slot, so the high bytes must not be garbage.
+    var result = Object.call(.upcast(node), .fromComptimeLatin1("get_state"), .{});
+    try testing.expectEqual(@as(i64, 2), result.as(i64).?);
+
+    // Negative values catch both garbage high bytes and bad sign extension.
+    result = Object.call(.upcast(node), .fromComptimeLatin1("get_state_negative"), .{});
+    try testing.expectEqual(@as(i64, -1), result.as(i64).?);
+}
+
+test "varcall and ptrcall return identical values for narrow enum" {
+    ensureRegistered();
+
+    const node = try TestNode.create();
+    defer node.base.destroy();
+
+    const var_result = Object.call(.upcast(node), .fromComptimeLatin1("get_state_negative"), .{});
+    const var_value = var_result.as(i64).?;
+
+    var slot: i64 = 0;
+    gdzig.ptrcall.writeReturn(TestState, &slot, .err);
+
+    try testing.expectEqual(@as(i64, -1), slot);
+    try testing.expectEqual(slot, var_value);
+}
+
+test "narrow enum argument through varcall roundtrips" {
+    ensureRegistered();
+
+    const node = try TestNode.create();
+    defer node.base.destroy();
+
+    // Varcall extracts the enum(i32) argument via Variant.as; the engine writes
+    // a full int64 slot, which must not overwrite past the narrow local.
+    var result = Object.call(.upcast(node), .fromComptimeLatin1("echo_state"), .{@as(TestState, .data_loaded)});
+    try testing.expectEqual(@as(i64, 2), result.as(i64).?);
+
+    result = Object.call(.upcast(node), .fromComptimeLatin1("echo_state"), .{@as(TestState, .err)});
+    try testing.expectEqual(@as(i64, -1), result.as(i64).?);
+}
+
+const TestState = enum(i32) {
+    uninitialized = 0,
+    data_loaded = 2,
+    stepping = 3,
+    err = -1,
+};
+
 const TestNode = struct {
     base: *Node,
     counter: i64 = 0,
@@ -119,6 +177,21 @@ const TestNode = struct {
         if (index >= 0 and index < 3) {
             self.indexed_values[@intCast(index)] = value;
         }
+    }
+
+    pub fn getState(self: *TestNode) TestState {
+        _ = self;
+        return .data_loaded;
+    }
+
+    pub fn getStateNegative(self: *TestNode) TestState {
+        _ = self;
+        return .err;
+    }
+
+    pub fn echoState(self: *TestNode, state: TestState) TestState {
+        _ = self;
+        return state;
     }
 };
 

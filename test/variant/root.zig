@@ -226,6 +226,41 @@ test "operators - power" {
     try testing.expectEqual(@as(i64, 8), pow_val);
 }
 
+const NarrowEnum = enum(i32) {
+    zero = 0,
+    two = 2,
+    neg = -1,
+};
+
+const NarrowFlags = packed struct(u32) {
+    a: bool = false,
+    b: bool = false,
+    _pad: u30 = 0,
+};
+
+test "narrow enum init/as roundtrip" {
+    const v = Variant.init(NarrowEnum, .two);
+    defer v.deinit();
+    try testing.expectEqual(Variant.Tag.int, v.tag);
+    try testing.expectEqual(@as(i64, 2), v.as(i64).?);
+    try testing.expectEqual(NarrowEnum.two, v.as(NarrowEnum).?);
+}
+
+test "negative narrow enum preserves sign through the slot" {
+    const v = Variant.init(NarrowEnum, .neg);
+    defer v.deinit();
+    try testing.expectEqual(@as(i64, -1), v.as(i64).?);
+    try testing.expectEqual(NarrowEnum.neg, v.as(NarrowEnum).?);
+}
+
+test "packed flags init/as roundtrip" {
+    const flags = NarrowFlags{ .a = true, .b = true };
+    const v = Variant.init(NarrowFlags, flags);
+    defer v.deinit();
+    try testing.expectEqual(@as(i64, 0b11), v.as(i64).?);
+    try testing.expectEqual(@as(u32, 0b11), @as(u32, @bitCast(v.as(NarrowFlags).?)));
+}
+
 const std = @import("std");
 const testing = std.testing;
 

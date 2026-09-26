@@ -24,6 +24,7 @@ pub const global = @import("global.zig");
 pub const math = @import("math.zig");
 pub const random = @import("random.zig");
 pub const extension = @import("extension.zig");
+pub const ptrcall = @import("class/ptrcall.zig");
 pub const testing = @import("testing.zig");
 
 const DispatchTable = @import("DispatchTable.zig");

@@ -50,7 +50,9 @@ pub const Variant = extern struct {
         switch (@typeInfo(T)) {
             .pointer => variantFromType(@ptrCast(&result), @ptrCast(@constCast(value))),
             else => {
-                var v: T = value;
+                // The engine's variant-from-type constructors read at the Variant slot
+                // width, so widen narrow scalars before handing over the pointer.
+                var v: SlotType(T) = .widen(value);
                 variantFromType(@ptrCast(&result), @ptrCast(&v));
             },
         }
@@ -79,7 +81,9 @@ pub const Variant = extern struct {
                 // Inline types
                 .nil => .{ .nil = {} },
                 .bool => .{ .bool = value.* },
-                .int => .{ .int = value.* },
+                // Narrow ints, enums, and packed flag structs are stored widened to
+                // the full int64 slot (see slot.Type); Godot Variant ints are int64.
+                .int => .{ .int = @intCast(SlotType(T).widen(value.*).raw) },
                 .float => .{ .float = value.* },
                 .vector2 => .{ .vector2 = value.* },
                 .vector2i => .{ .vector2i = value.* },
@@ -160,9 +164,12 @@ pub const Variant = extern struct {
         const variantToType = getVariantToTypeConstructor(tag);
 
         if (tag != .object) {
-            var result: T = undefined;
-            variantToType(@ptrCast(&result), @ptrCast(@constCast(&self)));
-            return result;
+            // The engine's type-from-variant constructors write at the Variant slot
+            // width, so read into a slot-width local and narrow, or the 8-byte write
+            // would overwrite 4 bytes of stack past a narrow local.
+            var wide: SlotType(T) = undefined;
+            variantToType(@ptrCast(&wide), @ptrCast(@constCast(&self)));
+            return wide.narrow();
         } else {
             var object: ?*Object = null;
             variantToType(@ptrCast(&object), @ptrCast(@constCast(&self)));
@@ -855,6 +862,8 @@ const mem = std.mem;
 const testing = std.testing;
 
 const c = @import("gdextension");
+const slot = @import("../slot.zig");
+const SlotType = slot.Type;
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
