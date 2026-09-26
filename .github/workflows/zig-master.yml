@@ -7,6 +7,10 @@ name: Zig Master (experimental)
 # Tracked under gdzig/gdzig#245.
 
 on:
+  # TEMPORARY (pre-merge validation only — remove before merging):
+  # lets this nightly workflow run once on PR #252 to measure the wasm
+  # build duration in CI before it becomes schedule-only.
+  pull_request:
   schedule:
     - cron: "23 4 * * *" # daily, off-peak
   workflow_dispatch:
