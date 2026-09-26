@@ -8,6 +8,10 @@ inputs:
   cache-key:
     description: Cache key for Zig build artifacts
     required: true
+  zig-version:
+    description: Zig version to set up (e.g. 'master'). Empty (default) resolves from minimum_zig_version in build.zig.zon.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -15,6 +19,7 @@ runs:
     - name: Setup Zig
       uses: mlugg/setup-zig@v2
       with:
+        version: ${{ inputs.zig-version }}
         cache-key: ${{ inputs.cache-key }}
 
     - name: Setup Godot
