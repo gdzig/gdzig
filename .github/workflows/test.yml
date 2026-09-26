@@ -41,6 +41,7 @@ jobs:
       - name: Test
         if: matrix.target == 'native'
         run: zig build test -Dgodot-path="$(command -v godot)"
+
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
@@ -90,6 +91,7 @@ jobs:
       - name: Test
         if: matrix.target == 'native'
         run: zig build test -Dgodot-path="$(command -v godot)"
+
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
