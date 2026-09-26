@@ -9,7 +9,7 @@ on:
 jobs:
   # Quick test for PRs - Godot compatibility target on Linux
   test-pr:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }})
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
@@ -20,25 +20,53 @@ jobs:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
         zig: ["0.16.0"]
+        target: [native]
         include:
           - os: ubuntu-latest
             godot: "4.7.2"
             zig: master
+            target: native
+            experimental: true
+          - os: ubuntu-latest
+            godot: "4.7.2"
+            zig: "0.16.0"
+            target: wasm
+          - os: ubuntu-latest
+            godot: "4.7.2"
+            zig: master
+            target: wasm
             experimental: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - uses: ./.github/actions/test-godot
+      # Native legs: build + run the Godot test suite.
+      - name: Test with Godot
+        if: matrix.target == 'native'
+        uses: ./.github/actions/test-godot
         with:
           godot-version: ${{ matrix.godot }}
           zig-version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
+      # wasm legs: build-only (no Godot test run); the 0.16 leg exercises the
+      # debug_io workaround (#244), the master leg must build without it (#245).
+      - name: Setup Zig
+        if: matrix.target == 'wasm'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+
+      - name: Build example for wasm32-emscripten
+        if: matrix.target == 'wasm'
+        run: zig build -Dtarget=wasm32-emscripten
+        working-directory: example
+
   # Full matrix for push to master and manual dispatch
   test-full:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }})
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -50,25 +78,55 @@ jobs:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
         zig: ["0.16.0"]
+        target: [native]
         include:
           - os: macos-latest
             godot: "4.7.2"
             zig: "0.16.0"
+            target: native
           - os: ubuntu-latest
             godot: "4.7.2"
             zig: master
+            target: native
             experimental: true
           - os: macos-latest
             godot: "4.7.2"
             zig: master
+            target: native
+            experimental: true
+          - os: ubuntu-latest
+            godot: "4.7.2"
+            zig: "0.16.0"
+            target: wasm
+          - os: ubuntu-latest
+            godot: "4.7.2"
+            zig: master
+            target: wasm
             experimental: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - uses: ./.github/actions/test-godot
+      # Native legs: build + run the Godot test suite.
+      - name: Test with Godot
+        if: matrix.target == 'native'
+        uses: ./.github/actions/test-godot
         with:
           godot-version: ${{ matrix.godot }}
           zig-version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+
+      # wasm legs: build-only (no Godot test run); the 0.16 leg exercises the
+      # debug_io workaround (#244), the master leg must build without it (#245).
+      - name: Setup Zig
+        if: matrix.target == 'wasm'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+
+      - name: Build example for wasm32-emscripten
+        if: matrix.target == 'wasm'
+        run: zig build -Dtarget=wasm32-emscripten
+        working-directory: example
