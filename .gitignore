@@ -33,3 +33,6 @@ src/random.zig
 site/.astro/
 site/dist/
 site/node_modules/
+
+# Godot web export output
+example/web/
