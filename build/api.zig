@@ -123,6 +123,10 @@ fn addExtensionWeb(
 
     const run_emcc = b.addSystemCommand(&.{lazyPathString(b, emsdk_path.path(b, "upstream/emscripten/emcc"))});
     run_emcc.addArtifactArg(lib);
+    // Inherit stdio so emcc's warnings stream directly; when captured, zig's
+    // build runner echoes them post-hoc under a misleading "failed command:"
+    // header even when the step succeeds (emcc warns on pthreads+SIDE_MODULE).
+    run_emcc.stdio = .inherit;
 
     run_emcc.addArgs(&.{
         "-sSIDE_MODULE=1",
