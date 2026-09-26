@@ -13,62 +13,39 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
-    # zig master legs are experimental: they must not gate PRs (#245).
-    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
-        zig: ["0.16.0"]
-        target: [native]
-        include:
-          - os: ubuntu-latest
-            godot: "4.7.2"
-            zig: master
-            target: native
-            experimental: true
-          - os: ubuntu-latest
-            godot: "4.7.2"
-            zig: "0.16.0"
-            target: wasm
-          - os: ubuntu-latest
-            godot: "4.7.2"
-            zig: master
-            target: wasm
-            experimental: true
+        zig: ["0.16.0", master]
+        target: [native, wasm]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Native legs: build + run the Godot test suite.
-      - name: Test with Godot
-        if: matrix.target == 'native'
-        uses: ./.github/actions/test-godot
-        with:
-          godot-version: ${{ matrix.godot }}
-          zig-version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
-
-      # wasm legs: build-only (no Godot test run); the 0.16 leg exercises the
-      # debug_io workaround (#244), the master leg must build without it (#245).
       - name: Setup Zig
-        if: matrix.target == 'wasm'
         uses: mlugg/setup-zig@v2
         with:
+          # Empty version resolves minimum_zig_version from build.zig.zon.
           version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
-      # gdzig build.zig resolves the Godot executable eagerly at configure
-      # time, so wasm legs need Godot installed even though it is never run.
       - name: Setup Godot
-        if: matrix.target == 'wasm'
         uses: chickensoft-games/setup-godot@v2
         with:
           version: ${{ matrix.godot }}
           use-dotnet: false
 
+      - name: Test
+        if: matrix.target == 'native'
+        run: zig build test -Dgodot-path="$(command -v godot)"
+
+      # wasm legs are build-only (no Godot test run). Godot is still set up
+      # above because gdzig's build script resolves the Godot executable
+      # eagerly at configure time. The 0.16 leg exercises the #244 debug_io
+      # workaround; the master leg must build without it (#245).
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
@@ -80,72 +57,49 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    # zig master legs are experimental: they must not gate pushes (#245).
-    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.7.2"]
-        zig: ["0.16.0"]
-        target: [native]
+        zig: ["0.16.0", master]
+        target: [native, wasm]
         include:
           - os: macos-latest
             godot: "4.7.2"
             zig: "0.16.0"
             target: native
-          - os: ubuntu-latest
-            godot: "4.7.2"
-            zig: master
-            target: native
-            experimental: true
           - os: macos-latest
             godot: "4.7.2"
             zig: master
             target: native
-            experimental: true
-          - os: ubuntu-latest
-            godot: "4.7.2"
-            zig: "0.16.0"
-            target: wasm
-          - os: ubuntu-latest
-            godot: "4.7.2"
-            zig: master
-            target: wasm
-            experimental: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Native legs: build + run the Godot test suite.
-      - name: Test with Godot
-        if: matrix.target == 'native'
-        uses: ./.github/actions/test-godot
-        with:
-          godot-version: ${{ matrix.godot }}
-          zig-version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
-
-      # wasm legs: build-only (no Godot test run); the 0.16 leg exercises the
-      # debug_io workaround (#244), the master leg must build without it (#245).
       - name: Setup Zig
-        if: matrix.target == 'wasm'
         uses: mlugg/setup-zig@v2
         with:
+          # Empty version resolves minimum_zig_version from build.zig.zon.
           version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
-      # gdzig build.zig resolves the Godot executable eagerly at configure
-      # time, so wasm legs need Godot installed even though it is never run.
       - name: Setup Godot
-        if: matrix.target == 'wasm'
         uses: chickensoft-games/setup-godot@v2
         with:
           version: ${{ matrix.godot }}
           use-dotnet: false
 
+      - name: Test
+        if: matrix.target == 'native'
+        run: zig build test -Dgodot-path="$(command -v godot)"
+
+      # wasm legs are build-only (no Godot test run). Godot is still set up
+      # above because gdzig's build script resolves the Godot executable
+      # eagerly at configure time. The 0.16 leg exercises the #244 debug_io
+      # workaround; the master leg must build without it (#245).
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
