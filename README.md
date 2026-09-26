@@ -16,9 +16,15 @@ expected until a stable version is released. Issue reports, feature requests, an
 
 ### WebAssembly
 
-WebAssembly builds do not work with Zig 0.16.0 because of [ziglang/zig#31849](https://codeberg.org/ziglang/zig/issues/31849). Zig fixed the issue in [ziglang/zig#31850](https://codeberg.org/ziglang/zig/pulls/31850) after the 0.16.0 release.
+WebAssembly is supported on Zig 0.16.0 through a built-in workaround for [ziglang/zig#31849](https://codeberg.org/ziglang/zig/issues/31849), a standard library bug in that release. The workaround applies only to wasm32-emscripten builds on Zig 0.16.x and turns itself off on Zig releases with the upstream fix ([ziglang/zig#31850](https://codeberg.org/ziglang/zig/pulls/31850)).
 
-If you need WebAssembly, use a gdzig compatibility tag for Zig 0.15.x and the matching Zig release. Compatibility tags use the format `zig-{zig-version}-{date}`. Choose the latest tag whose name starts with `zig-0.15.`.
+Build an extension for the web with the `wasm32-emscripten` target:
+
+```sh
+zig build -Dtarget=wasm32-emscripten
+```
+
+See the [example](example/) for a browser export preset and instructions.
 
 ## Usage:
 
