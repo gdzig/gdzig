@@ -9,14 +9,22 @@ on:
 jobs:
   # Quick test for PRs - Godot compatibility target on Linux
   test-pr:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
+    # zig master legs are experimental: they must not gate PRs (#245).
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       matrix:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
+        zig: ["0.16.0"]
+        include:
+          - os: ubuntu-latest
+            godot: "4.7.2"
+            zig: master
+            experimental: true
 
     steps:
       - name: Checkout
@@ -25,22 +33,35 @@ jobs:
       - uses: ./.github/actions/test-godot
         with:
           godot-version: ${{ matrix.godot }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
+          zig-version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
   # Full matrix for push to master and manual dispatch
   test-full:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # zig master legs are experimental: they must not gate pushes (#245).
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       matrix:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.7.2"]
+        zig: ["0.16.0"]
         include:
           - os: macos-latest
             godot: "4.7.2"
+            zig: "0.16.0"
+          - os: ubuntu-latest
+            godot: "4.7.2"
+            zig: master
+            experimental: true
+          - os: macos-latest
+            godot: "4.7.2"
+            zig: master
+            experimental: true
 
     steps:
       - name: Checkout
@@ -49,4 +70,5 @@ jobs:
       - uses: ./.github/actions/test-godot
         with:
           godot-version: ${{ matrix.godot }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
+          zig-version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
