@@ -13,7 +13,9 @@
 //! to fd 2 through libc; emscripten forwards it to the browser console. This
 //! keeps `std.log`, `std.debug.print`, and the default panic handler working
 //! in web builds.
-
+//!
+// TODO(zig 0.16.0): remove this entire workaround module once support for
+// 0.16.x is dropped (upstream fix ziglang/zig#31850 is in 0.17).
 /// Whether the workaround applies to the current target and compiler.
 pub const needed = builtin.os.tag == .emscripten and
     builtin.zig_version.major == 0 and

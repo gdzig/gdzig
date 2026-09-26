@@ -36,7 +36,14 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "architecture", options.architecture);
     build_options.addOption([]const u8, "precision", options.precision);
-    build_options.addOptionPath("headers", options.headers);
+    // TODO(zig 0.16.0): zig master's `addOptionPath` is file-only and gained
+    // `addOptionPathDirectory` for directories (this path is opened as a dir
+    // by pkg/bindgen/Config.zig).
+    if (comptime builtin.zig_version.minor == 16) {
+        build_options.addOptionPath("headers", options.headers);
+    } else {
+        build_options.addOptionPathDirectory("headers", options.headers);
+    }
 
     const mod = b.createModule(.{
         .target = target,
@@ -80,12 +87,15 @@ pub fn run(b: *Build, exe: *Build.Step.Compile, options: RunOptions) Build.LazyP
     const bindings_output = cmd.addOutputDirectoryArg("bindings");
     cmd.addArg(options.precision);
     cmd.addArg(options.architecture);
-    cmd.addArg(if (b.verbose) "verbose" else "quiet");
+    // TODO(zig 0.16.0): zig master moved `Build.verbose` into `Build.Graph`.
+    const verbose: bool = if (comptime builtin.zig_version.minor == 16) b.verbose else b.graph.verbose;
+    cmd.addArg(if (verbose) "verbose" else "quiet");
 
     return bindings_output;
 }
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
 

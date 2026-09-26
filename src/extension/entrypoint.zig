@@ -14,6 +14,8 @@ pub const std_options: std.Options = if (@hasDecl(extension, "std_options")) ext
 // the wrong return type. Substitute a minimal debug_io that does not
 // reference `std.Io.Threaded`. On all other targets this evaluates to the
 // standard library default.
+// TODO(zig 0.16.0): remove this shim (and emscripten_debug_io.zig) once 0.16.x
+// support is dropped; the workaround module is not needed on 0.17+.
 pub const std_options_debug_io: std.Io = if (emscripten_debug_io.needed)
     emscripten_debug_io.io
 else

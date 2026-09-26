@@ -38,8 +38,9 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                     const FnType = @TypeOf(method);
                     const fn_info = @typeInfo(FnType).@"fn";
                     const ReturnType = fn_info.return_type orelse void;
+                    const param_types = compat.fnParamTypes(FnType);
 
-                    const param_count = fn_info.params.len;
+                    const param_count = param_types.len;
                     if (param_count == 1) {
                         // Only self parameter - generate simpler wrapper
                         const Wrapper = struct {
@@ -62,7 +63,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                                 var args: std.meta.ArgsTuple(FnType) = undefined;
                                 args[0] = instance;
                                 inline for (1..param_count) |j| {
-                                    const Arg = fn_info.params[j].type.?;
+                                    const Arg = param_types[j].?;
                                     args[j] = ptrcall.readArg(Arg, p_args[j - 1]);
                                 }
                                 if (ReturnType == void) {
@@ -221,22 +222,22 @@ test "VTable ptrcall marshals virtual params at engine width" {
     // a full 8-byte slot (int64/double/uint8), with unused high bytes left
     // as stack garbage. Poison everything first so a narrow read/write
     // would be caught reading (or leaving) garbage.
-    var slot_i32: [8]u8 align(8) = .{0xAA} ** 8;
+    var slot_i32: [8]u8 align(8) = @splat(0xAA);
     std.mem.writeInt(i64, &slot_i32, -12345, .little);
 
-    var slot_u32: [8]u8 align(8) = .{0xAA} ** 8;
+    var slot_u32: [8]u8 align(8) = @splat(0xAA);
     std.mem.writeInt(i64, &slot_u32, 4_000_000_000, .little); // > i32 max
 
-    var slot_f32: [8]u8 align(8) = .{0xAA} ** 8;
+    var slot_f32: [8]u8 align(8) = @splat(0xAA);
     std.mem.writeInt(u64, &slot_f32, @as(u64, @bitCast(@as(f64, 3.5))), .little);
 
-    var slot_bool: [8]u8 align(8) = .{0xAA} ** 8;
+    var slot_bool: [8]u8 align(8) = @splat(0xAA);
     slot_bool[0] = 1;
 
-    var slot_enum: [8]u8 align(8) = .{0xAA} ** 8;
+    var slot_enum: [8]u8 align(8) = @splat(0xAA);
     std.mem.writeInt(i64, &slot_enum, -7, .little);
 
-    var slot_flags: [8]u8 align(8) = .{0xAA} ** 8;
+    var slot_flags: [8]u8 align(8) = @splat(0xAA);
     std.mem.writeInt(i64, &slot_flags, 0b10, .little); // beta set, alpha clear
 
     var args: [6]c.GDExtensionConstTypePtr = .{
@@ -249,7 +250,7 @@ test "VTable ptrcall marshals virtual params at engine width" {
     };
 
     var probe: Probe = .{};
-    var ret_slot: [8]u8 align(8) = .{0xAA} ** 8;
+    var ret_slot: [8]u8 align(8) = @splat(0xAA);
 
     wrapper(@ptrCast(&probe), &args, @ptrCast(&ret_slot));
 
@@ -308,52 +309,53 @@ test "VTable ptrcall marshals virtual returns at engine width" {
     var no_args: [0]c.GDExtensionConstTypePtr = .{};
 
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_i32").?(instance_ptr, &no_args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(i64, -123456), std.mem.readInt(i64, &ret, .little));
     }
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_u32").?(instance_ptr, &no_args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(i64, 4_111_222_333), std.mem.readInt(i64, &ret, .little));
     }
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_f32").?(instance_ptr, &no_args, @ptrCast(&ret));
         const bits = std.mem.readInt(u64, &ret, .little);
         try std.testing.expectEqual(@as(f64, -2.5), @as(f64, @bitCast(bits)));
     }
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_bool").?(instance_ptr, &no_args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(u8, 1), ret[0]);
     }
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_enum").?(instance_ptr, &no_args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(i64, -300), std.mem.readInt(i64, &ret, .little));
     }
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_flags").?(instance_ptr, &no_args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(i64, 0b10), std.mem.readInt(i64, &ret, .little));
     }
     {
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_ret_u64").?(instance_ptr, &no_args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(u64, 0xFFFF_FFFF_FFFF_FFFF), std.mem.readInt(u64, &ret, .little));
     }
     {
-        var arg_slot: [8]u8 align(8) = .{0xAA} ** 8;
+        var arg_slot: [8]u8 align(8) = @splat(0xAA);
         std.mem.writeInt(i64, &arg_slot, 41, .little);
         var args: [1]c.GDExtensionConstTypePtr = .{@ptrCast(&arg_slot)};
-        var ret: [8]u8 align(8) = .{0xAA} ** 8;
+        var ret: [8]u8 align(8) = @splat(0xAA);
         ReturnsVTable.get("_add_and_return").?(instance_ptr, &args, @ptrCast(&ret));
         try std.testing.expectEqual(@as(i64, 42), std.mem.readInt(i64, &ret, .little));
     }
 }
 
 const std = @import("std");
+const compat = @import("../compat.zig");
 
 const c = @import("gdextension");
 const casez = @import("casez");

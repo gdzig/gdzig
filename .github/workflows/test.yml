@@ -9,44 +9,90 @@ on:
 jobs:
   # Quick test for PRs - Godot compatibility target on Linux
   test-pr:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
+        zig: ["0.16.0", master]
+        target: [native, wasm]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - uses: ./.github/actions/test-godot
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
         with:
-          godot-version: ${{ matrix.godot }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
+          # Empty version resolves minimum_zig_version from build.zig.zon.
+          version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ matrix.godot }}
+          use-dotnet: false
+
+      - name: Test
+        if: matrix.target == 'native'
+        run: zig build test -Dgodot-path="$(command -v godot)"
+
+      - name: Build example for wasm32-emscripten
+        if: matrix.target == 'wasm'
+        run: zig build -Dtarget=wasm32-emscripten
+        working-directory: example
 
   # Full matrix for push to master and manual dispatch
   test-full:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }}
+    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
+      fail-fast: false
       matrix:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.7.2"]
+        zig: ["0.16.0", master]
+        target: [native, wasm]
         include:
           - os: macos-latest
             godot: "4.7.2"
+            zig: "0.16.0"
+            target: native
+          - os: macos-latest
+            godot: "4.7.2"
+            zig: master
+            target: native
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - uses: ./.github/actions/test-godot
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
         with:
-          godot-version: ${{ matrix.godot }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}
+          # Empty version resolves minimum_zig_version from build.zig.zon.
+          version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ matrix.godot }}
+          use-dotnet: false
+
+      - name: Test
+        if: matrix.target == 'native'
+        run: zig build test -Dgodot-path="$(command -v godot)"
+
+      - name: Build example for wasm32-emscripten
+        if: matrix.target == 'wasm'
+        run: zig build -Dtarget=wasm32-emscripten
+        working-directory: example

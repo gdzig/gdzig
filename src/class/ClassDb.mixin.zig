@@ -816,12 +816,12 @@ fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T
             if (Userdata != void) {
                 const userdata = @as(*Userdata, @ptrCast(@alignCast(method_userdata)));
                 ret.* = callback(userdata, inst, args) catch |err| {
-                    if (r_error) |e| e.* = @bitCast(CallResult.fromError(err));
+                    if (r_error) |e| e.* = CallResult.fromError(err).toCError();
                     return;
                 };
             } else {
                 ret.* = callback(inst, args) catch |err| {
-                    if (r_error) |e| e.* = @bitCast(CallResult.fromError(err));
+                    if (r_error) |e| e.* = CallResult.fromError(err).toCError();
                     return;
                 };
             }
@@ -898,6 +898,17 @@ pub const CallResult = extern struct {
                 error.InstanceIsNull => .instance_is_null,
                 error.MethodNotConst => .method_not_const,
             },
+        };
+    }
+
+    /// Converts to the C ABI error struct. Field-wise instead of `@bitCast`
+    /// because zig master (0.17) no longer allows `@bitCast` to or from
+    /// extern structs.
+    pub fn toCError(self: CallResult) c.GDExtensionCallError {
+        return .{
+            .@"error" = @intFromEnum(self.@"error"),
+            .argument = self.argument,
+            .expected = self.expected,
         };
     }
 };

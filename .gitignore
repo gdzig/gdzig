@@ -3,6 +3,7 @@
 .vscode
 .DS_Store
 .zig-cache
+.zig-cache-master
 zig-out
 zig-pkg
 gen

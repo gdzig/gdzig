@@ -270,7 +270,7 @@ pub fn Class(comptime T: type) type {
                 break :blk enum_name;
             };
 
-            inline for (info.@"enum".fields) |field| {
+            inline for (compat.enumFields(E)) |field| {
                 self.constants.append(alloc, .{
                     .enum_name = short_name,
                     .name = field.name,
@@ -302,7 +302,7 @@ pub fn Class(comptime T: type) type {
             };
 
             comptime var bit: u5 = 0;
-            inline for (info.@"struct".fields) |field| {
+            inline for (compat.structFields(F)) |field| {
                 if (field.type == bool) {
                     self.constants.append(alloc, .{
                         .enum_name = short_name,
@@ -730,7 +730,7 @@ pub fn Signal(comptime T: type, comptime S: type) type {
             const class_name: StringName = .fromType(T);
             const signal_name: StringName = .fromSignal(S);
 
-            const fields = @typeInfo(S).@"struct".fields;
+            const fields = compat.structFields(S);
             var arg_info: [fields.len]classdb.PropertyInfo = undefined;
             var names: [fields.len]StringName = undefined;
             inline for (fields, 0..) |field, i| {
@@ -932,6 +932,7 @@ fn Callbacks(comptime T: type) type {
 }
 
 const std = @import("std");
+const compat = @import("../compat.zig");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 

@@ -107,10 +107,10 @@ fn addExtensionWeb(
 
     // Install and activate emsdk
     const emsdk_script = if (b.graph.host.result.os.tag == .windows) "emsdk.bat" else "emsdk";
-    const install_emsdk = b.addSystemCommand(&.{emsdk_path.path(b, emsdk_script).getPath(b)});
+    const install_emsdk = b.addSystemCommand(&.{lazyPathString(b, emsdk_path.path(b, emsdk_script))});
     install_emsdk.addArgs(&.{ "install", options.emsdk_version });
 
-    const activate_emsdk = b.addSystemCommand(&.{emsdk_path.path(b, emsdk_script).getPath(b)});
+    const activate_emsdk = b.addSystemCommand(&.{lazyPathString(b, emsdk_path.path(b, emsdk_script))});
     activate_emsdk.addArgs(&.{ "activate", options.emsdk_version });
     activate_emsdk.step.dependOn(&install_emsdk.step);
 
@@ -121,8 +121,12 @@ fn addExtensionWeb(
     const optimize = options.optimize;
     const single_threaded = mod.single_threaded orelse false;
 
-    const run_emcc = b.addSystemCommand(&.{emsdk_path.path(b, "upstream/emscripten/emcc").getPath(b)});
+    const run_emcc = b.addSystemCommand(&.{lazyPathString(b, emsdk_path.path(b, "upstream/emscripten/emcc"))});
     run_emcc.addArtifactArg(lib);
+    // Inherit stdio so emcc's warnings stream directly; when captured, zig's
+    // build runner echoes them post-hoc under a misleading "failed command:"
+    // header even when the step succeeds (emcc warns on pthreads+SIDE_MODULE).
+    run_emcc.stdio = .inherit;
 
     run_emcc.addArgs(&.{
         "-sSIDE_MODULE=1",
@@ -135,21 +139,21 @@ fn addExtensionWeb(
     }
 
     run_emcc.addArgs(switch (optimize) {
-        .Debug => &.{
+        common.optimize_debug => &.{
             "-O0",
             "-g3",
             "-fsanitize=undefined",
         },
-        .ReleaseSafe => &.{
+        common.optimize_safe => &.{
             "-O3",
             "-fsanitize=undefined",
             "-fsanitize-minimal-runtime",
         },
-        .ReleaseFast => &.{"-O3"},
-        .ReleaseSmall => &.{"-Oz"},
+        common.optimize_fast => &.{"-O3"},
+        common.optimize_small => &.{"-Oz"},
     });
 
-    if (optimize != .Debug) {
+    if (optimize != common.optimize_debug) {
         run_emcc.addArgs(&.{
             "-flto",
             "--closure",
@@ -250,8 +254,15 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     install_project.step.dependOn(&install_ext.step);
 
     const runner_options = b.addOptions();
+    // TODO(zig 0.16.0): zig master removed `Build.install_path`; the default
+    // install prefix on master is `<build_root>/zig-out` (custom `--prefix`
+    // values are not reflected here yet).
+    const install_path: []const u8 = if (comptime builtin.zig_version.minor == 16)
+        b.install_path
+    else
+        "zig-out";
     runner_options.addOption([]const []const u8, "test_folders", &.{
-        b.fmt("{s}/{s}", .{ b.install_path, install_subdir }),
+        b.fmt("{s}/{s}", .{ install_path, install_subdir }),
     });
     runner_options.addOptionPath("godot_exe", paths.namedLazyPath("godot"));
 
@@ -260,9 +271,14 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
         .root_module = b.createModule(.{
             .root_source_file = paths.path("src/testing/coordinator.zig"),
             .target = options.target,
-            .optimize = .Debug,
+            .optimize = common.optimize_debug,
             .imports = &.{
                 .{ .name = "runner_options", .module = runner_options.createModule() },
+                .{ .name = "compat", .module = b.createModule(.{
+                    .root_source_file = paths.path("src/compat.zig"),
+                    .target = options.target,
+                    .optimize = common.optimize_debug,
+                }) },
             },
         }),
     });
@@ -276,6 +292,22 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
 // ============================================================================
 // Internal helpers
 // ============================================================================
+
+/// Resolves a `LazyPath` to a filesystem path string during the configure
+/// phase. Only source paths and dependency paths are supported (generated
+/// paths have no configure-time string on zig master).
+fn lazyPathString(b: *Build, lp: Build.LazyPath) []const u8 {
+    // TODO(zig 0.16.0): zig master removed `LazyPath.getPath2`; resolve src
+    // and dependency paths from the owning package root instead.
+    if (comptime builtin.zig_version.minor == 16) {
+        return lp.getPath2(b, null);
+    }
+    return switch (lp) {
+        .src_path => |sp| sp.owner.root.joinString(b.graph.arena, sp.sub_path) catch @panic("OOM"),
+        .dependency => |d| d.dependency.builder.root.joinString(b.graph.arena, d.sub_path) catch @panic("OOM"),
+        else => @panic("unsupported lazy path for configure-time resolution"),
+    };
+}
 
 /// Resolves paths and modules from either the current build (when building gdzig itself)
 /// or from a dependency (when gdzig is used as a dependency by downstream projects).
@@ -311,8 +343,15 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
     const deps = build_runner.dependencies;
     const build_zig = @import("../build.zig");
 
-    inline for (@typeInfo(deps.packages).@"struct".decls) |decl| {
-        const pkg_hash = decl.name;
+    // TODO(zig 0.16.0): master's `@typeInfo(T).@"struct"` exposes
+    // `decl_names` (plain strings) instead of `decls` (`Declaration`
+    // structs).
+    inline for (if (comptime builtin.zig_version.minor == 16)
+        @typeInfo(deps.packages).@"struct".decls
+    else
+        @typeInfo(deps.packages).@"struct".decl_names) |decl|
+    {
+        const pkg_hash = comptime if (builtin.zig_version.minor == 16) decl.name else decl;
         const pkg = @field(deps.packages, pkg_hash);
         if (@hasDecl(pkg, "build_zig") and pkg.build_zig == build_zig) {
             for (b.available_deps) |available| {
@@ -320,9 +359,14 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
                     const build_root = pkg.build_root;
                     var it = b.graph.dependency_cache.iterator();
                     while (it.next()) |entry| {
-                        if (std.mem.eql(u8, entry.key_ptr.build_root_string, build_root)) {
-                            return entry.value_ptr.*;
-                        }
+                        // TODO(zig 0.16.0): master's dependency cache key has
+                        // no `build_root_string`; the package hash identifies
+                        // the package instead.
+                        const matches = if (comptime builtin.zig_version.minor == 16)
+                            std.mem.eql(u8, entry.key_ptr.build_root_string, build_root)
+                        else
+                            std.mem.eql(u8, entry.key_ptr.pkg_hash, pkg_hash);
+                        if (matches) return entry.value_ptr.*;
                     }
                     @panic("gdzig dependency not initialized. Call b.dependency(\"gdzig\", ...) before using gdzig build functions");
                 }
@@ -378,5 +422,8 @@ fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
 }
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Build = std.Build;
 const Step = std.Build.Step;
+
+const common = @import("common.zig");

@@ -113,7 +113,7 @@ pub fn disconnect(self: *Self, comptime S: type, callable: Callable) void {
 /// Emits a signal. Guarantees no allocations when calling across the FFI. Passing Transform2D, AABB, Basis, Transform3D, or Projection is a compile error; use the Alloc variant.
 pub fn emit(self: *Self, comptime SignalType: type, signal: AssertNonAllocating(SignalType)) EmitError!void {
     const signal_name: StringName = .fromSignal(SignalType);
-    const fields = @typeInfo(SignalType).@"struct".fields;
+    const fields = compat.structFields(SignalType);
     var args: [fields.len]Variant = undefined;
     inline for (fields, 0..) |field, i| {
         args[i] = Variant.init(field.type, @field(signal, field.name));
@@ -125,7 +125,7 @@ pub fn emit(self: *Self, comptime SignalType: type, signal: AssertNonAllocating(
 /// Emits a signal. Will necessarily allocate when calling across the FFI with Transform2d, Aabb, Basis, Transform3d, or Projection.
 pub fn emitAlloc(self: *Self, comptime SignalType: type, signal: SignalType) EmitError!void {
     const signal_name: StringName = .fromSignal(SignalType);
-    const fields = @typeInfo(SignalType).@"struct".fields;
+    const fields = compat.structFields(SignalType);
     var args: [fields.len]Variant = undefined;
     inline for (fields, 0..) |field, i| {
         args[i] = Variant.init(field.type, @field(signal, field.name));
@@ -152,7 +152,7 @@ fn emitImpl(self: *Self, signal_name: StringName, args: anytype) EmitError!void 
 
 /// Returns Signal if no fields allocate, otherwise generates a compile error.
 fn AssertNonAllocating(comptime SignalType: type) type {
-    const fields = @typeInfo(SignalType).@"struct".fields;
+    const fields = compat.structFields(SignalType);
     inline for (fields) |field| {
         if (allocatesAsVariant(field.type)) {
             @compileError("Signal field '" ++ field.name ++ "' has type " ++ @typeName(field.type) ++
@@ -169,6 +169,7 @@ const EmitError = gdzig.EmitError;
 const class = gdzig.class;
 
 const DestroyInstanceBinding = gdzig.extension.DestroyInstanceBinding;
+const compat = @import("../compat.zig");
 
 // @mixin stop
 
