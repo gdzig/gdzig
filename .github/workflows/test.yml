@@ -16,6 +16,7 @@ jobs:
     # zig master legs are experimental: they must not gate PRs (#245).
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
@@ -59,6 +60,15 @@ jobs:
           version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
+      # gdzig build.zig resolves the Godot executable eagerly at configure
+      # time, so wasm legs need Godot installed even though it is never run.
+      - name: Setup Godot
+        if: matrix.target == 'wasm'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ matrix.godot }}
+          use-dotnet: false
+
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
         run: zig build -Dtarget=wasm32-emscripten
@@ -73,6 +83,7 @@ jobs:
     # zig master legs are experimental: they must not gate pushes (#245).
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
+      fail-fast: false
       matrix:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
@@ -125,6 +136,15 @@ jobs:
         with:
           version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+
+      # gdzig build.zig resolves the Godot executable eagerly at configure
+      # time, so wasm legs need Godot installed even though it is never run.
+      - name: Setup Godot
+        if: matrix.target == 'wasm'
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ matrix.godot }}
+          use-dotnet: false
 
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
