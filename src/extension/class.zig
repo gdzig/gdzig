@@ -4,18 +4,35 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
     const callbacks = comptime makeClassCallbacks(T);
     const Userdata = ClassUserdataOf(T);
 
-    if (gdzig.version.gte(.@"4.4")) {
+    if (gdzig.version.gte(.@"4.7")) {
+        classdb.registerClass6(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
+            .userdata = info.userdata,
+            .is_virtual = info.is_virtual,
+            .is_abstract = info.is_abstract,
+            .is_exposed = info.is_exposed,
+            .is_runtime = info.is_runtime,
+            .icon_path = info.icon_path,
+        } else .{
+            .is_virtual = info.is_virtual,
+            .is_abstract = info.is_abstract,
+            .is_exposed = info.is_exposed,
+            .is_runtime = info.is_runtime,
+            .icon_path = info.icon_path,
+        }, callbacks.v6);
+    } else if (gdzig.version.gte(.@"4.4")) {
         classdb.registerClass4(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
             .is_abstract = info.is_abstract,
             .is_exposed = info.is_exposed,
             .is_runtime = info.is_runtime,
+            .icon_path = info.icon_path,
         } else .{
             .is_virtual = info.is_virtual,
             .is_abstract = info.is_abstract,
             .is_exposed = info.is_exposed,
             .is_runtime = info.is_runtime,
+            .icon_path = info.icon_path,
         }, callbacks.v4);
     } else if (gdzig.version.gte(.@"4.3")) {
         classdb.registerClass3(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
@@ -139,6 +156,7 @@ fn makeClassCallbacks(comptime T: type) struct {
     v2: classdb.ClassCallbacks2(T, ClassUserdataOf(T), void),
     v3: classdb.ClassCallbacks3(T, ClassUserdataOf(T), void),
     v4: classdb.ClassCallbacks4(T, ClassUserdataOf(T), void),
+    v6: classdb.ClassCallbacks6(T, ClassUserdataOf(T), void),
 } {
     comptime {
         if (!@hasDecl(T, "create")) {
@@ -372,6 +390,27 @@ fn makeClassCallbacks(comptime T: type) struct {
             .get_rid = if (@hasDecl(T, "_getRid")) T._getRid else null,
         },
         .v4 = .{
+            .create = if (Userdata != void) Callbacks.create2 else Callbacks.create2NoUserdata,
+            .destroy = if (Userdata != void) Callbacks.destroy else Callbacks.destroyNoUserdata,
+            .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,
+
+            .get_virtual = if (Userdata != void) Callbacks.getVirtual2 else Callbacks.getVirtual2NoUserdata,
+            // .get_virtual_call_data - not yet supported
+            // .call_virtual_with_data - not yet supported
+
+            .set = if (@hasDecl(T, "_set")) T._set else null,
+            .get = if (@hasDecl(T, "_get")) T._get else null,
+            .get_property_list = if (@hasDecl(T, "_getPropertyList")) T._getPropertyList else null,
+            .destroy_property_list = if (@hasDecl(T, "_destroyPropertyList")) T._destroyPropertyList else null,
+            .property_can_revert = if (@hasDecl(T, "_propertyCanRevert")) T._propertyCanRevert else null,
+            .property_get_revert = if (@hasDecl(T, "_propertyGetRevert")) T._propertyGetRevert else null,
+            .validate_property = if (@hasDecl(T, "_validateProperty")) T._validateProperty else null,
+            .notification = if (@hasDecl(T, "_notification")) T._notification else null,
+            .to_string = if (@hasDecl(T, "_toString")) T._toString else null,
+            .reference = if (@hasDecl(T, "_reference")) T._reference else null,
+            .unreference = if (@hasDecl(T, "_unreference")) T._unreference else null,
+        },
+        .v6 = .{
             .create = if (Userdata != void) Callbacks.create2 else Callbacks.create2NoUserdata,
             .destroy = if (Userdata != void) Callbacks.destroy else Callbacks.destroyNoUserdata,
             .recreate = if (@hasDecl(T, "recreate")) T.recreate else null,

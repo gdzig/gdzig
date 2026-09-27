@@ -1,5 +1,6 @@
 # HEAD
 
+- **Fixed custom Resource refcounts on Godot 4.7+**: RefCounted/Resource extension classes now register Godot 4.7's `create_instance3` callback and return a Godot-owned reference when instantiated through ClassDB/GDScript, preventing the extra starting refcount and ObjectDB leaks when script references are dropped. Godot 4.4–4.6 remain supported through the deprecated `create_instance2` path, but this leak fix depends on the 4.7 ownership contract.
 - **Breaking — type-selected scalar math**: The 62 fixed-arity `gdzig.math` helpers with scalar float/integer results now require a leading result type. Float-returning helpers accept `f32` or `f64` (for example, `gdzig.math.lerpAngle(f32, from, to, weight)`); integer-returning helpers accept `i32` or `i64` (for example, `gdzig.math.clampi(i32, value, min, max)`). Inputs are converted to Godot's `f64`/`i64` utility-function ABI and results are returned with the selected type. Existing untyped calls must add `f64` or `i64` to preserve their previous result type.
 - **Updated dependencies**: Zig 0.14.1 and Godot 4.4 support
 - **Fully commented bindgens**: All generated bindings include complete documentation from Godot's API for convenient ZLS hover docs

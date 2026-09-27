@@ -100,6 +100,8 @@ defer _ = obj.unreference();
 return Variant.init(obj);
 ```
 
+When Godot 4.7 or newer constructs your own `RefCounted`/`Resource` extension class through `ClassDB` or GDScript, gdzig registers the `create_instance3` callback and returns the object with a claimed reference for Godot to own. Direct Zig calls to `Resource.init()` also return an owned object at reference count 1. Godot 4.4–4.6 remain supported through the deprecated `create_instance2` callback, but that older path keeps its original RefCounted construction behavior. If you create additional `RefCounted` helper objects inside your extension class `create()` function and retain them yourself, call `initRef()` explicitly if those helpers will be handed to engine APIs before another owner takes a reference.
+
 **Non-RefCounted** classes (like `Node`) require manual destruction. Prefer `node.queueFree()` which defers destruction until safe. Use `node.destroy()` only when immediate destruction is required (e.g., in your extension class's destroy callback).
 
 ### Extension Classes
