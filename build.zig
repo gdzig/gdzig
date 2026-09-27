@@ -31,7 +31,7 @@ pub fn build(b: *Build) !void {
 
     const godot_cpp = b.dependency("godot_cpp", .{});
     const interface_header: Build.LazyPath = if (regenerate_interface) blk: {
-        const python = common.findProgram(b, &.{ "python3", "python" }) orelse
+        const python = compat.findProgram(b, &.{ "python3", "python" }) orelse
             @panic("Python is required to regenerate gdextension_interface.h");
         const generate_header = b.addSystemCommand(&.{python});
         generate_header.addArgs(&.{
@@ -60,7 +60,7 @@ pub fn build(b: *Build) !void {
         if (godot_path) |p| {
             break :blk .{ .cwd_relative = p };
         }
-        if (common.findProgram(b, &.{"godot"})) |p| {
+        if (compat.findProgram(b, &.{"godot"})) |p| {
             break :blk .{ .cwd_relative = p };
         }
         @panic("Godot executable not found. Install godot on PATH or pass -Dgodot-path=<path>");
@@ -97,7 +97,7 @@ pub fn build(b: *Build) !void {
     const bindgen_exe = bindgen.build(b, .{
         .headers = headers,
         .target = b.graph.host,
-        .optimize = common.optimize_debug,
+        .optimize = compat.optimize_debug,
         .precision = precision,
         .architecture = architecture,
     });
@@ -154,14 +154,7 @@ pub fn build(b: *Build) !void {
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
 
-        // TODO(zig 0.16.0): zig master renamed `Build.build_root` to
-        // `Build.root` (Cache.Path) and removed `LazyPath.getPath2`; open
-        // the `test/` dir through the build-root directory handle instead.
-        const build_root: Dir = if (comptime builtin.zig_version.minor == 16)
-            b.build_root.handle
-        else
-            b.root.root_dir.handle;
-        var tests_dir = try build_root.openDir(b.graph.io, "test", .{ .iterate = true });
+        var tests_dir = try compat.buildRootDir(b).openDir(b.graph.io, "test", .{ .iterate = true });
         defer tests_dir.close(b.graph.io);
 
         var iter = tests_dir.iterate();
@@ -237,4 +230,5 @@ pub const TestOptions = api.TestOptions;
 pub const InitializationLevel = api.InitializationLevel;
 const bindgen = @import("build/bindgen.zig");
 const common = @import("build/common.zig");
+const compat = @import("build/compat.zig");
 const gdextension = @import("build/gdextension.zig");

@@ -155,12 +155,10 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, io: Io, input_dir
         break :blk contents[start_idx..stop_idx :0];
     };
 
-    // TODO(zig 0.16.0): zig master's `Ast.parse` takes `ParseOptions`
-    // (with `mode` defaulting to `.zig`) instead of a bare `Mode`.
-    var ast = if (comptime builtin.zig_version.minor == 16)
-        try Ast.parse(allocator, parse_contents, .zig)
+    var ast = if (comptime @hasDecl(Ast, "ParseOptions"))
+        try Ast.parse(allocator, parse_contents, .{})
     else
-        try Ast.parse(allocator, parse_contents, .{});
+        try Ast.parse(allocator, parse_contents, .zig);
     defer ast.deinit(allocator);
 
     if (ast.errors.len > 0) {
@@ -239,7 +237,6 @@ pub fn deinit(self: *Builtin, allocator: Allocator) void {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const Io = std.Io;

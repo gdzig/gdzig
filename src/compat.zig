@@ -1,17 +1,20 @@
-//! Compatibility shims for Zig compiler introspection APIs that changed
-//! shape between Zig 0.16.0 and zig master (0.17).
+//! Compatibility shims for Zig APIs that changed shape between the pinned
+//! stable release and zig master. See docs/adr/0001-zig-version-compat.md.
 //!
-//! Call sites import this module directly, so no per-site markers are
-//! needed: deleting or changing a helper here surfaces as a build error at
-//! every call site when 0.16.x support is dropped.
+//! Gates probe API *shape* (comptime `@hasDecl`/`@hasField`), not version
+//! numbers, so they keep working across future releases until the old-shape
+//! branch is deleted. `zig_016` is reserved for language-rule changes that
+//! have no API shape to probe. Discover all gates with:
+//! `git grep -E "comptime !?@has(Decl|Field)"`.
 //!
-// TODO(zig 0.16.0): delete this entire module when 0.16.x support is
-// dropped; each helper's `else` branch is the plain 0.17+ std call.
+// TODO(zig 0.16.0): when 0.16.x support is dropped, delete the old-shape
+// branches; each helper reduces to the other branch's plain std call.
 
 const std = @import("std");
 const builtin = @import("builtin");
 
-/// Whether the current compiler is a 0.16.x release.
+/// Whether the current compiler is a 0.16.x release. Only for gates with
+/// no API shape to probe (language rule changes).
 pub const zig_016 = builtin.zig_version.major == 0 and builtin.zig_version.minor == 16;
 
 /// Uniform view of a struct field: name and type.
@@ -22,17 +25,8 @@ pub const StructField = struct {
 
 /// Struct fields of `T` as `{ name, type }` pairs.
 pub inline fn structFields(comptime T: type) []const StructField {
-    if (comptime zig_016) {
-        return comptime blk: {
-            const fields = @typeInfo(T).@"struct".fields;
-            var result: [fields.len]StructField = undefined;
-            for (fields, 0..) |field, i| {
-                result[i] = .{ .name = field.name, .type = field.type };
-            }
-            const final = result;
-            break :blk &final;
-        };
-    } else {
+    if (comptime @hasField(std.builtin.Type.Struct, "field_names")) {
+        // New shape: parallel field_names / field_types arrays.
         return comptime blk: {
             const info = @typeInfo(T).@"struct";
             var result: [info.field_names.len]StructField = undefined;
@@ -43,6 +37,16 @@ pub inline fn structFields(comptime T: type) []const StructField {
             break :blk &final;
         };
     }
+    // Old shape: []StructField.
+    return comptime blk: {
+        const fields = @typeInfo(T).@"struct".fields;
+        var result: [fields.len]StructField = undefined;
+        for (fields, 0..) |field, i| {
+            result[i] = .{ .name = field.name, .type = field.type };
+        }
+        const final = result;
+        break :blk &final;
+    };
 }
 
 /// Uniform view of an enum field: name and value.
@@ -53,17 +57,8 @@ pub const EnumField = struct {
 
 /// Enum fields of `T` as `{ name, value }` pairs.
 pub inline fn enumFields(comptime T: type) []const EnumField {
-    if (comptime zig_016) {
-        return comptime blk: {
-            const fields = @typeInfo(T).@"enum".fields;
-            var result: [fields.len]EnumField = undefined;
-            for (fields, 0..) |field, i| {
-                result[i] = .{ .name = field.name, .value = field.value };
-            }
-            const final = result;
-            break :blk &final;
-        };
-    } else {
+    if (comptime @hasField(std.builtin.Type.Enum, "field_names")) {
+        // New shape: parallel field_names / field_values arrays.
         return comptime blk: {
             const info = @typeInfo(T).@"enum";
             var result: [info.field_names.len]EnumField = undefined;
@@ -74,39 +69,51 @@ pub inline fn enumFields(comptime T: type) []const EnumField {
             break :blk &final;
         };
     }
+    // Old shape: []EnumField.
+    return comptime blk: {
+        const fields = @typeInfo(T).@"enum".fields;
+        var result: [fields.len]EnumField = undefined;
+        for (fields, 0..) |field, i| {
+            result[i] = .{ .name = field.name, .value = field.value };
+        }
+        const final = result;
+        break :blk &final;
+    };
 }
 
 /// Declaration names of `T`, public and private.
 pub inline fn declNames(comptime T: type) []const [:0]const u8 {
-    if (comptime zig_016) {
-        return comptime blk: {
-            const decls = std.meta.declarations(T);
-            var names: [decls.len][:0]const u8 = undefined;
-            for (decls, 0..) |decl, i| {
-                names[i] = decl.name;
-            }
-            const final = names;
-            break :blk &final;
-        };
-    } else {
+    if (comptime !@hasDecl(std.builtin.Type, "Declaration")) {
+        // New shape: std.meta.declarations returns names only.
         return std.meta.declarations(T);
     }
+    // Old shape: []Type.Declaration structs with `.name`.
+    return comptime blk: {
+        const decls = std.meta.declarations(T);
+        var names: [decls.len][:0]const u8 = undefined;
+        for (decls, 0..) |decl, i| {
+            names[i] = decl.name;
+        }
+        const final = names;
+        break :blk &final;
+    };
 }
 
 /// Function parameter types of the function type `T` (`null` for `anytype`
 /// or generic parameters).
 pub inline fn fnParamTypes(comptime T: type) []const ?type {
-    if (comptime zig_016) {
-        return comptime blk: {
-            const params = @typeInfo(T).@"fn".params;
-            var result: [params.len]?type = undefined;
-            for (params, 0..) |param, i| {
-                result[i] = param.type;
-            }
-            const final = result;
-            break :blk &final;
-        };
-    } else {
+    if (comptime @hasField(std.builtin.Type.Fn, "param_types")) {
+        // New shape: param_types array, parameter names dropped.
         return @typeInfo(T).@"fn".param_types;
     }
+    // Old shape: []FnParam with `.type`.
+    return comptime blk: {
+        const params = @typeInfo(T).@"fn".params;
+        var result: [params.len]?type = undefined;
+        for (params, 0..) |param, i| {
+            result[i] = param.type;
+        }
+        const final = result;
+        break :blk &final;
+    };
 }
