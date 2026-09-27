@@ -1,7 +1,7 @@
 pub const BuildOptions = struct {
     casez: *Build.Module,
     target: Build.ResolvedTarget,
-    optimize: OptimizeMode = .Debug,
+    optimize: OptimizeMode = compat.Optimize.debug.optimizeMode(),
 };
 
 pub fn build(b: *Build, options: BuildOptions) *Build.Module {
@@ -18,3 +18,5 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Module {
 const std = @import("std");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
+
+const compat = @import("compat.zig");

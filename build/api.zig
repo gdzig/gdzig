@@ -107,10 +107,10 @@ fn addExtensionWeb(
 
     // Install and activate emsdk
     const emsdk_script = if (b.graph.host.result.os.tag == .windows) "emsdk.bat" else "emsdk";
-    const install_emsdk = b.addSystemCommand(&.{emsdk_path.path(b, emsdk_script).getPath(b)});
+    const install_emsdk = b.addSystemCommand(&.{compat.lazyPathString(b, emsdk_path.path(b, emsdk_script))});
     install_emsdk.addArgs(&.{ "install", options.emsdk_version });
 
-    const activate_emsdk = b.addSystemCommand(&.{emsdk_path.path(b, emsdk_script).getPath(b)});
+    const activate_emsdk = b.addSystemCommand(&.{compat.lazyPathString(b, emsdk_path.path(b, emsdk_script))});
     activate_emsdk.addArgs(&.{ "activate", options.emsdk_version });
     activate_emsdk.step.dependOn(&install_emsdk.step);
 
@@ -121,8 +121,12 @@ fn addExtensionWeb(
     const optimize = options.optimize;
     const single_threaded = mod.single_threaded orelse false;
 
-    const run_emcc = b.addSystemCommand(&.{emsdk_path.path(b, "upstream/emscripten/emcc").getPath(b)});
+    const run_emcc = b.addSystemCommand(&.{compat.lazyPathString(b, emsdk_path.path(b, "upstream/emscripten/emcc"))});
     run_emcc.addArtifactArg(lib);
+    // Inherit stdio so emcc's warnings stream directly; when captured, zig's
+    // build runner echoes them post-hoc under a misleading "failed command:"
+    // header even when the step succeeds (emcc warns on pthreads+SIDE_MODULE).
+    run_emcc.stdio = .inherit;
 
     run_emcc.addArgs(&.{
         "-sSIDE_MODULE=1",
@@ -134,22 +138,22 @@ fn addExtensionWeb(
         run_emcc.addArg("-sUSE_PTHREADS=1");
     }
 
-    run_emcc.addArgs(switch (optimize) {
-        .Debug => &.{
+    run_emcc.addArgs(switch (compat.Optimize.fromOptimizeMode(optimize)) {
+        .debug => &.{
             "-O0",
             "-g3",
             "-fsanitize=undefined",
         },
-        .ReleaseSafe => &.{
+        .safe => &.{
             "-O3",
             "-fsanitize=undefined",
             "-fsanitize-minimal-runtime",
         },
-        .ReleaseFast => &.{"-O3"},
-        .ReleaseSmall => &.{"-Oz"},
+        .fast => &.{"-O3"},
+        .small => &.{"-Oz"},
     });
 
-    if (optimize != .Debug) {
+    if (compat.Optimize.fromOptimizeMode(optimize) != .debug) {
         run_emcc.addArgs(&.{
             "-flto",
             "--closure",
@@ -251,7 +255,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
 
     const runner_options = b.addOptions();
     runner_options.addOption([]const []const u8, "test_folders", &.{
-        b.fmt("{s}/{s}", .{ b.install_path, install_subdir }),
+        b.fmt("{s}/{s}", .{ compat.installPath(b), install_subdir }),
     });
     runner_options.addOptionPath("godot_exe", paths.namedLazyPath("godot"));
 
@@ -260,7 +264,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
         .root_module = b.createModule(.{
             .root_source_file = paths.path("src/testing/coordinator.zig"),
             .target = options.target,
-            .optimize = .Debug,
+            .optimize = compat.Optimize.debug.optimizeMode(),
             .imports = &.{
                 .{ .name = "runner_options", .module = runner_options.createModule() },
             },
@@ -311,8 +315,7 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
     const deps = build_runner.dependencies;
     const build_zig = @import("../build.zig");
 
-    inline for (@typeInfo(deps.packages).@"struct".decls) |decl| {
-        const pkg_hash = decl.name;
+    inline for (compat.declNames(deps.packages)) |pkg_hash| {
         const pkg = @field(deps.packages, pkg_hash);
         if (@hasDecl(pkg, "build_zig") and pkg.build_zig == build_zig) {
             for (b.available_deps) |available| {
@@ -320,9 +323,7 @@ fn getSelfDependency(b: *Build) *Build.Dependency {
                     const build_root = pkg.build_root;
                     var it = b.graph.dependency_cache.iterator();
                     while (it.next()) |entry| {
-                        if (std.mem.eql(u8, entry.key_ptr.build_root_string, build_root)) {
-                            return entry.value_ptr.*;
-                        }
+                        if (compat.depCacheKeyMatches(entry.key_ptr, build_root, pkg_hash)) return entry.value_ptr.*;
                     }
                     @panic("gdzig dependency not initialized. Call b.dependency(\"gdzig\", ...) before using gdzig build functions");
                 }
@@ -380,3 +381,5 @@ fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
 const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
+
+const compat = @import("compat.zig");

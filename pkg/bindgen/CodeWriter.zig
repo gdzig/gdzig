@@ -30,7 +30,7 @@ fn drain(w: *Writer, data: []const []const u8, splat: usize) Error!usize {
             // Add indentation at start of line (but not for empty lines)
             if (this.at_line_start and (this.comment != .off or byte != '\n')) {
                 for (0..this.indent) |_| {
-                    _ = try this.out.writeAll(" " ** 4);
+                    _ = try this.out.writeAll("    ");
                 }
 
                 _ = switch (this.comment) {

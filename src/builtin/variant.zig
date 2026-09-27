@@ -828,7 +828,7 @@ test "forType" {
         .{ .bool, bool },
         .{ .int, i64 },
         .{ .float, f64 },
-        .{ .int, enum(u32) {} },
+        .{ .int, if (comptime compat.zig_016) enum(u32) {} else enum(noreturn) {} },
     };
 
     inline for (pairs) |pair| {
@@ -856,6 +856,7 @@ test "forType comptime" {
 }
 
 const std = @import("std");
+const compat = @import("../compat.zig");
 const Atomic = std.atomic.Value;
 const Child = std.meta.Child;
 const mem = std.mem;

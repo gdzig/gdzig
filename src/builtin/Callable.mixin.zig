@@ -1,18 +1,18 @@
 pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callable {
     // find the method on `p_instance` by pointer
     const T = comptime std.meta.Child(@TypeOf(p_instance));
-    const decls = comptime std.meta.declarations(T);
+    const decls = comptime compat.declNames(T);
 
     comptime var method_name: ?[:0]const u8 = null;
 
     inline for (decls) |decl| {
-        const field = @field(T, decl.name);
+        const field = @field(T, decl);
         const p_func_ptr: *const anyopaque = @ptrCast(p_function_ptr);
         const decl_func_ptr: *const anyopaque = @ptrCast(&field);
 
         if (comptime p_func_ptr == decl_func_ptr) {
             // Convert to snake_case to match the registered method name
-            method_name = comptime std.fmt.comptimePrint("{s}", .{casez.comptimeConvert(godot_case.method, decl.name)});
+            method_name = comptime std.fmt.comptimePrint("{s}", .{casez.comptimeConvert(godot_case.method, decl)});
             break;
         }
     }
@@ -36,6 +36,7 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
 const casez = @import("casez");
 const common = @import("common");
 const godot_case = common.godot_case;
+const compat = @import("../compat.zig");
 
 // @mixin stop
 

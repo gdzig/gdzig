@@ -155,7 +155,10 @@ pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, io: Io, input_dir
         break :blk contents[start_idx..stop_idx :0];
     };
 
-    var ast = try Ast.parse(allocator, parse_contents, .zig);
+    var ast = if (comptime @hasDecl(Ast, "ParseOptions"))
+        try Ast.parse(allocator, parse_contents, .{})
+    else
+        try Ast.parse(allocator, parse_contents, .zig);
     defer ast.deinit(allocator);
 
     if (ast.errors.len > 0) {
