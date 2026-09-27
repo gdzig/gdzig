@@ -123,7 +123,7 @@ test "indexed properties" {
     ensureRegistered();
 
     // Indexed properties require Godot 4.2+
-    if (!gdzig.version.gte(.@"4.2")) return;
+    if (!gdzig.version.gte(.@"4.2")) return error.SkipZigTest;
 
     const node = try PropertyNode.create();
     defer node.destroy();

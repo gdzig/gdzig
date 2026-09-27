@@ -120,6 +120,12 @@ pub fn ClassInfo4(comptime Userdata: type) type {
         };
 }
 
+// @ref GDExtensionClassCreationInfo6 (no callbacks)
+// @since 4.7 (uses GDExtensionClassCreateInstance3)
+pub fn ClassInfo6(comptime Userdata: type) type {
+    return ClassInfo4(Userdata);
+}
+
 //
 // Class Callbacks
 //
@@ -227,6 +233,32 @@ pub fn ClassCallbacks4(comptime T: type, comptime ClassUserdata: type, comptime 
     };
 }
 
+// @ref GDExtensionClassCreationInfo6 (only the callbacks)
+// @since 4.7 (uses Create3)
+pub fn ClassCallbacks6(comptime T: type, comptime ClassUserdata: type, comptime VirtualCallUserdata: type) type {
+    return struct {
+        create: Create3(T, ClassUserdata),
+        destroy: Destroy(T, ClassUserdata),
+        recreate: ?Recreate(T, ClassUserdata) = null,
+
+        get_virtual: ?GetVirtual2(T, ClassUserdata) = null,
+        get_virtual_call_data: ?GetVirtualCallData2(ClassUserdata, VirtualCallUserdata) = null,
+        call_virtual_with_data: ?CallVirtualWithData(T, VirtualCallUserdata) = null,
+
+        set: ?Set(T) = null,
+        get: ?Get(T) = null,
+        get_property_list: ?GetPropertyList(T) = null,
+        destroy_property_list: ?DestroyPropertyList2(T) = null,
+        property_can_revert: ?PropertyCanRevert(T) = null,
+        property_get_revert: ?PropertyGetRevert(T) = null,
+        validate_property: ?ValidateProperty(T) = null,
+        notification: ?Notification2(T) = null,
+        to_string: ?ToString(T) = null,
+        reference: ?Reference(T) = null,
+        unreference: ?Unreference(T) = null,
+    };
+}
+
 //
 // Instance Lifecycle Callbacks
 //
@@ -264,6 +296,26 @@ pub fn Create2(comptime T: type, comptime ClassUserdata: type) type {
 
 // @ref GDExtensionClassCreateInstance2
 fn wrapCreate2(comptime T: type, comptime ClassUserdata: type, comptime callback: Create2(T, ClassUserdata)) Child(c.GDExtensionClassCreateInstance2) {
+    return struct {
+        fn wrapped(p_class_userdata: ?*anyopaque, p_notify_postinitialize: c.GDExtensionBool) callconv(.c) c.GDExtensionObjectPtr {
+            const notify = p_notify_postinitialize != 0;
+            const inst = if (ClassUserdata != void) blk: {
+                const ud = @as(ClassUserdata, @ptrCast(@alignCast(p_class_userdata)));
+                break :blk callback(ud, notify) catch return null;
+            } else callback(notify) catch return null;
+            return @ptrCast(Object.upcast(inst));
+        }
+    }.wrapped;
+}
+
+// @ref GDExtensionClassCreateInstance3
+// @since 4.7 (RefCounted instances must be returned with a claimed reference)
+pub fn Create3(comptime T: type, comptime ClassUserdata: type) type {
+    return Create2(T, ClassUserdata);
+}
+
+// @ref GDExtensionClassCreateInstance3
+fn wrapCreate3(comptime T: type, comptime ClassUserdata: type, comptime callback: Create3(T, ClassUserdata)) Child(c.GDExtensionClassCreateInstance3) {
     return struct {
         fn wrapped(p_class_userdata: ?*anyopaque, p_notify_postinitialize: c.GDExtensionBool) callconv(.c) c.GDExtensionObjectPtr {
             const notify = p_notify_postinitialize != 0;
@@ -1089,6 +1141,56 @@ pub inline fn registerClass4(
             .icon_path = @ptrCast(info.icon_path),
 
             .create_instance_func = wrapCreate2(T, Userdata, callbacks.create),
+            .free_instance_func = wrapDestroy(T, Userdata, callbacks.destroy),
+            .recreate_instance_func = if (callbacks.recreate) |f| wrapRecreate(T, Userdata, f) else null,
+            .get_virtual_func = if (callbacks.get_virtual) |f| wrapGetVirtual2(T, Userdata, f) else null,
+            .get_virtual_call_data_func = if (callbacks.get_virtual_call_data) |f| wrapGetVirtualCallData2(Userdata, VirtualCallData, f) else null,
+            .call_virtual_with_data_func = if (callbacks.call_virtual_with_data) |f| wrapCallVirtualWithData(T, VirtualCallData, f) else null,
+
+            .set_func = if (callbacks.set) |f| wrapSet(T, f) else null,
+            .get_func = if (callbacks.get) |f| wrapGet(T, f) else null,
+            .get_property_list_func = if (callbacks.get_property_list) |f| wrapGetPropertyList(T, f) else null,
+            .free_property_list_func = if (callbacks.destroy_property_list) |f| wrapDestroyPropertyList2(T, f) else null,
+            .property_can_revert_func = if (callbacks.property_can_revert) |f| wrapPropertyCanRevert(T, f) else null,
+            .property_get_revert_func = if (callbacks.property_get_revert) |f| wrapPropertyGetRevert(T, f) else null,
+            .validate_property_func = if (callbacks.validate_property) |f| wrapValidateProperty(T, f) else null,
+            .notification_func = if (callbacks.notification) |f| wrapNotification2(T, f) else null,
+            .to_string_func = if (callbacks.to_string) |f| wrapToString(T, f) else null,
+            .reference_func = if (callbacks.reference) |f| wrapReference(T, f) else null,
+            .unreference_func = if (callbacks.unreference) |f| wrapUnreference(T, f) else null,
+
+            .class_userdata = userdata,
+        },
+    );
+}
+
+/// Registers an extension class in the ClassDb.
+///
+/// @since 4.7
+pub inline fn registerClass6(
+    comptime T: type,
+    comptime Userdata: type,
+    comptime VirtualCallData: type,
+    class_name: *const StringName,
+    base_class_name: *const StringName,
+    info: ClassInfo6(Userdata),
+    comptime callbacks: ClassCallbacks6(T, Userdata, VirtualCallData),
+) void {
+    const userdata: ?*anyopaque = if (Userdata != void) @ptrCast(@constCast(info.userdata)) else null;
+
+    const func = raw.classdbRegisterExtensionClass6 orelse @panic("classdb_register_extension_class6 requires Godot 4.7+");
+    func(
+        raw.library,
+        @ptrCast(class_name),
+        @ptrCast(base_class_name),
+        &c.GDExtensionClassCreationInfo6{
+            .is_virtual = @intFromBool(info.is_virtual),
+            .is_abstract = @intFromBool(info.is_abstract),
+            .is_exposed = @intFromBool(info.is_exposed),
+            .is_runtime = @intFromBool(info.is_runtime),
+            .icon_path = @ptrCast(info.icon_path),
+
+            .create_instance_func = wrapCreate3(T, Userdata, callbacks.create),
             .free_instance_func = wrapDestroy(T, Userdata, callbacks.destroy),
             .recreate_instance_func = if (callbacks.recreate) |f| wrapRecreate(T, Userdata, f) else null,
             .get_virtual_func = if (callbacks.get_virtual) |f| wrapGetVirtual2(T, Userdata, f) else null,
