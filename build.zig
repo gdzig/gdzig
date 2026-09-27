@@ -97,7 +97,7 @@ pub fn build(b: *Build) !void {
     const bindgen_exe = bindgen.build(b, .{
         .headers = headers,
         .target = b.graph.host,
-        .optimize = compat.optimize_debug,
+        .optimize = compat.Optimize.debug.optimizeMode(),
         .precision = precision,
         .architecture = architecture,
     });

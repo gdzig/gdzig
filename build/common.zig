@@ -1,7 +1,7 @@
 pub const BuildOptions = struct {
     casez: *Build.Module,
     target: Build.ResolvedTarget,
-    optimize: OptimizeMode = compat.optimize_debug,
+    optimize: OptimizeMode = compat.Optimize.debug.optimizeMode(),
 };
 
 pub fn build(b: *Build, options: BuildOptions) *Build.Module {

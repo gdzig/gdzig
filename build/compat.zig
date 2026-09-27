@@ -15,25 +15,53 @@ const Build = std.Build;
 const Io = std.Io;
 const OptimizeMode = std.builtin.OptimizeMode;
 
-/// True when `Build.findProgram` returns an optional (new shape) instead
-/// of an error union (old shape).
-const find_program_returns_optional =
-    @typeInfo(@typeInfo(@TypeOf(Build.findProgram)).@"fn".return_type.?) == .optional;
-
 /// Find a program by name candidates on PATH. Returns null when not found.
 pub fn findProgram(b: *Build, names: []const []const u8) ?[]const u8 {
-    if (comptime find_program_returns_optional) return b.findProgram(.{ .names = names });
+    // New shape returns an optional; old shape an error union.
+    if (comptime @typeInfo(@typeInfo(@TypeOf(Build.findProgram)).@"fn".return_type.?) == .optional)
+        return b.findProgram(.{ .names = names });
     return b.findProgram(names, &.{}) catch null;
 }
 
 /// True when `OptimizeMode` variants are lowercase (new shape).
 const lowercase_optimize_mode = std.meta.stringToEnum(OptimizeMode, "debug") != null;
 
-/// `OptimizeMode` variants, renamed to lowercase on master.
-pub const optimize_debug: OptimizeMode = if (lowercase_optimize_mode) .debug else .Debug;
-pub const optimize_safe: OptimizeMode = if (lowercase_optimize_mode) .safe else .ReleaseSafe;
-pub const optimize_fast: OptimizeMode = if (lowercase_optimize_mode) .fast else .ReleaseFast;
-pub const optimize_small: OptimizeMode = if (lowercase_optimize_mode) .small else .ReleaseSmall;
+/// Version-stable wrapper over the std `OptimizeMode` variants, which were
+/// renamed to lowercase on master.
+pub const Optimize = enum {
+    debug,
+    safe,
+    fast,
+    small,
+
+    /// The std `OptimizeMode` for this variant.
+    pub fn optimizeMode(self: Optimize) OptimizeMode {
+        return switch (self) {
+            .debug => if (lowercase_optimize_mode) .debug else .Debug,
+            .safe => if (lowercase_optimize_mode) .safe else .ReleaseSafe,
+            .fast => if (lowercase_optimize_mode) .fast else .ReleaseFast,
+            .small => if (lowercase_optimize_mode) .small else .ReleaseSmall,
+        };
+    }
+
+    /// The wrapper variant for a std `OptimizeMode`.
+    pub fn fromOptimizeMode(mode: OptimizeMode) Optimize {
+        if (comptime lowercase_optimize_mode) {
+            return switch (mode) {
+                .debug => .debug,
+                .safe => .safe,
+                .fast => .fast,
+                .small => .small,
+            };
+        }
+        return switch (mode) {
+            .Debug => .debug,
+            .ReleaseSafe => .safe,
+            .ReleaseFast => .fast,
+            .ReleaseSmall => .small,
+        };
+    }
+};
 
 /// Directory handle for the package build root, for configure-phase
 /// directory access (`Build.build_root` was renamed to `Build.root`).
@@ -61,8 +89,11 @@ pub fn addOptionPathDirectory(options: *Build.Step.Options, name: []const u8, pa
 }
 
 /// The install prefix as a path string. Master removed
-/// `Build.install_path`; the default install prefix there is
-/// `<build_root>/zig-out` (custom `--prefix` values are not reflected here).
+/// `Build.install_path`; the default there is `zig-out` (a literal in
+/// lib/compiler/Maker.zig — not importable from build scripts, and the
+/// `install_prefix` LazyPath base panics at configure time, so there is no
+/// public default to reference). Custom `--prefix` values are not
+/// reflected here.
 pub fn installPath(b: *Build) []const u8 {
     if (comptime @hasField(Build, "install_path")) return b.install_path;
     return "zig-out";

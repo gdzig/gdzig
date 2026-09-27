@@ -138,22 +138,22 @@ fn addExtensionWeb(
         run_emcc.addArg("-sUSE_PTHREADS=1");
     }
 
-    run_emcc.addArgs(switch (optimize) {
-        compat.optimize_debug => &.{
+    run_emcc.addArgs(switch (compat.Optimize.fromOptimizeMode(optimize)) {
+        .debug => &.{
             "-O0",
             "-g3",
             "-fsanitize=undefined",
         },
-        compat.optimize_safe => &.{
+        .safe => &.{
             "-O3",
             "-fsanitize=undefined",
             "-fsanitize-minimal-runtime",
         },
-        compat.optimize_fast => &.{"-O3"},
-        compat.optimize_small => &.{"-Oz"},
+        .fast => &.{"-O3"},
+        .small => &.{"-Oz"},
     });
 
-    if (optimize != compat.optimize_debug) {
+    if (compat.Optimize.fromOptimizeMode(optimize) != .debug) {
         run_emcc.addArgs(&.{
             "-flto",
             "--closure",
@@ -264,7 +264,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
         .root_module = b.createModule(.{
             .root_source_file = paths.path("src/testing/coordinator.zig"),
             .target = options.target,
-            .optimize = compat.optimize_debug,
+            .optimize = compat.Optimize.debug.optimizeMode(),
             .imports = &.{
                 .{ .name = "runner_options", .module = runner_options.createModule() },
             },
