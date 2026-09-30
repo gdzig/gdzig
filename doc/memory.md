@@ -162,6 +162,26 @@ pub fn clearValues(_: *MyNode, values: Array) void {
 }
 ```
 
+### Registered method returns
+
+Registered methods treat `RefCounted` pointer returns as borrowed by default. Godot
+takes an additional shared reference, while the method keeps its existing ownership.
+
+When a method returns a fresh caller-owned reference, mark that method as transferring
+the reference:
+
+```zig
+class.addMethod("make_resource", .{ .return_ownership = .transfer });
+```
+
+The extension adapter first stores the result in the destination `Variant` or Ref slot,
+then releases the fresh reference returned by the method. Nullable returns are supported.
+The annotation affects only calls through the registered-method adapter. A direct Zig
+call still receives the fresh reference and must release it normally.
+
+Godot virtual callbacks use a separate ptrcall adapter and are not configured by
+`return_ownership`.
+
 ## Common Gotchas
 
 **Leaking Variants**: Any `Variant` returned from a vararg call must be `deinit()`ed. The compiler can't catch this.

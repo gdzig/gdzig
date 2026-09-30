@@ -11,6 +11,7 @@ pub const InitializationLevel = enum(c_int) {
 };
 
 pub const Registry = @import("extension/Registry.zig");
+pub const ReturnOwnership = @import("extension/method.zig").ReturnOwnership;
 
 /// Low-level registration pieces exposed for binding integration tests.
 pub const testing = struct {

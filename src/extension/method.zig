@@ -16,6 +16,19 @@ const Variant = gdzig.builtin.Variant;
 
 const Registry = @import("Registry.zig");
 
+/// Describes who owns a registered method's RefCounted return before it crosses
+/// the GDExtension call boundary.
+///
+/// This policy applies to methods registered through `Registry`. Godot virtual
+/// callbacks use a separate ptrcall adapter and are not configured by this enum.
+pub const ReturnOwnership = enum {
+    /// The method retains ownership. Godot receives an additional shared reference.
+    borrowed,
+    /// The method returns a fresh caller-owned reference. The adapter transfers that
+    /// reference to Godot after the destination Variant or Ref safely owns the object.
+    transfer,
+};
+
 /// Registers a method on a class.
 ///
 /// Example:
@@ -62,6 +75,10 @@ pub fn MethodConfig(comptime Class: type) type {
             const Args = compat.fnParamTypes(MethodType);
             const ReturnType = @typeInfo(MethodType).@"fn".return_type orelse void;
             const arg_count = Args.len - 1;
+
+            if (options.return_ownership == .transfer and !class.isRefCountedPtr(ReturnType)) {
+                @compileError("return_ownership = .transfer requires a RefCounted pointer return type");
+            }
 
             const return_value: classdb.PropertyInfo = .{
                 .type = .forType(ReturnType),
@@ -113,6 +130,7 @@ pub fn MethodConfig(comptime Class: type) type {
                         const result = @call(.auto, method, call_args);
                         const variant = Variant.init(ReturnType, result);
                         releaseVarValue(ReturnType, result);
+                        releaseTransferredReturn(ReturnType, result, options.return_ownership);
                         return variant;
                     }
                 }
@@ -131,6 +149,7 @@ pub fn MethodConfig(comptime Class: type) type {
                         if (ret) |r| {
                             writePtrReturn(ReturnType, r, result);
                         }
+                        releaseTransferredReturn(ReturnType, result, options.return_ownership);
                     }
                 }
             };
@@ -251,6 +270,22 @@ fn writePtrReturn(comptime ReturnType: type, p_ret: *anyopaque, value: ReturnTyp
         return;
     }
     ptrcall.writeReturn(ReturnType, p_ret, value);
+}
+
+fn releaseTransferredReturn(comptime T: type, value: T, comptime ownership: ReturnOwnership) void {
+    if (comptime ownership != .transfer) return;
+
+    const object = if (comptime class.isNullableClassPtr(T))
+        value orelse return
+    else
+        value;
+    const ref_counted = gdzig.class.RefCounted.upcast(object);
+    if (ref_counted.unreference()) {
+        // No destination retained the value, such as a direct ptrcall callback
+        // invocation with a null return slot. Bypass Object.destroy(), whose
+        // user-destruction guard intentionally suppresses the extension callback.
+        gdzig.raw.objectDestroy(@ptrCast(gdzig.class.Object.upcast(object)));
+    }
 }
 
 /// Releases varcall-owned builtin temporaries after the callback no longer needs them.

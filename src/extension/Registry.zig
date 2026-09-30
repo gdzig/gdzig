@@ -432,6 +432,10 @@ pub fn Method(comptime T: type) type {
             flags: MethodFlags = .{},
             /// Default argument values.
             default_arguments: []const *const Variant = &.{},
+            /// Ownership of a RefCounted return before it crosses into Godot.
+            /// `.borrowed` shares the returned object. `.transfer` consumes a fresh
+            /// caller-owned reference after the destination Variant or Ref owns it.
+            return_ownership: method_mod.ReturnOwnership = .borrowed,
 
             pub const auto: CreateOptions = .{};
         };
