@@ -91,7 +91,7 @@ fn addExtensionWeb(
     mod: *Build.Module,
     options: ExtensionOptions,
 ) ?*Extension {
-    const sdk = emsdk.get(dep.builder, options.emsdk_version, options.emsdk_path) orelse return null;
+    const sdk = emsdk.get(dep.builder, .{ .version = options.emsdk_version, .path = options.emsdk_path }) orelse return null;
     const emsdk_path = sdk.path;
 
     mod.pic = true;

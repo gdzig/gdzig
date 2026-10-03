@@ -9,7 +9,7 @@ pub const BuildOptions = struct {
 
 pub fn build(b: *Build, options: BuildOptions) *Build.Module {
     if (options.target.result.cpu.arch.isWasm()) {
-        const sdk = emsdk.get(b, options.emsdk_version, null) orelse
+        const sdk = emsdk.get(b, .{ .version = options.emsdk_version }) orelse
             return placeholderModule(b, options);
         return translate_c.translateC(b, .{
             .name = "gdextension_interface",
