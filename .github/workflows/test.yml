@@ -9,7 +9,7 @@ on:
 jobs:
   # Quick test for PRs - Godot compatibility target on Linux
   test-pr:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
+    name: Test Godot ${{ matrix.godot.api }} API on ${{ matrix.godot.runtime }} runtime, ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
@@ -17,10 +17,25 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        godot: ["4.7.2"]
+        godot:
+          - api: "4.6"
+            runtime: "4.6.3"
+          - api: "4.7"
+            runtime: "4.7.2"
+          - api: "4.6"
+            runtime: "4.7.2"
         zig: ["0.16.0", "0.17.0", master]
         target: [native, wasm]
         exclude:
+          # The wasm example uses the default 4.7 API and does not run Godot.
+          - godot:
+              api: "4.6"
+              runtime: "4.6.3"
+            target: wasm
+          - godot:
+              api: "4.6"
+              runtime: "4.7.2"
+            target: wasm
           # wasm32-emscripten is broken by a translate-c regression in Zig
           # 0.17 (host header leak / crash), also present on master. See #260.
           - zig: "0.17.0"
@@ -36,17 +51,17 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: ${{ matrix.zig }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+          cache-key: ${{ matrix.os }}-godot-api-${{ matrix.godot.api }}-runtime-${{ matrix.godot.runtime }}-zig-${{ matrix.zig }}
 
       - name: Setup Godot
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: ${{ matrix.godot }}
+          version: ${{ matrix.godot.runtime }}
           use-dotnet: false
 
       - name: Test
         if: matrix.target == 'native'
-        run: zig build test -Dgodot-path="$(command -v godot)"
+        run: zig build test -Dgodot-version=${{ matrix.godot.api }} -Dgodot-path="$(command -v godot)"
 
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
@@ -55,7 +70,7 @@ jobs:
 
   # Full matrix for push to master and manual dispatch
   test-full:
-    name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
+    name: Test Godot ${{ matrix.godot.api }} API on ${{ matrix.godot.runtime }} runtime, ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -64,10 +79,25 @@ jobs:
       matrix:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
-        godot: ["4.7.2"]
+        godot:
+          - api: "4.6"
+            runtime: "4.6.3"
+          - api: "4.7"
+            runtime: "4.7.2"
+          - api: "4.6"
+            runtime: "4.7.2"
         zig: ["0.16.0", "0.17.0", master]
         target: [native, wasm]
         exclude:
+          # The wasm example uses the default 4.7 API and does not run Godot.
+          - godot:
+              api: "4.6"
+              runtime: "4.6.3"
+            target: wasm
+          - godot:
+              api: "4.6"
+              runtime: "4.7.2"
+            target: wasm
           # wasm32-emscripten is broken by a translate-c regression in Zig
           # 0.17 (host header leak / crash), also present on master. See #260.
           - zig: "0.17.0"
@@ -76,15 +106,21 @@ jobs:
             target: wasm
         include:
           - os: macos-latest
-            godot: "4.7.2"
+            godot:
+              api: "4.7"
+              runtime: "4.7.2"
             zig: "0.16.0"
             target: native
           - os: macos-latest
-            godot: "4.7.2"
+            godot:
+              api: "4.7"
+              runtime: "4.7.2"
             zig: "0.17.0"
             target: native
           - os: macos-latest
-            godot: "4.7.2"
+            godot:
+              api: "4.7"
+              runtime: "4.7.2"
             zig: master
             target: native
 
@@ -96,17 +132,17 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: ${{ matrix.zig }}
-          cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
+          cache-key: ${{ matrix.os }}-godot-api-${{ matrix.godot.api }}-runtime-${{ matrix.godot.runtime }}-zig-${{ matrix.zig }}
 
       - name: Setup Godot
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: ${{ matrix.godot }}
+          version: ${{ matrix.godot.runtime }}
           use-dotnet: false
 
       - name: Test
         if: matrix.target == 'native'
-        run: zig build test -Dgodot-path="$(command -v godot)"
+        run: zig build test -Dgodot-version=${{ matrix.godot.api }} -Dgodot-path="$(command -v godot)"
 
       - name: Build example for wasm32-emscripten
         if: matrix.target == 'wasm'
