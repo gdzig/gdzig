@@ -88,15 +88,12 @@ pub fn addOptionPathDirectory(options: *Build.Step.Options, name: []const u8, pa
     }
 }
 
-/// The install prefix as a path string. Master removed
-/// `Build.install_path`; the default there is `zig-out` (a literal in
-/// lib/compiler/Maker.zig — not importable from build scripts, and the
-/// `install_prefix` LazyPath base panics at configure time, so there is no
-/// public default to reference). Custom `--prefix` values are not
-/// reflected here.
-pub fn installPath(b: *Build) []const u8 {
-    if (comptime @hasField(Build, "install_path")) return b.install_path;
-    return "zig-out";
+/// The install prefix as a lazy path. The new build API exposes
+/// `--prefix` only during the make phase, not during configuration.
+pub fn installPath(b: *Build) Build.LazyPath {
+    if (comptime @hasDecl(Build, "getInstallPath"))
+        return .{ .cwd_relative = b.getInstallPath(.prefix, "") };
+    return .{ .relative = .{ .base = .install_prefix } };
 }
 
 /// Resolves a `LazyPath` to a filesystem path string during the configure

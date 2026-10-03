@@ -2,33 +2,14 @@
 //!
 //! This executable:
 //! 1. Speaks the std.zig.Server protocol with the build system (via stdin/stdout)
-//! 2. Spawns Godot processes for each test folder
+//! 2. Spawns Godot processes for its test suite
 //! 3. Communicates with test harnesses via JSON IPC over stdin/stdout pipes
-//!
-//! The coordinator maintains a mapping from global test indices to (folder, local_index) pairs.
-
-const std = @import("std");
-const builtin = @import("builtin");
-const protocol = @import("protocol.zig");
-const options = @import("runner_options");
-
-const Allocator = std.mem.Allocator;
-const Io = std.Io;
-const File = Io.File;
-const ZigServer = std.zig.Server;
-
-/// Mapping from global test index to folder and local index
-const TestMapping = struct {
-    folder_index: u32,
-    local_index: u32,
-};
 
 /// State for the test runner
 const Runner = struct {
     allocator: Allocator,
     io: Io,
     server: ZigServer,
-    test_mappings: std.ArrayListUnmanaged(TestMapping),
     string_bytes: std.ArrayListUnmanaged(u8),
     test_name_indices: std.ArrayListUnmanaged(u32),
     environ_map: *std.process.Environ.Map,
@@ -50,7 +31,6 @@ const Runner = struct {
             .allocator = allocator,
             .io = io,
             .server = server,
-            .test_mappings = .empty,
             .string_bytes = .empty,
             .test_name_indices = .empty,
             .environ_map = environ_map,
@@ -58,12 +38,13 @@ const Runner = struct {
     }
 
     fn deinit(self: *Runner) void {
-        self.test_mappings.deinit(self.allocator);
         self.string_bytes.deinit(self.allocator);
         self.test_name_indices.deinit(self.allocator);
     }
 
     fn run(self: *Runner) !void {
+        try self.collectMetadata();
+
         while (true) {
             const header = self.server.receiveMessage() catch |err| {
                 if (err == error.EndOfStream) break;
@@ -85,16 +66,6 @@ const Runner = struct {
     }
 
     fn handleQueryTestMetadata(self: *Runner) !void {
-        // Clear previous state
-        self.test_mappings.clearRetainingCapacity();
-        self.string_bytes.clearRetainingCapacity();
-        self.test_name_indices.clearRetainingCapacity();
-
-        // Collect metadata from each test folder
-        for (options.test_folders, 0..) |folder, folder_idx| {
-            try self.collectFolderMetadata(folder, @intCast(folder_idx));
-        }
-
         // Build expected_panic_msgs (all zeros - we don't use panic expectations)
         const expected_panic_msgs = try self.allocator.alloc(u32, self.test_name_indices.items.len);
         defer self.allocator.free(expected_panic_msgs);
@@ -108,11 +79,11 @@ const Runner = struct {
         });
     }
 
-    fn collectFolderMetadata(self: *Runner, folder: []const u8, folder_idx: u32) !void {
-        const folder_name = std.fs.path.basename(folder);
+    fn collectMetadata(self: *Runner) !void {
+        const folder_name = std.fs.path.basename(options.test_folder);
 
         // Spawn Godot with stdin/stdout piped
-        var child = try self.spawnGodot(folder);
+        var child = try self.spawnGodot();
         defer {
             _ = child.wait(self.io) catch {};
         }
@@ -133,7 +104,7 @@ const Runner = struct {
 
             switch (resp) {
                 .metadata => |tests| {
-                    for (tests, 0..) |name, i| {
+                    for (tests) |name| {
                         // Record the string index before adding the prefixed name
                         const string_idx: u32 = @intCast(self.string_bytes.items.len);
                         try self.test_name_indices.append(self.allocator, string_idx);
@@ -143,12 +114,6 @@ const Runner = struct {
                         try self.string_bytes.append(self.allocator, '.');
                         try self.string_bytes.appendSlice(self.allocator, name);
                         try self.string_bytes.append(self.allocator, 0);
-
-                        // Record mapping
-                        try self.test_mappings.append(self.allocator, .{
-                            .folder_index = folder_idx,
-                            .local_index = @intCast(i),
-                        });
                     }
                 },
                 .result => return error.UnexpectedResponse,
@@ -164,34 +129,33 @@ const Runner = struct {
         try self.sendCommand(&child, .exit);
     }
 
-    fn handleRunTest(self: *Runner, global_index: u32) !void {
-        if (global_index >= self.test_mappings.items.len) {
+    fn handleRunTest(self: *Runner, index: u32) !void {
+        if (index >= self.test_name_indices.items.len) {
+            std.debug.print("Invalid test index {d} (suite has {d} tests)\n", .{ index, self.test_name_indices.items.len });
             try self.server.serveStringMessage(.test_started, &.{});
             try self.server.serveTestResults(.{
-                .index = global_index,
+                .index = index,
                 .flags = .{ .status = .fail, .fuzz = false, .log_err_count = 0, .leak_count = 0 },
             });
             return;
         }
 
-        const mapping = self.test_mappings.items[global_index];
-        const folder = options.test_folders[mapping.folder_index];
-
         // Tell the build server we're starting the test.
         try self.server.serveStringMessage(.test_started, &.{});
 
         // Spawn Godot
-        var child = try self.spawnGodot(folder);
+        var child = try self.spawnGodot();
         defer _ = child.wait(self.io) catch {};
 
         // Send run_test command
-        try self.sendCommand(&child, .{ .run_test = mapping.local_index });
+        try self.sendCommand(&child, .{ .run_test = index });
 
         // Read response, collecting Godot output
         var godot_output: std.ArrayListUnmanaged(u8) = .empty;
         defer godot_output.deinit(self.allocator);
 
-        var failed = true;
+        // A crash or missing result must still report a failed test.
+        var status: protocol.TestStatus = .fail;
         const response = try self.readResponse(&child, &godot_output);
         if (response) |resp| {
             defer {
@@ -201,7 +165,10 @@ const Runner = struct {
 
             switch (resp) {
                 .result => |result| {
-                    failed = !result.passed;
+                    status = result.status;
+                    if (status == .fail) {
+                        if (result.message) |message| std.debug.print("{s}\n", .{message});
+                    }
                 },
                 .metadata => {},
             }
@@ -211,7 +178,7 @@ const Runner = struct {
         self.sendCommand(&child, .exit) catch {};
 
         // If test failed, print Godot's output to stderr
-        if (failed and godot_output.items.len > 0) {
+        if (status == .fail and godot_output.items.len > 0) {
             var buf: [4096]u8 = undefined;
             var stderr_writer = File.stderr().writerStreaming(self.io, &buf);
             stderr_writer.interface.writeAll(godot_output.items) catch {};
@@ -220,9 +187,13 @@ const Runner = struct {
 
         // Send result to build system
         try self.server.serveTestResults(.{
-            .index = global_index,
+            .index = index,
             .flags = .{
-                .status = if (failed) .fail else .pass,
+                .status = switch (status) {
+                    .pass => .pass,
+                    .fail => .fail,
+                    .skip => .skip,
+                },
                 .fuzz = false,
                 .log_err_count = 0,
                 .leak_count = 0,
@@ -276,7 +247,7 @@ const Runner = struct {
         }
     }
 
-    fn spawnGodot(self: *Runner, folder: []const u8) !std.process.Child {
+    fn spawnGodot(self: *Runner) !std.process.Child {
         // Copy existing environment and add test mode flag
         var env_map = try self.environ_map.clone(self.allocator);
         defer env_map.deinit();
@@ -284,11 +255,11 @@ const Runner = struct {
         try env_map.put("GDZIG_TEST_MODE", "1");
 
         return std.process.spawn(self.io, .{
-            .argv = &.{ options.godot_exe, "--headless", "--path", folder, "--quit-after", "60" },
+            .argv = &.{ options.godot_exe, "--headless", "--path", options.test_folder, "--quit-after", "60" },
             .environ_map = &env_map,
             .stdin = .pipe,
             .stdout = .pipe,
-            .stderr = .pipe,
+            .stderr = .inherit,
         });
     }
 };
@@ -308,3 +279,13 @@ pub fn main(init: std.process.Init) !void {
 
     try runner.run();
 }
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Allocator = std.mem.Allocator;
+const Io = std.Io;
+const File = Io.File;
+const ZigServer = std.zig.Server;
+
+const protocol = @import("protocol.zig");
+const options = @import("runner_options");

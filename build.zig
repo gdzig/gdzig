@@ -145,6 +145,15 @@ pub fn build(b: *Build) !void {
     //
     // Tests
     //
+    const tests_protocol = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/testing/protocol.zig"),
+            .target = b.graph.host,
+            .optimize = compat.Optimize.debug.optimizeMode(),
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(tests_protocol).step);
+
     var tests_gdzig_run: ?*Build.Step.Run = null;
     var tests_common_run: ?*Build.Step.Run = null;
 

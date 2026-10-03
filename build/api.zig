@@ -254,9 +254,8 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     install_project.step.dependOn(&install_ext.step);
 
     const runner_options = b.addOptions();
-    runner_options.addOption([]const []const u8, "test_folders", &.{
-        b.fmt("{s}/{s}", .{ compat.installPath(b), install_subdir }),
-    });
+    compat.addOptionPathDirectory(runner_options, "test_folder", compat.installPath(b).path(b, install_subdir));
+    runner_options.step.dependOn(&install_project.step);
     runner_options.addOptionPath("godot_exe", paths.namedLazyPath("godot"));
 
     const coordinator = b.addExecutable(.{
@@ -273,6 +272,9 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
 
     const run = b.addRunArtifact(coordinator);
     run.enableTestRunnerMode();
+    // Installation order alone does not invalidate cached test results.
+    run.addFileInput(lib.getEmittedBin());
+    run.addFileInput(paths.namedLazyPath("godot"));
     run.step.dependOn(&install_project.step);
     return run;
 }

@@ -5,17 +5,6 @@
 //! 2. Exports the GDExtension entrypoint (so Godot can load it)
 //! 3. Reads commands from stdin, writes JSON responses to stdout
 
-const std = @import("std");
-const builtin = @import("builtin");
-const gdzig = @import("gdzig");
-const options = @import("options");
-const protocol = @import("protocol.zig");
-
-const Io = std.Io;
-const File = Io.File;
-const Writer = Io.Writer;
-const Os = gdzig.class.Os;
-
 // Export the GDExtension entrypoint
 comptime {
     @export(&entrypoint, .{
@@ -129,31 +118,37 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fns = builtin.test_functions;
 
     if (index >= test_fns.len) {
-        try protocol.writeResultResponse(writer, index, false, "Test index out of bounds");
+        try protocol.writeResultResponse(writer, .{ .index = index, .status = .fail, .message = "Test index out of bounds" });
         try writer.flush();
         return;
     }
 
-    const test_fn = test_fns[index];
-    const result = runSingleTest(test_fn);
-
-    try protocol.writeResultResponse(writer, index, result.passed, result.message);
+    try protocol.writeResultResponse(writer, .{
+        .index = index,
+        .status = runSingleTest(test_fns[index]),
+    });
     try writer.flush();
 }
 
-const SingleTestResult = struct {
-    passed: bool,
-    message: ?[]const u8,
-};
-
-fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
-    if (test_fn.func()) |_| {
-        return .{ .passed = true, .message = null };
-    } else |err| {
+fn runSingleTest(test_fn: std.builtin.TestFn) protocol.TestStatus {
+    test_fn.func() catch |err| {
+        if (err == error.SkipZigTest) return .skip;
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);
         }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
-        return .{ .passed = false, .message = null };
-    }
+        return .fail;
+    };
+    return .pass;
 }
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Io = std.Io;
+const File = Io.File;
+const Writer = Io.Writer;
+
+const gdzig = @import("gdzig");
+const Os = gdzig.class.Os;
+const options = @import("options");
+const protocol = @import("protocol.zig");

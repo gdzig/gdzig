@@ -11,10 +11,12 @@
 //!
 //! Responses (extension -> coordinator via stdout):
 //! - {"__gdzig__":"test_ipc","type":"metadata","tests":["test_one","test_two"]}
-//! - {"__gdzig__":"test_ipc","type":"result","index":5,"passed":true}
-//! - {"__gdzig__":"test_ipc","type":"result","index":5,"passed":false,"message":"error details"}
-
-const std = @import("std");
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"status":"pass"}
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"status":"fail","message":"error details"}
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"status":"skip"}
+//!
+//! This is a private contract between the co-built harness and coordinator.
+//! Legacy boolean result fields are not supported.
 
 const MARKER = "test_ipc";
 
@@ -55,9 +57,11 @@ pub const Response = union(enum) {
     result: TestResult,
 };
 
+pub const TestStatus = enum { pass, fail, skip };
+
 pub const TestResult = struct {
     index: u32,
-    passed: bool,
+    status: TestStatus,
     message: ?[]const u8 = null,
 };
 
@@ -131,8 +135,9 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
         const index_val = root.get("index") orelse return null;
         if (index_val != .integer) return null;
 
-        const passed_val = root.get("passed") orelse return null;
-        if (passed_val != .bool) return null;
+        const status_val = root.get("status") orelse return null;
+        if (status_val != .string) return null;
+        const status = std.meta.stringToEnum(TestStatus, status_val.string) orelse return null;
 
         var message: ?[]const u8 = null;
         if (root.get("message")) |msg_val| {
@@ -143,7 +148,7 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
 
         return .{ .result = .{
             .index = @intCast(index_val.integer),
-            .passed = passed_val.bool,
+            .status = status,
             .message = message,
         } };
     }
@@ -199,22 +204,73 @@ pub fn writeMetadataResponse(writer: anytype, tests: []const []const u8) !void {
 }
 
 /// Write a test result response as JSON to a writer.
-pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, message: ?[]const u8) !void {
+pub fn writeResultResponse(writer: anytype, result: TestResult) !void {
     try writer.writeAll("{\"__gdzig__\":\"");
     try writer.writeAll(MARKER);
     try writer.writeAll("\",\"type\":\"result\",\"index\":");
     var num_buf: [16]u8 = undefined;
-    const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{index}) catch unreachable;
+    const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{result.index}) catch unreachable;
     try writer.writeAll(num_str);
-    try writer.writeAll(",\"passed\":");
-    try writer.writeAll(if (passed) "true" else "false");
+    try writer.writeAll(",\"status\":");
+    try writeJsonString(writer, @tagName(result.status));
 
-    if (message) |msg| {
+    if (result.message) |msg| {
         try writer.writeAll(",\"message\":");
         try writeJsonString(writer, msg);
     }
 
     try writer.writeAll("}\n");
+}
+
+test "pass fail and skip survive IPC serialization" {
+    for ([_]TestStatus{ .pass, .fail, .skip }) |status| {
+        var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer output.deinit();
+        try writeResultResponse(&output.writer, .{ .index = 5, .status = status });
+        var response = (try parseResponse(std.testing.allocator, output.written())).?;
+        defer freeResponse(std.testing.allocator, &response);
+        try std.testing.expect(response == .result);
+        try std.testing.expectEqual(@as(u32, 5), response.result.index);
+        try std.testing.expectEqual(status, response.result.status);
+        try std.testing.expectEqual(null, response.result.message);
+    }
+}
+
+test "result status is required and rejects unknown or legacy representations" {
+    const invalid_fields = [_][]const u8{
+        "",
+        ",\"status\":\"unknown\"",
+        ",\"status\":true",
+        ",\"status\":0",
+        ",\"status\":null",
+        ",\"passed\":true",
+        ",\"passed\":true,\"skipped\":true",
+    };
+    for (invalid_fields) |fields| {
+        const line = try std.fmt.allocPrint(std.testing.allocator, "{{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":5{s}}}", .{fields});
+        defer std.testing.allocator.free(line);
+        var response = try parseResponse(std.testing.allocator, line);
+        defer if (response) |*value| freeResponse(std.testing.allocator, value);
+        try std.testing.expect(response == null);
+    }
+}
+
+test "failure diagnostics survive IPC serialization" {
+    for ([_][]const u8{ "Test index out of bounds", "details: \"quoted\"\\\n\r\t\x01" }) |message| {
+        var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer output.deinit();
+        try writeResultResponse(&output.writer, .{
+            .index = std.math.maxInt(u32),
+            .status = .fail,
+            .message = message,
+        });
+        var response = (try parseResponse(std.testing.allocator, output.written())).?;
+        defer freeResponse(std.testing.allocator, &response);
+        try std.testing.expect(response == .result);
+        try std.testing.expectEqual(std.math.maxInt(u32), response.result.index);
+        try std.testing.expectEqual(TestStatus.fail, response.result.status);
+        try std.testing.expectEqualStrings(message, response.result.message.?);
+    }
 }
 
 test "parse query_metadata command" {
@@ -249,3 +305,5 @@ test "reject godot output" {
 test "accept ipc messages" {
     try std.testing.expect(isIpcMessage("{\"__gdzig__\":\"test_ipc\",\"cmd\":\"exit\"}"));
 }
+
+const std = @import("std");
