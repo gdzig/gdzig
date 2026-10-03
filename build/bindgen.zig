@@ -52,10 +52,14 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
         },
     });
 
-    return b.addExecutable(.{
+    const exe = b.addExecutable(.{
         .name = "gdzig-bindgen",
         .root_module = mod,
     });
+    // The gdextension module's root and its c_builtins/helpers imports are
+    // produced by the nested translate-c build.
+    exe.step.dependOn(translate_c.nestedBuildStep(b));
+    return exe;
 }
 
 pub const RunOptions = struct {
@@ -92,3 +96,4 @@ const OptimizeMode = std.builtin.OptimizeMode;
 const common = @import("common.zig");
 const compat = @import("compat.zig");
 const gdextension = @import("gdextension.zig");
+const translate_c = @import("translate_c.zig");

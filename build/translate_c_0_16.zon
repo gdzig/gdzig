@@ -1,0 +1,7 @@
+// ZSF translate-c pin for zig 0.16.x toolchains (branch zig-0.16.x).
+// Bump by editing this file; verify the hash with `zig fetch <url>`.
+.{
+    .branch = "zig-0.16.x",
+    .url = "git+https://codeberg.org/ziglang/translate-c#6fe0ffc4549f15c5f2d9432c2b4460ba90ff85ac",
+    .hash = "translate_c-1.0.0-Q_BUWo_5BgD4flHdUhA31zOz0XvZk9k7lQv1ouzyNXj2",
+}
