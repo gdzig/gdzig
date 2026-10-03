@@ -307,6 +307,23 @@ pub inline fn indexConst(self: *const String, index_: usize) *const u32 {
     return @ptrCast(raw.stringOperatorIndexConst(self.constPtr(), @intCast(index_)));
 }
 
+/// Returns a Variant that borrows this String.
+///
+/// No allocation and no ownership transfer: the Variant stores a copy of the
+/// string handle, so the String must outlive the returned Variant and calling
+/// `Variant.deinit` on the result is illegal behavior. Call `.clone()` on the
+/// result to get an owned Variant instead.
+pub fn asVariant(self: *const String) Variant {
+    return Variant.wrap(String, self);
+}
+
+test "asVariant borrows without allocation" {
+    const string: String = .empty;
+    const variant = string.asVariant();
+    try std.testing.expectEqual(Variant.Tag.string, variant.tag);
+    try std.testing.expectEqual(string, variant.data.string);
+}
+
 // @mixin stop
 
 const Self = gdzig.builtin.String;
