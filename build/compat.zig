@@ -96,6 +96,20 @@ pub fn installPath(b: *Build) Build.LazyPath {
     return .{ .relative = .{ .base = .install_prefix } };
 }
 
+/// Fixed child-build seed arguments. The new build runner accepts only the
+/// equals form, while the old runner accepts only a separate value.
+pub fn fixedBuildSeedArgs() []const []const u8 {
+    if (comptime @hasField(Build.Graph, "random_seed")) return &.{ "--seed", "0x1234" };
+    return &.{"--seed=0x1234"};
+}
+
+/// The configured global cache, shared with standalone regression builds.
+pub fn globalCachePath(b: *Build) Build.LazyPath {
+    if (comptime @hasField(Build.Graph, "global_cache_root"))
+        return .{ .cwd_relative = b.graph.global_cache_root.path.? };
+    return .{ .relative = .{ .base = .global_cache } };
+}
+
 /// Resolves a `LazyPath` to a filesystem path string during the configure
 /// phase (the old-shape `LazyPath.getPath2`/`getPath` were removed on
 /// master). Only source paths and dependency paths are supported —

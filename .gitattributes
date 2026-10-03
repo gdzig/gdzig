@@ -1,2 +1,3 @@
 vendor/gdextension_interface.h linguist-generated=true
-vendor/extension_api.json linguist-generated=true
+vendor/extension_api-4-6.json linguist-generated=true
+vendor/extension_api-4-7.json linguist-generated=true

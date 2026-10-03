@@ -1,0 +1,7 @@
+.{
+    .name = .gdzig_example,
+    .fingerprint = 0x215ba1d8ad1afa53,
+    .version = "0.0.0",
+    .dependencies = .{ .gdzig = .{ .path = "gdzig" } },
+    .paths = .{ "build.zig", "build.zig.zon", "root.zig" },
+}

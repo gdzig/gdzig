@@ -13,6 +13,7 @@
 //! - `c` - C type definitions from `gdextension_interface.h`
 //!
 
+pub const godot_version = @import("build_options").godot_version;
 pub const c = @import("gdextension");
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
@@ -134,6 +135,7 @@ pub const Version = extern struct {
 
 test {
     std.testing.refAllDecls(@This());
+    _ = @import("dispatch_test.zig");
 }
 
 const std = @import("std");

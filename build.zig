@@ -8,6 +8,7 @@ pub fn build(b: *Build) !void {
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
     const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
+    const godot_version = b.option(api.GodotVersion, "godot-version", "Godot binding API target [default: 4.7]") orelse .@"4.7";
     const regenerate_interface = b.option(bool, "regenerate-interface", "Regenerate the vendored GDExtension interface header (requires Python)") orelse false;
 
     //
@@ -48,7 +49,10 @@ pub fn build(b: *Build) !void {
         generate_header.addFileArg(godot_cpp.path("gdextension/gdextension_interface.json"));
         break :blk generated_header;
     } else b.path("vendor/gdextension_interface.h");
-    const extension_api = b.path("vendor/extension_api.json");
+    const extension_api = switch (godot_version) {
+        .@"4.6" => b.path("vendor/extension_api-4-6.json"),
+        .@"4.7" => b.path("vendor/extension_api-4-7.json"),
+    };
 
     const headers_write = b.addWriteFiles();
     _ = headers_write.addCopyFile(interface_header, "gdextension_interface.h");
@@ -69,6 +73,8 @@ pub fn build(b: *Build) !void {
     b.addNamedLazyPath("godot", godot_exe);
     b.addNamedLazyPath("gdextension_interface.h", headers.path(b, "gdextension_interface.h"));
     b.addNamedLazyPath("extension_api.json", headers.path(b, "extension_api.json"));
+    const test_manifest = b.addWriteFiles().add("test_extension.gdextension", api.generateTestGdextension(b, godot_version));
+    b.addNamedLazyPath("test_extension.gdextension", test_manifest);
 
     //
     // GDExtension
@@ -120,6 +126,7 @@ pub fn build(b: *Build) !void {
     const gdzig_options = b.addOptions();
     gdzig_options.addOption([]const u8, "architecture", architecture);
     gdzig_options.addOption([]const u8, "precision", precision);
+    gdzig_options.addOption(api.GodotVersion, "godot_version", godot_version);
 
     const gdzig_mod = b.addModule("gdzig", .{
         .root_source_file = gdzig_combined.path(b, "gdzig.zig"),
@@ -145,6 +152,9 @@ pub fn build(b: *Build) !void {
     //
     // Tests
     //
+    const tests_bindgen = b.addTest(.{ .root_module = bindgen_exe.root_module });
+    test_step.dependOn(&b.addRunArtifact(tests_bindgen).step);
+
     const tests_protocol = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/testing/protocol.zig"),
@@ -153,6 +163,24 @@ pub fn build(b: *Build) !void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(tests_protocol).step);
+
+    // Exercise the public downstream build seam on the native CI hosts. This
+    // driver owns its temporary fixture; it never invokes this root test step.
+    if (builtin.os.tag == .linux or builtin.os.tag == .macos) {
+        const test_build_step = b.step("test-build", "Run native downstream build regressions (Linux/macOS)");
+        const regression = b.addSystemCommand(&.{"/bin/sh"});
+        regression.addFileArg(b.path("build/tests/run.sh"));
+        regression.addArg(b.graph.zig_exe);
+        regression.addDirectoryArg(b.path("."));
+        regression.addFileArg(godot_exe);
+        regression.addArg(@tagName(godot_version));
+        regression.addDirectoryArg(compat.globalCachePath(b));
+        regression.addArgs(compat.fixedBuildSeedArgs());
+        // Recheck build scripts and mutable fixture inputs on every invocation.
+        regression.has_side_effects = true;
+        test_build_step.dependOn(&regression.step);
+        if (!target.result.cpu.arch.isWasm()) test_step.dependOn(test_build_step);
+    }
 
     var tests_gdzig_run: ?*Build.Step.Run = null;
     var tests_common_run: ?*Build.Step.Run = null;

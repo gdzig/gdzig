@@ -1578,6 +1578,7 @@ fn writeDispatchTable(ctx: *Context) !void {
     );
     try w.writeLine(
         \\library: Child(c.GDExtensionClassLibraryPtr),
+        \\version: Version,
         \\
     );
 
@@ -1602,20 +1603,28 @@ fn writeDispatchTable(ctx: *Context) !void {
     w.indent += 1;
 
     try w.writeLine(
+        \\// Bootstrap with the getter available on standard Godot 4.1+ builds.
+        \\// Probing a newer getter first would log missing-symbol errors on older engines.
+        \\const getGodotVersion: Child(c.GDExtensionInterfaceGetGodotVersion) = @ptrCast(getProcAddress("get_godot_version").?);
+        \\var version: Version = undefined;
+        \\getGodotVersion(@ptrCast(&version));
         \\return .{
         \\    .library = library,
+        \\    .version = version,
     );
     w.indent += 1;
 
     for (ctx.dispatch_table.functions.items) |function| {
-        if (function.isRequired()) {
+        if (std.mem.eql(u8, function.api_name, "get_godot_version")) {
+            try w.printLine(".{s} = getGodotVersion,", .{function.name});
+        } else if (function.isRequired()) {
             try w.printLine(
                 \\.{s} = @ptrCast(getProcAddress("{s}").?),
             , .{ function.name, function.api_name });
         } else {
             try w.printLine(
-                \\.{s} = @ptrCast(getProcAddress("{s}")),
-            , .{ function.name, function.api_name });
+                \\.{s} = if (version.gte(.{{ .major = {d}, .minor = {d}, .patch = {d} }})) @ptrCast(getProcAddress("{s}")) else null,
+            , .{ function.name, function.since.major, function.since.minor, function.since.patch, function.api_name });
         }
     }
 
@@ -1636,6 +1645,7 @@ fn writeDispatchTable(ctx: *Context) !void {
         \\
         \\const c = @import("gdextension");
         \\
+        \\const Version = @import("gdzig").Version;
         \\const builtin = @import("builtin.zig");
         \\const class = @import("class.zig");
         \\const global = @import("global.zig");

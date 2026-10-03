@@ -11,10 +11,10 @@ pub const Function = struct {
     name: []const u8,
     api_name: []const u8,
     ptr_type: []const u8,
-    since: []const u8,
+    since: std.SemanticVersion,
 
     pub fn isRequired(self: Function) bool {
-        return std.mem.eql(u8, self.since, "4.1");
+        return self.since.order(.{ .major = 4, .minor = 1, .patch = 0 }) == .eq;
     }
 };
 

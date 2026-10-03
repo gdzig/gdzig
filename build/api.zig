@@ -1,3 +1,9 @@
+/// Binding API target, independent of the Godot executable used to run tests.
+pub const GodotVersion = enum {
+    @"4.6",
+    @"4.7",
+};
+
 /// Initialization level for GDExtension.
 pub const InitializationLevel = enum {
     core,
@@ -225,7 +231,8 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     obj.entry = .disabled;
 
     const lib = b.addLibrary(.{
-        .name = options.name,
+        // Each suite has its own test/<name> directory and shares one manifest.
+        .name = "gdzig-test",
         .linkage = .dynamic,
         .root_module = b.createModule(.{
             .target = options.target,
@@ -240,7 +247,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     });
 
     const project_files = b.addWriteFiles();
-    _ = project_files.add("test_extension.gdextension", generateGdextension(b, lib.out_filename));
+    _ = project_files.addCopyFile(paths.namedLazyPath("test_extension.gdextension"), "test_extension.gdextension");
     _ = project_files.add("project.godot", generateProjectGodot(b, options.name));
     _ = project_files.add("main.tscn", generateMainScene());
     // Generate extension_list.cfg so Godot loads the extension without editor mode
@@ -274,6 +281,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     run.enableTestRunnerMode();
     // Installation order alone does not invalidate cached test results.
     run.addFileInput(lib.getEmittedBin());
+    run.addFileInput(paths.namedLazyPath("test_extension.gdextension"));
     run.addFileInput(paths.namedLazyPath("godot"));
     run.step.dependOn(&install_project.step);
     return run;
@@ -360,24 +368,25 @@ fn generateProjectGodot(b: *Build, name: []const u8) []const u8 {
     , .{name});
 }
 
-fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
+/// Shared manifest for the private test libraries installed by addTestImpl.
+pub fn generateTestGdextension(b: *Build, godot_version: GodotVersion) []const u8 {
     return b.fmt(
         \\[configuration]
         \\entry_symbol = "gdextension_entry"
-        \\compatibility_minimum = "4.7"
+        \\compatibility_minimum = "{s}"
         \\
         \\[libraries]
-        \\linux.debug.x86_64 = "res://{0s}"
-        \\linux.release.x86_64 = "res://{0s}"
-        \\linux.debug.arm64 = "res://{0s}"
-        \\linux.release.arm64 = "res://{0s}"
-        \\windows.debug.x86_64 = "res://{0s}"
-        \\windows.release.x86_64 = "res://{0s}"
-        \\macos.debug.arm64 = "res://{0s}"
-        \\macos.release.arm64 = "res://{0s}"
-        \\macos.debug.x86_64 = "res://{0s}"
-        \\macos.release.x86_64 = "res://{0s}"
-    , .{lib_name});
+        \\linux.debug.x86_64 = "res://libgdzig-test.so"
+        \\linux.release.x86_64 = "res://libgdzig-test.so"
+        \\linux.debug.arm64 = "res://libgdzig-test.so"
+        \\linux.release.arm64 = "res://libgdzig-test.so"
+        \\windows.debug.x86_64 = "res://gdzig-test.dll"
+        \\windows.release.x86_64 = "res://gdzig-test.dll"
+        \\macos.debug.arm64 = "res://libgdzig-test.dylib"
+        \\macos.release.arm64 = "res://libgdzig-test.dylib"
+        \\macos.debug.x86_64 = "res://libgdzig-test.dylib"
+        \\macos.release.x86_64 = "res://libgdzig-test.dylib"
+    , .{@tagName(godot_version)});
 }
 
 const std = @import("std");

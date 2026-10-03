@@ -301,7 +301,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 break :blk null;
             };
 
-            const since = parseSinceVersion(docs) orelse "4.1";
+            const since = try parseSinceVersion(docs);
 
             try self.func_docs.put(self.allocator(), fp_type.?, docs.?);
             try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
@@ -640,19 +640,46 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
     }
 }
 
-fn parseSinceVersion(docs: ?[]const u8) ?[]const u8 {
-    const doc_str = docs orelse return null;
+fn parseSinceVersion(docs: ?[]const u8) !std.SemanticVersion {
+    const doc_str = docs orelse return error.InvalidSinceVersion;
     const since_tag = "@since ";
-    const start = std.mem.indexOf(u8, doc_str, since_tag) orelse return null;
-    const version_start = start + since_tag.len;
-    if (version_start + 3 > doc_str.len) return null;
-
-    // Return "X.Y" slice
-    return doc_str[version_start..][0..3];
+    const start = std.mem.indexOf(u8, doc_str, since_tag) orelse return error.InvalidSinceVersion;
+    var tokens = std.mem.tokenizeAny(u8, doc_str[start + since_tag.len ..], " \t\r\n");
+    const version = tokens.next() orelse return error.InvalidSinceVersion;
+    var parts = std.mem.splitScalar(u8, version, '.');
+    var numbers: [3]usize = .{ 0, 0, 0 };
+    var count: usize = 0;
+    while (parts.next()) |part| {
+        if (count == numbers.len or part.len == 0) return error.InvalidSinceVersion;
+        for (part) |ch| {
+            if (!std.ascii.isDigit(ch)) return error.InvalidSinceVersion;
+        }
+        numbers[count] = std.fmt.parseInt(usize, part, 10) catch return error.InvalidSinceVersion;
+        count += 1;
+    }
+    if (count < 2) return error.InvalidSinceVersion;
+    return .{ .major = numbers[0], .minor = numbers[1], .patch = numbers[2] };
 }
 
 fn trimLineEnding(line: []const u8) []const u8 {
     return std.mem.trimEnd(u8, line, "\r\n");
+}
+
+test "interface since metadata preserves multi-digit minors and optional patches" {
+    const minor = try parseSinceVersion(" * @since 4.10\n * @name future_function");
+    try std.testing.expectEqual(@as(usize, 4), minor.major);
+    try std.testing.expectEqual(@as(usize, 10), minor.minor);
+    try std.testing.expectEqual(@as(usize, 0), minor.patch);
+
+    const patch = try parseSinceVersion(" * @since 4.10.2\r\n");
+    try std.testing.expectEqual(@as(usize, 2), patch.patch);
+}
+
+test "invalid interface since metadata cannot imply baseline availability" {
+    try std.testing.expectError(error.InvalidSinceVersion, parseSinceVersion(null));
+    for ([_][]const u8{ "", "@since ", "@since 4", "@since 4.x", "@since 4..1", "@since 4.1.0.1", "@since 4.1beta" }) |docs| {
+        try std.testing.expectError(error.InvalidSinceVersion, parseSinceVersion(docs));
+    }
 }
 
 test "trimLineEnding normalizes header line endings" {
