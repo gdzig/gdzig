@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
-        zig: ["0.16.0", master]
+        zig: ["0.16.0", "0.17.0", master]
         target: [native, wasm]
 
     steps:
@@ -28,8 +28,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          # Empty version resolves minimum_zig_version from build.zig.zon.
-          version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          version: ${{ matrix.zig }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
       - name: Setup Godot
@@ -59,12 +58,16 @@ jobs:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.7.2"]
-        zig: ["0.16.0", master]
+        zig: ["0.16.0", "0.17.0", master]
         target: [native, wasm]
         include:
           - os: macos-latest
             godot: "4.7.2"
             zig: "0.16.0"
+            target: native
+          - os: macos-latest
+            godot: "4.7.2"
+            zig: "0.17.0"
             target: native
           - os: macos-latest
             godot: "4.7.2"
@@ -78,8 +81,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
-          # Empty version resolves minimum_zig_version from build.zig.zon.
-          version: ${{ matrix.zig == 'master' && matrix.zig || '' }}
+          version: ${{ matrix.zig }}
           cache-key: ${{ matrix.os }}-godot-${{ matrix.godot }}-zig-${{ matrix.zig }}
 
       - name: Setup Godot
