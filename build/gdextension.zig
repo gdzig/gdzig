@@ -8,25 +8,33 @@ pub const BuildOptions = struct {
 };
 
 pub fn build(b: *Build, options: BuildOptions) *Build.Module {
-    if (options.target.result.cpu.arch.isWasm()) {
-        const sdk = emsdk.get(b, .{ .version = options.emsdk_version }) orelse
-            return placeholderModule(b, options);
-        return translate_c.translateC(b, .{
-            .name = "gdextension_interface",
-            .c_source_file = options.headers.path(b, "gdextension_interface.h"),
-            .target = options.target,
-            .optimize = options.optimize,
-            .system_include_paths = &.{sdk.sysroot_include},
-            .step_deps = &.{sdk.activate_step},
-        }).mod;
-    }
+    const sdk: ?emsdk.Emsdk = if (options.target.result.cpu.arch.isWasm())
+        emsdk.get(b, .{ .version = options.emsdk_version }) orelse
+            return placeholderModule(b, options)
+    else
+        null;
 
-    return translate_c.translateC(b, .{
+    return translate_c.translateC(b, resolveOptions(b, options, sdk)).mod;
+}
+
+/// Builds the translate-c options for the gdextension header. When `sdk` is
+/// given (wasm targets), translation additionally uses the emsdk sysroot and
+/// runs after the shared emsdk activate step.
+fn resolveOptions(b: *Build, options: BuildOptions, sdk: ?emsdk.Emsdk) translate_c.Options {
+    var system_include_paths: []const Build.LazyPath = &.{};
+    var step_deps: []const *Build.Step = &.{};
+    if (sdk) |s| {
+        system_include_paths = b.allocator.dupe(Build.LazyPath, &.{s.sysroot_include}) catch @panic("OOM");
+        step_deps = b.allocator.dupe(*Build.Step, &.{s.activate_step}) catch @panic("OOM");
+    }
+    return .{
         .name = "gdextension_interface",
         .c_source_file = options.headers.path(b, "gdextension_interface.h"),
         .target = options.target,
         .optimize = options.optimize,
-    }).mod;
+        .system_include_paths = system_include_paths,
+        .step_deps = step_deps,
+    };
 }
 
 /// Stand-in module used on wasm while the lazy emsdk dependency is being
