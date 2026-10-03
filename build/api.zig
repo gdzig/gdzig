@@ -91,10 +91,8 @@ fn addExtensionWeb(
     mod: *Build.Module,
     options: ExtensionOptions,
 ) ?*Extension {
-    const emsdk_path = if (options.emsdk_path) |p| p else blk: {
-        const emsdk_dep = dep.builder.lazyDependency("emsdk", .{}) orelse return null;
-        break :blk emsdk_dep.path("");
-    };
+    const sdk = emsdk.get(dep.builder, options.emsdk_version, options.emsdk_path) orelse return null;
+    const emsdk_path = sdk.path;
 
     mod.pic = true;
     mod.strip = false;
@@ -105,17 +103,8 @@ fn addExtensionWeb(
         .root_module = mod,
     });
 
-    // Install and activate emsdk
-    const emsdk_script = if (b.graph.host.result.os.tag == .windows) "emsdk.bat" else "emsdk";
-    const install_emsdk = b.addSystemCommand(&.{compat.lazyPathString(b, emsdk_path.path(b, emsdk_script))});
-    install_emsdk.addArgs(&.{ "install", options.emsdk_version });
-
-    const activate_emsdk = b.addSystemCommand(&.{compat.lazyPathString(b, emsdk_path.path(b, emsdk_script))});
-    activate_emsdk.addArgs(&.{ "activate", options.emsdk_version });
-    activate_emsdk.step.dependOn(&install_emsdk.step);
-
-    lib.step.dependOn(&activate_emsdk.step);
-    mod.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
+    lib.step.dependOn(sdk.activate_step);
+    mod.addSystemIncludePath(sdk.sysroot_include);
 
     // Run emcc to produce final .wasm
     const optimize = options.optimize;
@@ -383,3 +372,4 @@ const Build = std.Build;
 const Step = std.Build.Step;
 
 const compat = @import("compat.zig");
+const emsdk = @import("emsdk.zig");

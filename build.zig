@@ -141,6 +141,9 @@ pub fn build(b: *Build) !void {
         .linkage = .static,
         .use_llvm = true,
     });
+    // The gdextension module's root and its c_builtins/helpers imports are
+    // produced by the nested translate-c build.
+    gdzig_lib.step.dependOn(translate_c.nestedBuildStep(b));
 
     //
     // Tests
@@ -232,3 +235,4 @@ const bindgen = @import("build/bindgen.zig");
 const common = @import("build/common.zig");
 const compat = @import("build/compat.zig");
 const gdextension = @import("build/gdextension.zig");
+const translate_c = @import("build/translate_c.zig");
