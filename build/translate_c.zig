@@ -55,21 +55,18 @@ pub fn nestedBuildStep(b: *Build) *Build.Step {
     return nestedToolchain(b).step;
 }
 
-// TODO(zig 0.16.0): when 0.16.x support is dropped, delete the 0.16 pin and
-// translate016; the modern branch covers everything else.
+// TODO(zig 0.16.0): when 0.16.x support is dropped, delete
+// translate_c_0_16.zon, translate016, and this arm.
 //
-// Pins are per-Zig-version branches of the ZSF translate-c package, verified
-// with `zig fetch`. The master pin tracks `main` (best effort per ADR 0001;
-// CI's master leg catches drift).
-const pin_url = switch (builtin.zig_version.minor) {
-    16 => "git+https://codeberg.org/ziglang/translate-c#6fe0ffc4549f15c5f2d9432c2b4460ba90ff85ac", // zig-0.16.x
-    17 => "git+https://codeberg.org/ziglang/translate-c#02ff0c523fb92a38939b04d0145c4a9602a74d56", // zig-0.17.x
-    else => "git+https://codeberg.org/ziglang/translate-c#875969d3493e245e01bf5d7860f792d8f3eb9ef5", // main
-};
-const pin_hash = switch (builtin.zig_version.minor) {
-    16 => "translate_c-1.0.0-Q_BUWo_5BgD4flHdUhA31zOz0XvZk9k7lQv1ouzyNXj2",
-    17 => "translate_c-2.0.0-Q_BUWltOBwBYABF84EUL208pIFeUIwbBs29FmVBaafN5",
-    else => "translate_c-0.0.0-Q_BUWoFOBwAhz77Zd15HCVuhTKzdUKc94kezmCeJ7IC_",
+// The pin for the running toolchain. Pins live in ZON configs so per-branch
+// bumps are data edits and a foreign-branch config is inert data (ZON import
+// is comptime deserialization; nothing foreign is ever analyzed). Argument
+// ordering stays in code (translate016/translateModern): order is logic, and
+// the compiler checks it.
+const pin = switch (builtin.zig_version.minor) {
+    16 => @import("translate_c_0_16.zon"),
+    17 => @import("translate_c_0_17.zon"),
+    else => @import("translate_c_main.zon"),
 };
 
 const step_name = "gdzig-translate-c-exe";
@@ -137,7 +134,7 @@ fn generatedZon(b: *Build) []const u8 {
         \\    .paths = .{{ "build.zig", "build.zig.zon" }},
         \\}}
         \\
-    , .{ pin_url, pin_hash });
+    , .{ pin.url, pin.hash });
 }
 
 const generated_build_zig =
