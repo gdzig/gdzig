@@ -126,6 +126,23 @@ fn typeShortName(comptime T: type) [:0]const u8 {
     return full[pos + 1 ..];
 }
 
+/// Returns a Variant that borrows this StringName.
+///
+/// No allocation and no ownership transfer: the Variant stores a copy of the
+/// string handle, so the StringName must outlive the returned Variant and
+/// calling `Variant.deinit` on the result is illegal behavior. Call `.clone()`
+/// on the result to get an owned Variant instead.
+pub fn asVariant(self: *const StringName) Variant {
+    return Variant.wrap(StringName, self);
+}
+
+test "asVariant borrows without allocation" {
+    const name: StringName = .empty;
+    const variant = name.asVariant();
+    try std.testing.expectEqual(Variant.Tag.string_name, variant.tag);
+    try std.testing.expectEqual(name, variant.data.string_name);
+}
+
 const casez = @import("casez");
 const common = @import("common");
 const godot_case = common.godot_case;
