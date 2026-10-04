@@ -39,6 +39,8 @@ signals: StringArrayHashMap(Signal) = .empty,
 
 /// Imports required by this class
 imports: Imports = .empty,
+/// Owned declaration names from this class and its flattened parent mixins.
+mixin_names: StringArrayHashMap(void) = .empty,
 
 pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !Class {
     var self: Class = .{};
@@ -112,6 +114,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Inherited methods
     if (self.getBasePtr(ctx)) |base| {
+        try self.recordMixinNames(allocator, base.mixin_names.keys());
         // Copy the parent class functions
         for (base.functions.values()) |*function| {
             var inherited: Function = function.*;
@@ -165,6 +168,7 @@ pub fn loadMixinIfExists(self: *Class, allocator: Allocator, io: std.Io, input: 
     defer allocator.free(path);
     var mixin: Mixin = (try Mixin.load(allocator, io, input, path)) orelse return;
     defer mixin.deinit(allocator);
+    try self.recordMixinNames(allocator, mixin.names.items);
     self.applyMixin(&mixin);
 }
 
@@ -173,8 +177,20 @@ pub fn loadMixinIfExists(self: *Class, allocator: Allocator, io: std.Io, input: 
 pub fn applyMixin(self: *Class, mixin: *const Mixin) void {
     for (mixin.declarations.items) |declaration| {
         for (self.functions.values()) |*function| {
-            if (std.mem.eql(u8, function.name, declaration.name)) function.skip = true;
+            if (std.mem.eql(u8, function.name, declaration.name)) {
+                function.skip = true;
+                function.mixin_override = true;
+            }
         }
+    }
+}
+
+fn recordMixinNames(self: *Class, allocator: Allocator, names: []const []const u8) !void {
+    for (names) |name| {
+        if (self.mixin_names.contains(name)) continue;
+        const owned = try allocator.dupe(u8, name);
+        errdefer allocator.free(owned);
+        try self.mixin_names.put(allocator, owned, {});
     }
 }
 
@@ -232,6 +248,8 @@ pub fn deinit(self: *Class, allocator: Allocator) void {
     self.signals.deinit(allocator);
 
     self.imports.deinit(allocator);
+    for (self.mixin_names.keys()) |name| allocator.free(name);
+    self.mixin_names.deinit(allocator);
 
     self.* = .{};
 }

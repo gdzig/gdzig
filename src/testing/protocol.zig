@@ -11,8 +11,8 @@
 //!
 //! Responses (extension -> coordinator via stdout):
 //! - {"__gdzig__":"test_ipc","type":"metadata","tests":["test_one","test_two"]}
-//! - {"__gdzig__":"test_ipc","type":"result","index":5,"passed":true}
-//! - {"__gdzig__":"test_ipc","type":"result","index":5,"passed":false,"message":"error details"}
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"outcome":"pass"}
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"outcome":"fail","message":"error details"}
 
 const std = @import("std");
 
@@ -133,15 +133,9 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
         const index_val = root.get("index") orelse return null;
         if (index_val != .integer) return null;
 
-        const passed_val = root.get("passed") orelse return null;
-        if (passed_val != .bool) return null;
-
-        const skipped = if (root.get("skipped")) |value| blk: {
-            if (value != .bool) return null;
-            break :blk value.bool;
-        } else false;
-        // Legacy wire fields remain readable, but contradictory states are invalid.
-        if (skipped and passed_val.bool) return null;
+        const outcome_val = root.get("outcome") orelse return null;
+        if (outcome_val != .string) return null;
+        const outcome = std.meta.stringToEnum(TestOutcome, outcome_val.string) orelse return null;
 
         var message: ?[]const u8 = null;
         if (root.get("message")) |msg_val| {
@@ -152,7 +146,7 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
 
         return .{ .result = .{
             .index = @intCast(index_val.integer),
-            .outcome = if (skipped) .skip else if (passed_val.bool) .pass else .fail,
+            .outcome = outcome,
             .message = message,
         } };
     }
@@ -215,9 +209,8 @@ pub fn writeResultResponse(writer: anytype, result: TestResult) !void {
     var num_buf: [16]u8 = undefined;
     const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{result.index}) catch unreachable;
     try writer.writeAll(num_str);
-    try writer.writeAll(",\"passed\":");
-    try writer.writeAll(if (result.outcome == .pass) "true" else "false");
-    if (result.outcome == .skip) try writer.writeAll(",\"skipped\":true");
+    try writer.writeAll(",\"outcome\":");
+    try writeJsonString(writer, @tagName(result.outcome));
 
     if (result.message) |msg| {
         try writer.writeAll(",\"message\":");
@@ -243,18 +236,22 @@ test "result responses preserve pass fail and skip" {
     }
 }
 
-test "contradictory pass and skip response is rejected" {
-    const parsed = try parseResponse(std.testing.allocator, "{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"passed\":true,\"skipped\":true}");
-    try std.testing.expect(parsed == null);
+test "wire outcomes are single enum tags" {
+    for ([_]TestOutcome{ .pass, .fail, .skip }) |expected| {
+        const line = try std.fmt.allocPrint(std.testing.allocator, "{{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"outcome\":\"{s}\"}}", .{@tagName(expected)});
+        defer std.testing.allocator.free(line);
+        var parsed = (try parseResponse(std.testing.allocator, line)).?;
+        defer freeResponse(std.testing.allocator, &parsed);
+        try std.testing.expectEqual(expected, parsed.result.outcome);
+    }
 }
 
-test "older result response defaults to not skipped" {
-    var parsed = (try parseResponse(
-        std.testing.allocator,
-        "{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"passed\":false}",
-    )).?;
-    defer freeResponse(std.testing.allocator, &parsed);
-    try std.testing.expectEqual(TestOutcome.fail, parsed.result.outcome);
+test "missing unknown or wrong-type wire outcomes are rejected" {
+    for ([_][]const u8{ "", ",\"outcome\":\"unknown\"", ",\"outcome\":false", ",\"passed\":true,\"skipped\":true" }) |fields| {
+        const line = try std.fmt.allocPrint(std.testing.allocator, "{{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0{s}}}", .{fields});
+        defer std.testing.allocator.free(line);
+        try std.testing.expect((try parseResponse(std.testing.allocator, line)) == null);
+    }
 }
 
 test "parse query_metadata command" {

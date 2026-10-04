@@ -117,6 +117,7 @@ pub fn build(b: *Build) !void {
 
     const tests_singleton = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/compat/singleton.zig"),
+        .imports = &.{.{ .name = "oopz", .module = oopz.module("oopz") }},
         .target = b.graph.host,
         .optimize = optimize,
     }) });
@@ -195,7 +196,7 @@ pub fn build(b: *Build) !void {
 
             const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
                 .name = b.dupe(entry.name),
-                .defer_startup = std.mem.eql(u8, entry.name, "compat"),
+                .startup = if (std.mem.eql(u8, entry.name, "compat")) .deferred else .initialization,
                 .root_module = test_mod,
                 .target = target,
                 .optimize = optimize,

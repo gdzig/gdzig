@@ -42,6 +42,10 @@ type_selected_scalar: TypeSelectedScalar = .none,
 can_init_directly: bool = false,
 
 skip: bool = false,
+/// Class mixin owns the public declaration, but may call a private generated bind.
+mixin_override: bool = false,
+/// Visibility of generated declarations. Override delegates are private.
+is_public: bool = true,
 
 /// This maps the API's operator name to a function name
 const operator_fn_names: StaticStringMap([]const u8) = .initComptime(.{

@@ -164,6 +164,9 @@ fn addExtensionWeb(
     return ext;
 }
 
+/// Startup phase for the integration-test IPC server.
+pub const TestStartup = enum { initialization, deferred };
+
 /// Options for adding a Godot test.
 pub const TestOptions = struct {
     /// Name for this test (used in output paths).
@@ -176,11 +179,10 @@ pub const TestOptions = struct {
     optimize: std.builtin.OptimizeMode,
     /// Initialization level for the test extension.
     initialization_level: InitializationLevel = .scene,
-    /// Defer the test IPC server until Godot processes deferred calls after startup.
-    /// Use this for GUI tests: default ThemeDB resources are not ready during the
-    /// scene initialization callback, so creating RichTextLabel there can crash.
-    /// Keep false for class-registration tests, which must run during initialization.
-    defer_startup: bool = false,
+    /// IPC server startup phase. GUI tests use deferred startup because default
+    /// ThemeDB resources are not ready during the scene initialization callback.
+    /// Class-registration tests retain initialization ordering.
+    startup: TestStartup = .initialization,
 };
 
 /// Add a Godot integration test to the build.
@@ -198,7 +200,7 @@ pub fn addTestImpl(b: *Build, resolver: Resolver, options: TestOptions) *Step.Ru
     const entry_options = b.addOptions();
     entry_options.addOption([]const u8, "entry_symbol", "gdextension_entry");
     entry_options.addOption(InitializationLevel, "minimum_initialization_level", options.initialization_level);
-    entry_options.addOption(bool, "defer_startup", options.defer_startup);
+    entry_options.addOption(TestStartup, "startup", options.startup);
 
     const mod = b.createModule(.{
         .root_source_file = options.root_module.root_source_file,

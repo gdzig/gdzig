@@ -467,15 +467,33 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Functions
     for (class.functions.values()) |*function| {
-        if (function.skip) continue;
-
         if (function.mode != .final) continue;
-        try writeClassFunction(w, class, function, ctx);
+        if (function.skip and !function.mixin_override) continue;
+        var emitted: Context.Function = function.*;
+        const delegate_name = if (function.mixin_override) try std.fmt.allocPrint(ctx.rawAllocator(), "{s}Raw", .{function.name}) else null;
+        defer if (delegate_name) |name| ctx.rawAllocator().free(name);
+        if (delegate_name) |name| {
+            try checkClassDeclarationName(class, name);
+            const storage = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}_ptr", .{name});
+            defer ctx.rawAllocator().free(storage);
+            try checkClassDeclarationName(class, storage);
+            if (function.is_vararg) {
+                const alloc_name = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}Alloc", .{name});
+                defer ctx.rawAllocator().free(alloc_name);
+                try checkClassDeclarationName(class, alloc_name);
+                const alloc_storage = try std.fmt.allocPrint(ctx.rawAllocator(), "{s}_ptr", .{alloc_name});
+                defer ctx.rawAllocator().free(alloc_storage);
+                try checkClassDeclarationName(class, alloc_storage);
+            }
+            emitted.name = name;
+            emitted.is_public = false;
+        }
+        try writeClassFunction(w, class, &emitted, ctx);
         try w.writeLine("");
 
         // Write allocating wrapper for vararg functions
         if (function.is_vararg) {
-            try writeFunctionAlloc(w, function, class, ctx);
+            try writeFunctionAlloc(w, &emitted, class, ctx);
             try w.writeLine("");
         }
     }
@@ -519,6 +537,16 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Imports (with collision detection for signals/enums/flags)
     try writeImports(w, &class.imports, class, ctx);
+}
+
+fn checkClassDeclarationName(class: *const Context.Class, name: []const u8) !void {
+    if (class.mixin_names.contains(name) or class.hasCollision(name)) return error.GeneratedDeclarationCollision;
+    for (class.functions.values()) |function| {
+        if (std.mem.eql(u8, function.name, name)) return error.GeneratedDeclarationCollision;
+    }
+    for (class.constants.values()) |constant| {
+        if (std.mem.eql(u8, constant.name, name)) return error.GeneratedDeclarationCollision;
+    }
 }
 
 fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, class: *const Context.Class, ctx: *const Context) !void {
@@ -637,6 +665,7 @@ test "class bind primary then compatibility order, including Alloc and no metada
 
 /// Writes a thin vararg wrapper that does comptime check and delegates to the Alloc version.
 fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionOptions(w, function, class, ctx);
     try w.writeLine(
         \\/// Guarantees no allocations when calling across the FFI. Passing packed arrays is a compile error; use the Alloc variant.
         \\///
@@ -645,9 +674,9 @@ fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, 
 
     // Function signature
     if (std.zig.Token.keywords.has(function.name)) {
-        try w.print("pub fn @\"{s}\"(", .{function.name});
+        try w.print("{s}fn @\"{s}\"(", .{ if (function.is_public) "pub " else "", function.name });
     } else {
-        try w.print("pub fn {s}(", .{function.name});
+        try w.print("{s}fn {s}(", .{ if (function.is_public) "pub " else "", function.name });
     }
 
     var is_first = true;
@@ -661,7 +690,8 @@ fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, 
         is_first = false;
     }
 
-    for (function.parameters.values()) |param| {
+    const opt = firstOptionalParameter(function);
+    for (function.parameters.values()[0..opt]) |param| {
         if (!is_first) try w.writeAll(", ");
         try w.print("{s}: ", .{param.name});
         try writeTypeAtParameter(w, &param.type, class, ctx);
@@ -669,7 +699,12 @@ fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, 
     }
 
     if (!is_first) try w.writeAll(", ");
-    try w.writeAll("@\"...\": anytype) ");
+    try w.writeAll("@\"...\": anytype");
+    if (opt < function.parameters.count()) {
+        try w.writeAll(", opt: ");
+        try writeOptionsName(w, function, ctx);
+    }
+    try w.writeAll(") ");
     try writeTypeAtReturn(w, &function.return_type, class, ctx);
     try w.writeLine(" {");
     w.indent += 1;
@@ -695,14 +730,16 @@ fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, 
     }
 
     is_first = true;
-    for (function.parameters.values()) |param| {
+    for (function.parameters.values()[0..opt]) |param| {
         if (!is_first) try w.writeAll(", ");
         try w.print("{s}", .{param.name});
         is_first = false;
     }
 
     if (!is_first) try w.writeAll(", ");
-    try w.writeLine("@\"...\");");
+    try w.writeAll("@\"...\"");
+    if (opt < function.parameters.count()) try w.writeAll(", opt");
+    try w.writeLine(");");
 
     w.indent -= 1;
     try w.writeLine("}");
@@ -718,9 +755,9 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
 
     // Declaration with Alloc suffix
     if (std.zig.Token.keywords.has(function.name)) {
-        try w.print("pub fn @\"{s}Alloc\"(", .{function.name});
+        try w.print("{s}fn @\"{s}Alloc\"(", .{ if (function.is_public) "pub " else "", function.name });
     } else {
-        try w.print("pub fn {s}Alloc(", .{function.name});
+        try w.print("{s}fn {s}Alloc(", .{ if (function.is_public) "pub " else "", function.name });
     }
 
     var is_first = true;
@@ -746,7 +783,8 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
     }
 
     // Positional parameters
-    for (function.parameters.values()) |param| {
+    const opt = firstOptionalParameter(function);
+    for (function.parameters.values()[0..opt]) |param| {
         if (!is_first) {
             try w.writeAll(", ");
         }
@@ -760,6 +798,10 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
         try w.writeAll(", ");
     }
     try w.writeAll("@\"...\": anytype");
+    if (opt < function.parameters.count()) {
+        try w.writeAll(", opt: ");
+        try writeOptionsName(w, function, ctx);
+    }
 
     // Return type
     try w.writeAll(") ");
@@ -768,6 +810,9 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
     w.indent += 1;
 
     const param_count = function.parameters.count();
+    var defaults: Context.Function = function.*;
+    defaults.is_vararg = false;
+    try writeRuntimeDefaults(w, &defaults, opt, class, ctx);
 
     // Build pointer array to stack-temporary Variants
     try w.printLine("var args: [{d} + @\"...\".len]*Variant = undefined;", .{param_count});
@@ -775,8 +820,10 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
     // Fixed parameters - wrap in Variant (unless already Variant)
     // Use wrap() for non-allocating types, init() for allocating types (packed arrays)
     for (function.parameters.values(), 0..) |param, i| {
+        var source_buf: [256]u8 = undefined;
+        const source = if (i < opt) param.name else try std.fmt.bufPrint(&source_buf, "{s}{s}", .{ if (param.needsRuntimeInit(ctx) or optNullMaterializer(&param, ctx) != null) "actual_" else "opt.", param.name });
         if (param.type == .variant) {
-            try w.printLine("args[{d}] = @constCast(&{s});", .{ i, param.name });
+            try w.printLine("args[{d}] = @constCast(&{s});", .{ i, source });
         } else {
             // Check if this type requires allocation (packed arrays)
             const needs_alloc = if (param.type == .basic) blk: {
@@ -787,12 +834,12 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
             if (needs_alloc) {
                 try w.print("args[{d}] = @constCast(&Variant.init(", .{i});
                 try writeTypeAtParameter(w, &param.type, class, ctx);
-                try w.printLine(", {s}));", .{param.name});
+                try w.printLine(", {s}));", .{source});
                 try w.printLine("defer args[{d}].deinit();", .{i});
             } else {
                 try w.print("args[{d}] = @constCast(&Variant.wrap(", .{i});
                 try writeTypeAtParameter(w, &param.type, class, ctx);
-                try w.printLine(", &{s}));", .{param.name});
+                try w.printLine(", &{s}));", .{source});
             }
         }
     }
@@ -1097,7 +1144,144 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
     try w.writeLine("};");
 }
 
+test "named options use original API names and preserve runtime defaults" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123 };
+    try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
+    try function.parameters.put(arena.allocator(), "label", .{ .name = "label", .type = .string, .default = .{ .string = "default" } });
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w: CodeWriter = .init(&out.writer);
+    try writeFunctionHeader(&w, &function, null, &ctx);
+    const text = out.written();
+    try std.testing.expect(std.mem.indexOf(u8, text, "pub const ProbeOptions = struct") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "opt: ProbeOptions") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "count: i64 = 7") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "label: ?String = null") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "actual_label = opt.label orelse") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "defer if (opt.label == null) actual_label.deinit();") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "ProbeRawOptions") == null);
+}
+
+test "private fixed and Alloc delegates share API options and singleton shape" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const cls: Context.Class = .{ .name = "Probe" };
+    var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123, .is_public = false, .self = .singleton };
+    try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w: CodeWriter = .init(&out.writer);
+    try writeClassFunction(&w, &cls, &function, &ctx);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "fn probeRaw(opt: ProbeOptions)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "pub fn probeRaw") == null);
+    out.clearRetainingCapacity();
+    function.is_vararg = true;
+    try writeClassFunctionVarargWrapper(&w, &cls, &function, &ctx);
+    try writeFunctionAlloc(&w, &function, &cls, &ctx);
+    const text = out.written();
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "pub const ProbeOptions"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, "opt: ProbeOptions"));
+    try std.testing.expect(std.mem.indexOf(u8, text, "probeRawAlloc(@\"...\", opt)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "pub fn probeRaw") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "self:") == null);
+    out.clearRetainingCapacity();
+    try writeModuleFunctionVarargWrapper(&w, &function, &ctx);
+    try writeFunctionAlloc(&w, &function, null, &ctx);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, out.written(), "pub const ProbeOptions"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, out.written(), "opt: ProbeOptions"));
+    try function.parameters.put(arena.allocator(), "value", .{ .name = "value", .type = .variant, .default = .null });
+    out.clearRetainingCapacity();
+    try writeFunctionAlloc(&w, &function, null, &ctx);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "actual_value: Variant = opt.value orelse .nil") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "@constCast(&actual_value)") != null);
+}
+
+test "generated declaration names reject API and private mixin collisions" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var cls: Context.Class = .{};
+    try cls.functions.put(arena.allocator(), "other", .{ .name = "probeRaw" });
+    try cls.mixin_names.put(arena.allocator(), "probeRawAlloc", {});
+    try cls.mixin_names.put(arena.allocator(), "ProbeOptions", {});
+    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "probeRaw"));
+    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "probeRawAlloc"));
+    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "ProbeOptions"));
+    try checkClassDeclarationName(&cls, "unrelated");
+}
+
+fn firstOptionalParameter(function: *const Context.Function) usize {
+    for (function.parameters.values(), 0..) |param, i| {
+        if (param.default != null) return i;
+    }
+    return function.parameters.count();
+}
+
+fn writeOptionsName(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+    // API names are stable across Raw/Alloc wrappers. Constructors/operators
+    // have no unique API method name, so retain their generated Zig names.
+    const original = if (function.index != null or function.operator_name != null or std.mem.eql(u8, function.name_api, "_")) function.name else function.name_api;
+    const name = try casez.allocConvert(ctx.rawAllocator(), common.gdzig_case.type, original);
+    defer ctx.rawAllocator().free(name);
+    try w.print("{s}Options", .{name});
+}
+
+fn writeFunctionOptions(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
+    const opt = firstOptionalParameter(function);
+    if (opt == function.parameters.count()) return;
+    if (class) |cls| {
+        var name_out: std.Io.Writer.Allocating = .init(ctx.rawAllocator());
+        defer name_out.deinit();
+        var name_writer: CodeWriter = .init(&name_out.writer);
+        try writeOptionsName(&name_writer, function, ctx);
+        try checkClassDeclarationName(cls, name_out.written());
+    }
+    try w.writeAll("pub const ");
+    try writeOptionsName(w, function, ctx);
+    try w.writeLine(" = struct {");
+    w.indent += 1;
+    for (function.parameters.values()[opt..]) |param| {
+        try w.print("{s}: ", .{param.name});
+        if (param.needsRuntimeInit(ctx)) {
+            try w.writeAll("?");
+            try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
+            try w.writeLine(" = null,");
+        } else {
+            if (param.default.?.isNullable()) try w.writeAll("?");
+            try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
+            try w.writeAll(" = ");
+            try writeValue(w, param.default.?, ctx);
+            try w.writeLine(",");
+        }
+    }
+    w.indent -= 1;
+    try w.writeLine("};");
+}
+
+fn writeRuntimeDefaults(w: *CodeWriter, function: *const Context.Function, opt: usize, class: ?*const Context.Class, ctx: *const Context) !void {
+    for (function.parameters.values()[opt..]) |param| {
+        if (param.needsRuntimeInit(ctx)) {
+            const default_value = param.default.?;
+            try w.print("{0s} actual_{1s} = opt.{1s} orelse ", .{ if (default_value.runtimeInitNeedsDeinit()) "var" else "const", param.name });
+            try writeValue(w, default_value, ctx);
+            try w.writeLine(";");
+            if (default_value.runtimeInitNeedsDeinit()) try w.printLine("defer if (opt.{0s} == null) actual_{0s}.deinit();", .{param.name});
+        } else if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
+            if (optNullMaterializer(&param, ctx)) |init_expr| {
+                try w.print("var actual_{s}: ", .{param.name});
+                try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
+                try w.printLine(" = opt.{s} orelse {s};", .{ param.name, init_expr });
+                try w.printLine("defer if (opt.{0s} == null) actual_{0s}.deinit();", .{param.name});
+            }
+        }
+    }
+}
+
 fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
+    try writeFunctionOptions(w, function, class, ctx);
     if (function.is_vararg) {
         try w.writeLine(
             \\/// Guarantees no allocations when calling across the FFI. Passing Transform2d, Aabb, Basis, Transform3d, or Projection is a compile error; use the Alloc variant.
@@ -1109,9 +1293,9 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     // Declaration
     try w.writeAll("");
     if (std.zig.Token.keywords.has(function.name)) {
-        try w.print("pub fn @\"{s}\"(", .{function.name});
+        try w.print("{s}fn @\"{s}\"(", .{ if (function.is_public) "pub " else "", function.name });
     } else {
-        try w.print("pub fn {s}(", .{function.name});
+        try w.print("{s}fn {s}(", .{ if (function.is_public) "pub " else "", function.name });
     }
 
     var is_first = true;
@@ -1179,31 +1363,8 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
         if (!is_first) {
             try w.writeAll(", ");
         }
-        try w.writeAll("opt: struct { ");
-        is_first = true;
-        for (function.parameters.values()[opt..]) |param| {
-            if (!is_first) {
-                try w.writeAll(", ");
-            }
-            try w.print("{s}: ", .{param.name});
-
-            // Check if parameter needs runtime initialization
-            if (param.needsRuntimeInit(ctx)) {
-                // Use nullable type with null default for runtime-init params
-                try w.writeAll("?");
-                try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
-                try w.writeAll(" = null");
-            } else {
-                if (param.default.?.isNullable()) {
-                    try w.writeAll("?");
-                }
-                try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
-                try w.writeAll(" = ");
-                try writeValue(w, param.default.?, ctx);
-            }
-            is_first = false;
-        }
-        try w.writeAll(" }");
+        try w.writeAll("opt: ");
+        try writeOptionsName(w, function, ctx);
         is_first = false;
     }
 
@@ -1228,29 +1389,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     }
 
     // Initialize runtime default values
-    if (opt < function.parameters.count()) {
-        for (function.parameters.values()[opt..]) |param| {
-            if (param.needsRuntimeInit(ctx)) {
-                const default_value = param.default.?;
-                try w.print("{0s} actual_{1s} = opt.{1s} orelse ", .{
-                    if (default_value.runtimeInitNeedsDeinit()) "var" else "const",
-                    param.name,
-                });
-                try writeValue(w, default_value, ctx);
-                try w.writeLine(";");
-                if (default_value.runtimeInitNeedsDeinit()) {
-                    try w.printLine("defer if (opt.{0s} == null) actual_{0s}.deinit();", .{param.name});
-                }
-            } else if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
-                if (optNullMaterializer(&param, ctx)) |init_expr| {
-                    try w.print("var actual_{s}: ", .{param.name});
-                    try writeTypeAtOptionalParameterField(w, &param.type, class, ctx);
-                    try w.printLine(" = opt.{s} orelse {s};", .{ param.name, init_expr });
-                    try w.printLine("defer if (opt.{0s} == null) actual_{0s}.deinit();", .{param.name});
-                }
-            }
-        }
-    }
+    try writeRuntimeDefaults(w, function, opt, class, ctx);
 
     // Fixed argument slice variable
     if (!function.is_vararg and function.operator_name == null and !function.can_init_directly) {
@@ -1800,6 +1939,7 @@ fn writeModuleFunction(w: *CodeWriter, function: *const Context.Function, ctx: *
 
 /// Writes a thin vararg wrapper for a module function that does comptime check and delegates to the Alloc version.
 fn writeModuleFunctionVarargWrapper(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+    try writeFunctionOptions(w, function, null, ctx);
     try w.writeLine(
         \\/// Guarantees no allocations when calling across the FFI. Passing packed arrays is a compile error; use the Alloc variant.
         \\///
@@ -1808,13 +1948,14 @@ fn writeModuleFunctionVarargWrapper(w: *CodeWriter, function: *const Context.Fun
 
     // Function signature
     if (std.zig.Token.keywords.has(function.name)) {
-        try w.print("pub fn @\"{s}\"(", .{function.name});
+        try w.print("{s}fn @\"{s}\"(", .{ if (function.is_public) "pub " else "", function.name });
     } else {
-        try w.print("pub fn {s}(", .{function.name});
+        try w.print("{s}fn {s}(", .{ if (function.is_public) "pub " else "", function.name });
     }
 
     var is_first = true;
-    for (function.parameters.values()) |param| {
+    const opt = firstOptionalParameter(function);
+    for (function.parameters.values()[0..opt]) |param| {
         if (!is_first) try w.writeAll(", ");
         try w.print("{s}: ", .{param.name});
         try writeTypeAtParameter(w, &param.type, null, ctx);
@@ -1822,7 +1963,12 @@ fn writeModuleFunctionVarargWrapper(w: *CodeWriter, function: *const Context.Fun
     }
 
     if (!is_first) try w.writeAll(", ");
-    try w.writeAll("@\"...\": anytype) ");
+    try w.writeAll("@\"...\": anytype");
+    if (opt < function.parameters.count()) {
+        try w.writeAll(", opt: ");
+        try writeOptionsName(w, function, ctx);
+    }
+    try w.writeAll(") ");
     try writeTypeAtReturn(w, &function.return_type, null, ctx);
     try w.writeLine(" {");
     w.indent += 1;
@@ -1844,14 +1990,16 @@ fn writeModuleFunctionVarargWrapper(w: *CodeWriter, function: *const Context.Fun
     try w.print("{s}Alloc(", .{function.name});
 
     is_first = true;
-    for (function.parameters.values()) |param| {
+    for (function.parameters.values()[0..opt]) |param| {
         if (!is_first) try w.writeAll(", ");
         try w.print("{s}", .{param.name});
         is_first = false;
     }
 
     if (!is_first) try w.writeAll(", ");
-    try w.writeLine("@\"...\");");
+    try w.writeAll("@\"...\"");
+    if (opt < function.parameters.count()) try w.writeAll(", opt");
+    try w.writeLine(");");
 
     w.indent -= 1;
     try w.writeLine("}");
@@ -2086,4 +2234,6 @@ const std = @import("std");
 
 const CodeWriter = @import("CodeWriter.zig");
 const Context = @import("Context.zig");
+const casez = @import("casez");
+const common = @import("common");
 const util = @import("util.zig");

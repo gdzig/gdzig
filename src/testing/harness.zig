@@ -46,8 +46,8 @@ fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv
     if (level != @backingInt(options.minimum_initialization_level)) return;
 
     // Class-registration tests must stay in initialization. GUI tests opt in
-    // through TestOptions.defer_startup because default themes initialize later.
-    if (!options.defer_startup) {
+    // through TestOptions.startup because default themes initialize later.
+    if (options.startup == .initialization) {
         run();
         quit();
         return;

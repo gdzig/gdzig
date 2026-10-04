@@ -4,6 +4,8 @@ const Mixin = @This();
 source: [:0]u8,
 ast: Ast,
 declarations: std.ArrayList(Declaration) = .empty,
+/// All root declaration names, including private helpers, for collision checks.
+names: std.ArrayList([]const u8) = .empty,
 
 pub const Declaration = struct {
     kind: enum { function, constant },
@@ -29,31 +31,33 @@ pub fn parse(allocator: Allocator, contents: []const u8) !Mixin {
     const source = try allocator.allocSentinel(u8, contents_slice.len, 0);
     @memcpy(source, contents_slice);
     errdefer allocator.free(source);
-    var ast: Ast = if (comptime @hasDecl(Ast, "ParseOptions"))
-        try Ast.parse(allocator, source, .{})
-    else
-        try Ast.parse(allocator, source, .zig);
+    var ast: Ast = try .parse(allocator, source, .{});
     errdefer ast.deinit(allocator);
     if (ast.errors.len != 0) return error.ParseError;
     var declarations: std.ArrayList(Declaration) = .empty;
     errdefer declarations.deinit(allocator);
+    var names: std.ArrayList([]const u8) = .empty;
+    errdefer names.deinit(allocator);
     for (ast.rootDecls()) |index| {
         var buffer: [1]Ast.Node.Index = undefined;
         if (ast.fullFnProto(&buffer, index)) |proto| {
-            if (proto.visib_token == null) continue;
             const name_token = proto.name_token orelse continue;
+            try names.append(allocator, ast.tokenSlice(name_token));
+            if (proto.visib_token == null) continue;
             try declarations.append(allocator, .{ .kind = .function, .name = ast.tokenSlice(name_token), .node = index });
         } else if (ast.fullVarDecl(index)) |decl| {
+            try names.append(allocator, ast.tokenSlice(decl.ast.mut_token + 1));
             if (decl.visib_token == null) continue;
             if (ast.tokens.get(decl.ast.mut_token).tag != .keyword_const) continue;
             try declarations.append(allocator, .{ .kind = .constant, .name = ast.tokenSlice(decl.ast.mut_token + 1), .node = index });
         }
     }
-    return .{ .source = source, .ast = ast, .declarations = declarations };
+    return .{ .source = source, .ast = ast, .declarations = declarations, .names = names };
 }
 
 pub fn deinit(self: *Mixin, allocator: Allocator) void {
     self.declarations.deinit(allocator);
+    self.names.deinit(allocator);
     self.ast.deinit(allocator);
     allocator.free(self.source);
     self.* = undefined;
@@ -76,6 +80,11 @@ test "only each declaration's own public fn and const participate" {
     try std.testing.expectEqualStrings("replace", mixin.declarations.items[0].name);
     try std.testing.expectEqualStrings("alias", mixin.declarations.items[1].name);
     try std.testing.expectEqualStrings("UnrelatedOptions", mixin.declarations.items[2].name);
+    var found_private = false;
+    for (mixin.names.items) |name| {
+        if (std.mem.eql(u8, name, "privateAfterPublic")) found_private = true;
+    }
+    try std.testing.expect(found_private);
 }
 
 test "declaration names remain valid after input source is freed" {
@@ -154,13 +163,16 @@ test "class inheritance retains skipped API metadata" {
         .config = .{ .arch = .float, .precision = .@"64", .extension_api = undefined, .gdextension_interface = undefined, .input = tmp.dir, .output = tmp.dir, .verbosity = .quiet, .io = std.testing.io },
     };
     var parent: Context.Class = .{ .name = "Parent", .name_api = "Parent" };
-    var function: Context.Function = .{ .name = "isClass", .name_api = "is_class", .base = "Parent", .hash = 123, .self = .{ .constant = "Parent" }, .skip = true };
+    var function: Context.Function = .{ .name = "isClass", .name_api = "is_class", .base = "Parent", .hash = 123, .self = .{ .constant = "Parent" }, .skip = true, .mixin_override = true };
     try function.hash_compatibility.append(allocator, 456);
     try parent.functions.put(allocator, "is_class", function);
+    try parent.mixin_names.put(allocator, "privateHelper", {});
     try ctx.classes.put(allocator, "Parent", parent);
     const child = try Context.Class.fromApi(allocator, .{ .name = "Child", .inherits = "Parent", .is_refcounted = false, .is_instantiable = true, .api_type = null }, &ctx);
     const inherited = child.functions.get("is_class").?;
     try std.testing.expect(inherited.skip);
+    try std.testing.expect(inherited.mixin_override);
+    try std.testing.expect(child.mixin_names.contains("privateHelper"));
     try std.testing.expectEqualStrings("Child", inherited.self.constant);
     try std.testing.expectEqualStrings("Parent", inherited.base.?);
     try std.testing.expectEqual(@as(?u64, 123), inherited.hash);

@@ -32,24 +32,20 @@ fn isClassForSingleton(p_class: StringName) bool {
 // The public API accepts StringName on both runtimes, but 4.6 ptrcall requires
 // a temporary String. Selecting a compatibility hash does not perform conversion.
 fn isClassWithRuntimeAbi(self: *const Self, p_class: StringName) bool {
-    const modern = gdzig.version.gte(.@"4.7");
-    if (isClass_ptr == null) {
-        const hash: i64 = if (modern) object_is_class_compat.godot_4_7.object_is_class else object_is_class_compat.godot_4_6.object_is_class;
-        isClass_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("Object")), @ptrCast(&StringName.fromComptimeLatin1("is_class")), hash);
+    if (gdzig.version.gte(.@"4.7")) {
+        return if (comptime object_is_class_singleton.owner(Self) != null) isClassRaw(p_class) else self.isClassRaw(p_class);
+    }
+    if (isClass_legacy_ptr == null) {
+        isClass_legacy_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("Object")), @ptrCast(&StringName.fromComptimeLatin1("is_class")), object_is_class_compat.godot_4_6.object_is_class);
     }
     var result: bool = false;
-    if (modern) {
-        const args = [_]c.GDExtensionConstTypePtr{@ptrCast(&p_class)};
-        raw.objectMethodBindPtrcall(isClass_ptr, @ptrCast(@constCast(self)), @ptrCast(&args), @ptrCast(&result));
-    } else {
-        var legacy_name: gdzig.builtin.String = .fromStringName(p_class);
-        defer legacy_name.deinit();
-        const args = [_]c.GDExtensionConstTypePtr{@ptrCast(&legacy_name)};
-        raw.objectMethodBindPtrcall(isClass_ptr, @ptrCast(@constCast(self)), @ptrCast(&args), @ptrCast(&result));
-    }
+    var legacy_name: gdzig.builtin.String = .fromStringName(p_class);
+    defer legacy_name.deinit();
+    const args = [_]c.GDExtensionConstTypePtr{@ptrCast(&legacy_name)};
+    raw.objectMethodBindPtrcall(isClass_legacy_ptr, @ptrCast(@constCast(self)), @ptrCast(&args), @ptrCast(&result));
     return result;
 }
-var isClass_ptr: c.GDExtensionMethodBindPtr = null;
+var isClass_legacy_ptr: c.GDExtensionMethodBindPtr = null;
 
 /// Upcasts a child type to this type.
 pub fn upcast(value: anytype) *Self {
