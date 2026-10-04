@@ -4,22 +4,8 @@ const std = @import("std");
 const gdzig = @import("gdzig");
 const extension = @import("extension");
 const options = @import("options");
-const emscripten_debug_io = @import("emscripten_debug_io.zig");
 
 pub const std_options: std.Options = if (@hasDecl(extension, "std_options")) extension.std_options else .{};
-
-// Work around ziglang/zig#31849 on Zig 0.16.x: the default
-// `std.Options.debug_io` analyzes `std.Io.Threaded`'s vtable, which fails to
-// compile for wasm32-emscripten because `std.os.emscripten.W.STOPSIG` has
-// the wrong return type. Substitute a minimal debug_io that does not
-// reference `std.Io.Threaded`. On all other targets this evaluates to the
-// standard library default.
-// TODO(zig 0.16.0): remove this shim (and emscripten_debug_io.zig) once 0.16.x
-// support is dropped; the workaround module is not needed on 0.17+.
-pub const std_options_debug_io: std.Io = if (emscripten_debug_io.needed)
-    emscripten_debug_io.io
-else
-    std.Options.debug_threaded_io.?.io();
 
 var registry: gdzig.extension.Registry = .init(gdzig.engine_allocator);
 
