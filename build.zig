@@ -115,6 +115,15 @@ pub fn build(b: *Build) !void {
     test_step.dependOn(&run_tests_protocol.step);
     b.step("test-protocol", "Run integration-test IPC unit tests").dependOn(&run_tests_protocol.step);
 
+    const tests_singleton = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/compat/singleton.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    }) });
+    const run_tests_singleton = b.addRunArtifact(tests_singleton);
+    test_step.dependOn(&run_tests_singleton.step);
+    b.step("test-singleton", "Run singleton-owner lookup tests").dependOn(&run_tests_singleton.step);
+
     const bindings = bindgen.run(b, bindgen_exe, .{
         .headers = headers,
         .precision = precision,

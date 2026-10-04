@@ -228,31 +228,16 @@ const MixinType = enum {
 pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { MixinType, Function } {
     var buffer: [1]NodeIndex = undefined;
     const proto = ast.fullFnProto(&buffer, index) orelse return null;
-    const node = ast.nodes.get(@intFromEnum(index));
-
     const name_token = proto.name_token orelse return null;
     const fn_name = ast.tokenSlice(name_token);
-
-    const is_pub = blk: {
-        const main_token = node.main_token;
-        var token_index: usize = 0;
-        while (token_index < main_token) : (token_index += 1) {
-            const maybe_pub = ast.tokens.get(token_index);
-            if (maybe_pub.tag == .keyword_pub) {
-                break :blk true;
-            }
-        }
-        break :blk false;
-    };
-
-    if (!is_pub) {
+    if (proto.visib_token == null) {
         return null;
     }
 
     const fn_type: MixinType = blk: {
         if (proto.ast.params.len > 0) {
             const first_param_node = proto.ast.params[0];
-            const param_node = ast.nodes.get(@intFromEnum(first_param_node));
+            const param_node = ast.nodes.get(@backingInt(first_param_node));
             const param_name = ast.tokenSlice(param_node.main_token);
 
             if (std.mem.eql(u8, param_name, "self")) {
@@ -267,7 +252,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { Mi
     function.name_api = try casez.allocConvert(allocator, godot_case.method, fn_name);
 
     for (proto.ast.params) |param_index| {
-        const param_node = ast.nodes.get(@intFromEnum(param_index));
+        const param_node = ast.nodes.get(@backingInt(param_index));
         const param_name = try allocator.dupe(u8, ast.tokenSlice(param_node.main_token - 2));
         try function.parameters.put(allocator, param_name, .{});
     }

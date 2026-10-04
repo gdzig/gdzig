@@ -510,10 +510,6 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
         \\
     , .{class.name_api});
 
-    // Object's runtime ABI shim is shared, but its public signature follows
-    // the same singleton specialization as ordinary inherited methods.
-    try writeClassIsClass(w, class, ctx);
-
     // Mixins (include parent class mixins)
     try writeClassMixins(w, class, ctx);
 
@@ -523,24 +519,6 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Imports (with collision detection for signals/enums/flags)
     try writeImports(w, &class.imports, class, ctx);
-}
-
-fn writeClassIsClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) !void {
-    try w.writeLine("/// Returns whether this object inherits the named engine class.");
-    if (class.getNearestSingleton(ctx)) |singleton| {
-        try w.printLine(
-            \\pub fn isClass(p_class: StringName) bool {{
-            \\    const Singleton = gdzig.class.{0s};
-            \\    if (Singleton.instance == null) {{
-            \\        Singleton.instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1("{1s}"))).?);
-            \\    }}
-            \\    return isClassWithRuntimeAbi(@ptrCast(Singleton.instance.?), p_class);
-            \\}}
-        , .{ singleton.name, singleton.name_api });
-    } else {
-        try w.writeLine("pub const isClass = isClassWithRuntimeAbi;");
-    }
-    try w.writeLine("");
 }
 
 fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, class: *const Context.Class, ctx: *const Context) !void {

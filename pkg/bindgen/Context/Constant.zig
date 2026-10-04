@@ -79,21 +79,7 @@ pub fn fromClass(allocator: Allocator, api: GodotApi.Class.Constant, ctx: *const
 
 pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?Constant {
     const var_decl = ast.fullVarDecl(index) orelse return null;
-    const node = ast.nodes.get(@intFromEnum(index));
-
-    const is_pub = blk: {
-        const main_token = node.main_token;
-        var token_index: usize = 0;
-        while (token_index < main_token) : (token_index += 1) {
-            const token = ast.tokens.get(token_index);
-            if (token.tag == .keyword_pub) {
-                break :blk true;
-            }
-        }
-        break :blk false;
-    };
-
-    if (!is_pub) {
+    if (var_decl.visib_token == null) {
         return null;
     }
 
@@ -108,7 +94,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?Constant {
 
     return .{
         .skip = true,
-        .name = name,
+        .name = try allocator.dupe(u8, name),
         .name_api = name_api,
     };
 }

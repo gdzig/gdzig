@@ -96,14 +96,6 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         // Skip 'destroy' on RefCounted classes - provided by mixin instead
         if (self.is_refcounted and std.mem.eql(u8, method.name, "destroy")) continue;
 
-        // Class mixins are concatenated into generated declarations, unlike
-        // Builtin.loadMixinIfExists, which parses overrides and marks them skipped.
-        // Suppress these generated methods so their runtime ABI adapters (and
-        // singleton-specialized isClass wrappers) do not collide with duplicates.
-        if (std.mem.eql(u8, api.name, "Object") and std.mem.eql(u8, method.name, "is_class")) continue;
-        if (std.mem.eql(u8, api.name, "RichTextLabel") and
-            (std.mem.eql(u8, method.name, "add_image") or std.mem.eql(u8, method.name, "update_image"))) continue;
-
         var function = try Function.fromClass(allocator, self.name_api, self.has_singleton, method, ctx);
 
         // Rename signal methods - mixin provides idiomatic wrappers
@@ -164,7 +156,26 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         try self.signals.put(allocator, signal.name, try Signal.fromClass(allocator, api.name, signal, ctx));
     }
 
+    try self.loadMixinIfExists(allocator, ctx.config.io, ctx.config.input);
     return self;
+}
+
+pub fn loadMixinIfExists(self: *Class, allocator: Allocator, io: std.Io, input: std.Io.Dir) !void {
+    const path = try std.fmt.allocPrint(allocator, "class/{s}.mixin.zig", .{self.name});
+    defer allocator.free(path);
+    var mixin = (try Mixin.load(allocator, io, input, path)) orelse return;
+    defer mixin.deinit(allocator);
+    self.applyMixin(&mixin);
+}
+
+/// Class overrides only suppress emission. Keep API signatures, imports,
+/// hashes and inherited skip state intact for descendants and other consumers.
+pub fn applyMixin(self: *Class, mixin: *const Mixin) void {
+    for (mixin.declarations.items) |declaration| {
+        for (self.functions.values()) |*function| {
+            if (std.mem.eql(u8, function.name, declaration.name)) function.skip = true;
+        }
+    }
 }
 
 fn getAllSignalsIncludingInherits(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !ArrayList(GodotApi.Class.Signal) {
@@ -273,4 +284,5 @@ const Imports = Context.Imports;
 const Property = Context.Property;
 const Signal = Context.Signal;
 const GodotApi = @import("../GodotApi.zig");
+const Mixin = @import("../Mixin.zig");
 const docs = @import("docs.zig");
