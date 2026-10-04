@@ -31,7 +31,7 @@ pub fn build(b: *Build) !void {
 
     const godot_cpp = b.dependency("godot_cpp", .{});
     const interface_header: Build.LazyPath = if (regenerate_interface) blk: {
-        const python = compat.findProgram(b, &.{ "python3", "python" }) orelse
+        const python = b.findProgram(.{ .names = &.{ "python3", "python" } }) orelse
             @panic("Python is required to regenerate gdextension_interface.h");
         const generate_header = b.addSystemCommand(&.{python});
         generate_header.addArgs(&.{
@@ -60,7 +60,7 @@ pub fn build(b: *Build) !void {
         if (godot_path) |p| {
             break :blk .{ .cwd_relative = p };
         }
-        if (compat.findProgram(b, &.{"godot"})) |p| {
+        if (b.findProgram(.{ .names = &.{"godot"} })) |p| {
             break :blk .{ .cwd_relative = p };
         }
         @panic("Godot executable not found. Install godot on PATH or pass -Dgodot-path=<path>");
@@ -97,7 +97,7 @@ pub fn build(b: *Build) !void {
     const bindgen_exe = bindgen.build(b, .{
         .headers = headers,
         .target = b.graph.host,
-        .optimize = compat.Optimize.debug.optimizeMode(),
+        .optimize = .debug,
         .precision = precision,
         .architecture = architecture,
     });
@@ -159,7 +159,7 @@ pub fn build(b: *Build) !void {
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
 
-        var tests_dir = try compat.buildRootDir(b).openDir(b.graph.io, "test", .{ .iterate = true });
+        var tests_dir = try b.root.root_dir.handle.openDir(b.graph.io, "test", .{ .iterate = true });
         defer tests_dir.close(b.graph.io);
 
         var iter = tests_dir.iterate();
@@ -237,5 +237,4 @@ pub const TestOptions = api.TestOptions;
 pub const InitializationLevel = api.InitializationLevel;
 const bindgen = @import("build/bindgen.zig");
 const common = @import("build/common.zig");
-const compat = @import("build/compat.zig");
 const gdextension = @import("build/gdextension.zig");

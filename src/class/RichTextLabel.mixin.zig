@@ -6,13 +6,13 @@ pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: struct {
     width: f64 = 0,
     height: f64 = 0,
     color: gdzig.builtin.Color = .initRGBA(1, 1, 1, 1),
-    inline_align: gdzig.global.InlineAlignment = @enumFromInt(5),
+    inline_align: gdzig.global.InlineAlignment = @fromBackingInt(@intCast(5)),
     region: gdzig.builtin.Rect2 = .initXYWidthHeight(0, 0, 0, 0),
     key: ?Variant = null,
     pad: bool = false,
     tooltip: ?gdzig.builtin.String = null,
-    width_unit: Self.ImageUnit = @enumFromInt(0),
-    height_unit: Self.ImageUnit = @enumFromInt(0),
+    width_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
+    height_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
     alt_text: ?gdzig.builtin.String = null,
 }) void {
     var actual_key: Variant = opt.key orelse .nil;
@@ -22,9 +22,9 @@ pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: struct {
     var actual_alt_text: gdzig.builtin.String = opt.alt_text orelse .init();
     defer if (opt.alt_text == null) actual_alt_text.deinit();
     const modern = gdzig.version.gte(.@"4.7");
-    const alignment: i64 = @intFromEnum(opt.inline_align);
-    const width_unit: i64 = @intFromEnum(opt.width_unit);
-    const height_unit: i64 = @intFromEnum(opt.height_unit);
+    const alignment: i64 = @backingInt(opt.inline_align);
+    const width_unit: i64 = @backingInt(opt.width_unit);
+    const height_unit: i64 = @backingInt(opt.height_unit);
     // Do not convert dimensions on the modern path, which accepts all f64 values.
     const legacy_width: i64 = if (modern) 0 else @intFromFloat(opt.width);
     const legacy_height: i64 = if (modern) 0 else @intFromFloat(opt.height);
@@ -58,20 +58,20 @@ pub fn updateImage(self: *Self, p_key: Variant, p_mask: Self.ImageUpdateMask, p_
     width: f64 = 0,
     height: f64 = 0,
     color: gdzig.builtin.Color = .initRGBA(1, 1, 1, 1),
-    inline_align: gdzig.global.InlineAlignment = @enumFromInt(5),
+    inline_align: gdzig.global.InlineAlignment = @fromBackingInt(@intCast(5)),
     region: gdzig.builtin.Rect2 = .initXYWidthHeight(0, 0, 0, 0),
     pad: bool = false,
     tooltip: ?gdzig.builtin.String = null,
-    width_unit: Self.ImageUnit = @enumFromInt(0),
-    height_unit: Self.ImageUnit = @enumFromInt(0),
+    width_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
+    height_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
 }) void {
     var actual_tooltip: gdzig.builtin.String = opt.tooltip orelse .init();
     defer if (opt.tooltip == null) actual_tooltip.deinit();
     const modern = gdzig.version.gte(.@"4.7");
     const mask: i64 = @as(u32, @bitCast(p_mask));
-    const alignment: i64 = @intFromEnum(opt.inline_align);
-    const width_unit: i64 = @intFromEnum(opt.width_unit);
-    const height_unit: i64 = @intFromEnum(opt.height_unit);
+    const alignment: i64 = @backingInt(opt.inline_align);
+    const width_unit: i64 = @backingInt(opt.width_unit);
+    const height_unit: i64 = @backingInt(opt.height_unit);
     const legacy_width: i64 = if (modern) 0 else @intFromFloat(opt.width);
     const legacy_height: i64 = if (modern) 0 else @intFromFloat(opt.height);
     const legacy_width_percent = opt.width_unit != .image_unit_pixel;
