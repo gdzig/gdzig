@@ -110,7 +110,7 @@ fn addExtensionWeb(
     const optimize = options.optimize;
     const single_threaded = mod.single_threaded orelse false;
 
-    const run_emcc = b.addSystemCommand(&.{compat.lazyPathString(b, emsdk_path.path(b, "upstream/emscripten/emcc"))});
+    const run_emcc = b.addSystemCommand(&.{paths.lazyPathString(b, emsdk_path.path(b, "upstream/emscripten/emcc"))});
     run_emcc.addArtifactArg(lib);
     // Inherit stdio so emcc's warnings stream directly; when captured, zig's
     // build runner echoes them post-hoc under a misleading "failed command:"
@@ -187,8 +187,8 @@ pub fn addTest(b: *Build, options: TestOptions) *Step.Run {
     return addTestImpl(b, .{ .b = b, .dep = dep }, options);
 }
 
-pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
-    const gdzig_mod = paths.module("gdzig");
+pub fn addTestImpl(b: *Build, resolver: Resolver, options: TestOptions) *Step.Run {
+    const gdzig_mod = resolver.module("gdzig");
 
     const entry_options = b.addOptions();
     entry_options.addOption([]const u8, "entry_symbol", "gdextension_entry");
@@ -207,7 +207,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     const obj = b.addTest(.{
         .name = options.name,
         .root_module = mod,
-        .test_runner = .{ .path = paths.path("src/testing/harness.zig"), .mode = .simple },
+        .test_runner = .{ .path = resolver.path("src/testing/harness.zig"), .mode = .simple },
         .emit_object = true,
         .use_llvm = true,
     });
@@ -246,12 +246,12 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     runner_options.addOption([]const []const u8, "test_folders", &.{
         b.fmt("zig-out/{s}", .{install_subdir}),
     });
-    runner_options.addOptionPath("godot_exe", paths.namedLazyPath("godot"));
+    runner_options.addOptionPath("godot_exe", resolver.namedLazyPath("godot"));
 
     const coordinator = b.addExecutable(.{
         .name = b.fmt("test-{s}", .{options.name}),
         .root_module = b.createModule(.{
-            .root_source_file = paths.path("src/testing/coordinator.zig"),
+            .root_source_file = resolver.path("src/testing/coordinator.zig"),
             .target = options.target,
             .optimize = .debug,
             .imports = &.{
@@ -370,5 +370,5 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const compat = @import("compat.zig");
 const emsdk = @import("emsdk.zig");
+const paths = @import("paths.zig");
