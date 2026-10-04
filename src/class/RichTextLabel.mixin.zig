@@ -45,7 +45,7 @@ pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: struct {
         @ptrCast(&actual_alt_text),
     };
     if (addImage_ptr == null) {
-        const hash: i64 = if (modern) 1980227702 else @import("../godot_4_6.zig").rich_text_label_add_image;
+        const hash: i64 = if (modern) 1980227702 else rich_text_image_compat.rich_text_label_add_image;
         addImage_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("RichTextLabel")), @ptrCast(&StringName.fromComptimeLatin1("add_image")), hash);
     }
     raw.objectMethodBindPtrcall(addImage_ptr, @ptrCast(self), @ptrCast(&args), null);
@@ -83,12 +83,14 @@ pub fn updateImage(self: *Self, p_key: Variant, p_mask: Self.ImageUpdateMask, p_
         @ptrCast(&actual_tooltip),                                     if (modern) @ptrCast(&width_unit) else @ptrCast(&legacy_width_percent), if (modern) @ptrCast(&height_unit) else @ptrCast(&legacy_height_percent),
     };
     if (updateImage_ptr == null) {
-        const hash: i64 = if (modern) 202998225 else @import("../godot_4_6.zig").rich_text_label_update_image;
+        const hash: i64 = if (modern) 202998225 else rich_text_image_compat.rich_text_label_update_image;
         updateImage_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("RichTextLabel")), @ptrCast(&StringName.fromComptimeLatin1("update_image")), hash);
     }
     raw.objectMethodBindPtrcall(updateImage_ptr, @ptrCast(self), @ptrCast(&args), null);
 }
 var updateImage_ptr: c.GDExtensionMethodBindPtr = null;
+
+const rich_text_image_compat = @import("../godot_4_6.zig");
 
 // @mixin stop
 

@@ -58,6 +58,7 @@ pub const Response = union(enum) {
 pub const TestResult = struct {
     index: u32,
     passed: bool,
+    skipped: bool = false,
     message: ?[]const u8 = null,
 };
 
@@ -134,6 +135,11 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
         const passed_val = root.get("passed") orelse return null;
         if (passed_val != .bool) return null;
 
+        const skipped = if (root.get("skipped")) |value| blk: {
+            if (value != .bool) return null;
+            break :blk value.bool;
+        } else false;
+
         var message: ?[]const u8 = null;
         if (root.get("message")) |msg_val| {
             if (msg_val == .string) {
@@ -144,6 +150,7 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
         return .{ .result = .{
             .index = @intCast(index_val.integer),
             .passed = passed_val.bool,
+            .skipped = skipped,
             .message = message,
         } };
     }
@@ -199,7 +206,7 @@ pub fn writeMetadataResponse(writer: anytype, tests: []const []const u8) !void {
 }
 
 /// Write a test result response as JSON to a writer.
-pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, message: ?[]const u8) !void {
+pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, skipped: bool, message: ?[]const u8) !void {
     try writer.writeAll("{\"__gdzig__\":\"");
     try writer.writeAll(MARKER);
     try writer.writeAll("\",\"type\":\"result\",\"index\":");
@@ -208,6 +215,7 @@ pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, message: ?
     try writer.writeAll(num_str);
     try writer.writeAll(",\"passed\":");
     try writer.writeAll(if (passed) "true" else "false");
+    if (skipped) try writer.writeAll(",\"skipped\":true");
 
     if (message) |msg| {
         try writer.writeAll(",\"message\":");
@@ -215,6 +223,32 @@ pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, message: ?
     }
 
     try writer.writeAll("}\n");
+}
+
+test "result responses preserve pass fail and skip" {
+    const results = [_]TestResult{
+        .{ .index = 0, .passed = true },
+        .{ .index = 1, .passed = false, .message = "real failure" },
+        .{ .index = 2, .passed = false, .skipped = true },
+    };
+    for (results) |expected| {
+        var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer out.deinit();
+        try writeResultResponse(&out.writer, expected.index, expected.passed, expected.skipped, expected.message);
+        var parsed = (try parseResponse(std.testing.allocator, out.written())).?;
+        defer freeResponse(std.testing.allocator, &parsed);
+        try std.testing.expectEqualDeep(expected, parsed.result);
+    }
+}
+
+test "older result response defaults to not skipped" {
+    var parsed = (try parseResponse(
+        std.testing.allocator,
+        "{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"passed\":false}",
+    )).?;
+    defer freeResponse(std.testing.allocator, &parsed);
+    try std.testing.expect(!parsed.result.passed);
+    try std.testing.expect(!parsed.result.skipped);
 }
 
 test "parse query_metadata command" {

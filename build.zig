@@ -106,6 +106,15 @@ pub fn build(b: *Build) !void {
     test_step.dependOn(&run_tests_bindgen.step);
     b.step("test-bindgen", "Run bindgen unit tests").dependOn(&run_tests_bindgen.step);
 
+    const tests_protocol = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/testing/protocol.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    }) });
+    const run_tests_protocol = b.addRunArtifact(tests_protocol);
+    test_step.dependOn(&run_tests_protocol.step);
+    b.step("test-protocol", "Run integration-test IPC unit tests").dependOn(&run_tests_protocol.step);
+
     const bindings = bindgen.run(b, bindgen_exe, .{
         .headers = headers,
         .precision = precision,

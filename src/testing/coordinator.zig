@@ -192,6 +192,7 @@ const Runner = struct {
         defer godot_output.deinit(self.allocator);
 
         var failed = true;
+        var skipped = false;
         const response = try self.readResponse(&child, &godot_output);
         if (response) |resp| {
             defer {
@@ -201,7 +202,8 @@ const Runner = struct {
 
             switch (resp) {
                 .result => |result| {
-                    failed = !result.passed;
+                    skipped = result.skipped;
+                    failed = !result.passed and !skipped;
                 },
                 .metadata => {},
             }
@@ -222,7 +224,7 @@ const Runner = struct {
         try self.server.serveTestResults(.{
             .index = global_index,
             .flags = .{
-                .status = if (failed) .fail else .pass,
+                .status = if (skipped) .skip else if (failed) .fail else .pass,
                 .fuzz = false,
                 .log_err_count = 0,
                 .leak_count = 0,

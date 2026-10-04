@@ -146,7 +146,7 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fns = builtin.test_functions;
 
     if (index >= test_fns.len) {
-        try protocol.writeResultResponse(writer, index, false, "Test index out of bounds");
+        try protocol.writeResultResponse(writer, index, false, false, "Test index out of bounds");
         try writer.flush();
         return;
     }
@@ -154,12 +154,13 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fn = test_fns[index];
     const result = runSingleTest(test_fn);
 
-    try protocol.writeResultResponse(writer, index, result.passed, result.message);
+    try protocol.writeResultResponse(writer, index, result.passed, result.skipped, result.message);
     try writer.flush();
 }
 
 const SingleTestResult = struct {
     passed: bool,
+    skipped: bool = false,
     message: ?[]const u8,
 };
 
@@ -167,6 +168,7 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
     if (test_fn.func()) |_| {
         return .{ .passed = true, .message = null };
     } else |err| {
+        if (err == error.SkipZigTest) return .{ .passed = false, .skipped = true, .message = null };
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);
         }
