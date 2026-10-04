@@ -40,12 +40,7 @@ pub const Options = struct {
 
 pub fn translateC(b: *Build, options: Options) Translated {
     const toolchain = nestedToolchain(b);
-    // Only the selected prong is analyzed (comptime-known operand), so each
-    // branch may use std APIs that only exist on its own toolchain.
-    return switch (builtin.zig_version.minor) {
-        16 => translate016(b, toolchain, options),
-        else => translateModern(b, toolchain, options),
-    };
+    return translate(b, toolchain, options);
 }
 
 /// The memoized nested-build step that produces the translate-c exe and the
@@ -55,16 +50,11 @@ pub fn nestedBuildStep(b: *Build) *Build.Step {
     return nestedToolchain(b).step;
 }
 
-// TODO(zig 0.16.0): when 0.16.x support is dropped, delete
-// translate_c_0_16.zon, translate016, and this arm.
-//
 // The pin for the running toolchain. Pins live in ZON configs so per-branch
 // bumps are data edits and a foreign-branch config is inert data (ZON import
-// is comptime deserialization; nothing foreign is ever analyzed). Argument
-// ordering stays in code (translate016/translateModern): order is logic, and
-// the compiler checks it.
+// is comptime deserialization; nothing foreign is ever analyzed). The master
+// pin tracks `main` best effort per ADR 0001; CI's master leg catches drift.
 const pin = switch (builtin.zig_version.minor) {
-    16 => @import("translate_c_0_16.zon"),
     17 => @import("translate_c_0_17.zon"),
     else => @import("translate_c_main.zon"),
 };
@@ -124,7 +114,7 @@ fn generatedZon(b: *Build) []const u8 {
         \\    .name = .gdzig_translate_c,
         \\    .version = "0.0.0",
         \\    .fingerprint = 0x7e5c92f9743f2293,
-        \\    .minimum_zig_version = "0.16.0",
+        \\    .minimum_zig_version = "0.17.0",
         \\    .dependencies = .{{
         \\        .translate_c = .{{
         \\            .url = "{s}",
@@ -175,102 +165,10 @@ fn createRun(b: *Build, toolchain: Toolchain, options: Options) *Build.Step.Run 
     return run;
 }
 
-/// Argument plumbing ported from the zig-0.16.x branch Translator.initInner
-/// (order matters; probe-validated end-to-end on 0.16.0).
-fn translate016(b: *Build, toolchain: Toolchain, options: Options) Translated {
-    const target = options.target;
-    const run = createRun(b, toolchain, options);
-
-    run.addFileArg(options.c_source_file);
-    run.addArg("-o");
-    const output_file = run.addOutputFileArg(b.fmt("{s}.zig", .{options.name}));
-    run.addArgs(&.{ "-MD", "-MV", "-MF" });
-    _ = run.addDepFileOutputArg("deps.d");
-
-    if (!target.query.isNative()) {
-        const triple = target.query.zigTriple(b.graph.arena) catch @panic("OOM");
-        run.addArg(b.fmt("--target={s}", .{triple}));
-    }
-
-    // gdextension always links libc. For cross targets (and non-Linux
-    // natives) translate-c needs the libc dirs spelled out; for
-    // wasm32-emscripten LibCDirs.detect yields empty dirs (zig cannot build
-    // emscripten libc), so -nostdlibinc plus the caller's -isystem sysroot
-    // is exactly right.
-    if (!target.query.isNative() or target.result.os.tag != .linux) {
-        run.addArg("-nostdlibinc");
-        const libc = std.zig.LibCDirs.detect(
-            b.graph.arena,
-            b.graph.io,
-            b.graph.zig_lib_directory.path orelse ".",
-            &target.result,
-            target.query.isNativeAbi(),
-            true,
-            null,
-            &b.graph.environ_map,
-        ) catch |err| std.debug.panic("failed to locate libc: {s}", .{@errorName(err)});
-        for (libc.libc_include_dir_list) |include_dir| {
-            run.addArg("-isystem");
-            run.addDirectoryArg(.{ .cwd_relative = include_dir });
-        }
-        for (libc.libc_framework_dir_list) |framework_dir| {
-            run.addArg("-iframework");
-            run.addDirectoryArg(.{ .cwd_relative = framework_dir });
-        }
-        const clang_include = b.graph.zig_lib_directory.join(b.graph.arena, &.{"include"}) catch @panic("OOM");
-        run.addArg("-idirafter");
-        run.addDirectoryArg(.{ .cwd_relative = clang_include });
-    }
-
-    if (target.query.isNativeOs() and target.query.isNativeAbi()) {
-        const paths = std.zig.system.NativePaths.detect(
-            b.graph.arena,
-            b.graph.io,
-            &target.result,
-            &b.graph.environ_map,
-        ) catch |err| std.debug.panic("failed to detect native system paths: {s}", .{@errorName(err)});
-        for (paths.warnings.items) |warning| {
-            std.log.warn("{s}", .{warning});
-        }
-        for (paths.include_dirs.items) |include_dir| {
-            run.addArg("-isystem");
-            run.addDirectoryArg(.{ .cwd_relative = include_dir });
-        }
-        for (paths.framework_dirs.items) |framework_dir| {
-            run.addArg("-iframework");
-            run.addDirectoryArg(.{ .cwd_relative = framework_dir });
-        }
-    }
-
-    for (b.search_prefixes.items) |search_prefix| {
-        run.addArg("-I");
-        run.addDirectoryArg(.{ .cwd_relative = b.pathJoin(&.{ search_prefix, "include" }) });
-    }
-
-    run.addArg("-w");
-    run.addArg("-fmodule-libs");
-    // Match zig's built-in translate-c: struct fields get `= null` defaults
-    // (src/extension/class.zig initializes callback structs partially).
-    run.addArg("-fdefault-init");
-    run.addArg("-resource-dir");
-    run.addDirectoryArg(toolchain.aro_resource_dir);
-
-    for (options.system_include_paths) |p| {
-        run.addArg("-isystem");
-        run.addDirectoryArg(p);
-    }
-
-    return .{
-        .mod = makeResultModule(b, toolchain, options, output_file),
-        .run = run,
-        .output_file = output_file,
-    };
-}
-
 /// Argument plumbing ported from the zig-0.17.x branch Translator.initInner
 /// (identical shape on main; order matters; probe-validated at the CLI with
 /// the real 2.0.0 exe for wasm32-emscripten).
-fn translateModern(b: *Build, toolchain: Toolchain, options: Options) Translated {
+fn translate(b: *Build, toolchain: Toolchain, options: Options) Translated {
     const target = options.target;
     const run = createRun(b, toolchain, options);
 

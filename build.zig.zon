@@ -2,7 +2,7 @@
     .name = .godot,
     .version = "0.0.0-dev",
     .fingerprint = 0x74a61aa48e9841ab,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
 
     .dependencies = .{
         .bbcodez = .{

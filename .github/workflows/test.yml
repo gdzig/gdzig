@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         godot: ["4.7.2"]
-        zig: ["0.16.0", "0.17.0", master]
+        zig: ["0.17.0", master]
         target: [native, wasm]
 
     steps:
@@ -58,13 +58,9 @@ jobs:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.7.2"]
-        zig: ["0.16.0", "0.17.0", master]
+        zig: ["0.17.0", master]
         target: [native, wasm]
         include:
-          - os: macos-latest
-            godot: "4.7.2"
-            zig: "0.16.0"
-            target: native
           - os: macos-latest
             godot: "4.7.2"
             zig: "0.17.0"

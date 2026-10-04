@@ -1,3 +1,10 @@
+comptime {
+    // The root package's minimum_zig_version is not enforced by the toolchain,
+    // so reject old versions explicitly with a readable message.
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor < 17)
+        @compileError("gdzig requires Zig 0.17.0 or later");
+}
+
 pub fn build(b: *Build) !void {
     //
     // Options

@@ -3,7 +3,8 @@ godot = "4.7.2-stable"
 pre-commit = "latest"
 zlint = "latest"
 usage = "latest"
-zig = "0.16.0"
+zig = "0.17.0"
+# No zls release targets zig 0.17 yet; 0.16.0 is the newest available.
 zls = "0.16.0"
 
 [tool_alias]
