@@ -21,7 +21,7 @@ pub const ExtensionOptions = struct {
     /// For web builds, the Emscripten SDK path (optional, auto-fetched if not provided).
     emsdk_path: ?Build.LazyPath = null,
     /// For web builds, the Emscripten version to use.
-    emsdk_version: []const u8 = "4.0.20",
+    emsdk_version: []const u8 = emsdk.default_version,
 };
 
 /// A GDExtension build artifact.

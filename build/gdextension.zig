@@ -2,12 +2,12 @@ pub const BuildOptions = struct {
     headers: Build.LazyPath,
     target: Build.ResolvedTarget,
     optimize: OptimizeMode = .Debug,
-    emsdk_version: []const u8 = "4.0.20",
+    emsdk_version: []const u8 = emsdk.default_version,
 };
 
 pub fn build(b: *Build, options: BuildOptions) *Build.Module {
     const tc_dep = b.dependency("translate_c", .{});
-    const t: Translator = .init(tc_dep, .{
+    const translator: Translator = .init(tc_dep, .{
         .name = "gdextension_interface",
         .c_source_file = options.headers.path(b, "gdextension_interface.h"),
         .target = options.target,
@@ -19,11 +19,11 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Module {
     if (options.target.result.cpu.arch.isWasm()) {
         const sdk = emsdk.get(b, .{ .version = options.emsdk_version }) orelse
             return placeholderModule(b, options);
-        t.addSystemIncludePath(sdk.sysroot_include);
-        t.run.step.dependOn(sdk.activate_step);
+        translator.addSystemIncludePath(sdk.sysroot_include);
+        translator.run.step.dependOn(sdk.activate_step);
     }
 
-    return t.mod;
+    return translator.mod;
 }
 
 fn placeholderModule(b: *Build, options: BuildOptions) *Build.Module {

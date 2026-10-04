@@ -4,6 +4,8 @@ pub const Emsdk = struct {
     activate_step: *Build.Step,
 };
 
+pub const default_version = "4.0.20";
+
 pub const Options = struct {
     version: []const u8,
     path: ?Build.LazyPath = null,

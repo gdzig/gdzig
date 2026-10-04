@@ -74,7 +74,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Type System
 
-- Targets Zig 0.16.0 and Godot 4.7.2
+- Targets Zig 0.17.0 and Godot 4.7.2
 - Builtin types map to Zig equivalents based on precision setting (float/double)
 - Classes use oopz dependency for OOP-style inheritance
 - Supports both 32-bit and 64-bit architectures
@@ -97,8 +97,7 @@ Extensions define an entry point using `gdzig.entrypoint()` or `gdzig.entrypoint
 
 ## Current Status
 
-- Migrating to Zig 0.16.0 with Godot 4.7.2 compatibility
-- Active development on branch `zig-0.16`
+- Targeting Zig 0.17.0 with Godot 4.7.2 compatibility
 - Main branch for PRs: `master`
 - To see the generated code: run `zig build generated`. The generated code will be in the `gdzig/` folder.
 

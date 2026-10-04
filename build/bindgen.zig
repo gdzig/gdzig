@@ -52,11 +52,10 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
         },
     });
 
-    const exe = b.addExecutable(.{
+    return b.addExecutable(.{
         .name = "gdzig-bindgen",
         .root_module = mod,
     });
-    return exe;
 }
 
 pub const RunOptions = struct {
