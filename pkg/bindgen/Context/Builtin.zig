@@ -133,7 +133,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, io: Io, input_dir: Dir) !void {
     const path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name});
     defer allocator.free(path);
-    var mixin = (try Mixin.load(allocator, io, input_dir, path)) orelse return;
+    var mixin: Mixin = (try Mixin.load(allocator, io, input_dir, path)) orelse return;
     defer mixin.deinit(allocator);
     try self.applyMixin(allocator, &mixin);
 }

@@ -29,7 +29,7 @@ pub fn parse(allocator: Allocator, contents: []const u8) !Mixin {
     const source = try allocator.allocSentinel(u8, contents_slice.len, 0);
     @memcpy(source, contents_slice);
     errdefer allocator.free(source);
-    var ast = if (comptime @hasDecl(Ast, "ParseOptions"))
+    var ast: Ast = if (comptime @hasDecl(Ast, "ParseOptions"))
         try Ast.parse(allocator, source, .{})
     else
         try Ast.parse(allocator, source, .zig);
@@ -59,7 +59,7 @@ pub fn deinit(self: *Mixin, allocator: Allocator) void {
     self.* = undefined;
 }
 test "only each declaration's own public fn and const participate" {
-    var mixin = try Mixin.parse(std.testing.allocator,
+    var mixin: Mixin = try .parse(std.testing.allocator,
         \\const outside = 0;
         \\// @mixin start
         \\pub fn replace(self: *Self) void { _ = self; }
@@ -80,7 +80,7 @@ test "only each declaration's own public fn and const participate" {
 
 test "declaration names remain valid after input source is freed" {
     const source = try std.testing.allocator.dupe(u8, "pub const methodAlias = helper;");
-    var mixin = try Mixin.parse(std.testing.allocator, source);
+    var mixin: Mixin = try .parse(std.testing.allocator, source);
     std.testing.allocator.free(source);
     defer mixin.deinit(std.testing.allocator);
     try std.testing.expectEqualStrings("methodAlias", mixin.declarations.items[0].name);
@@ -96,7 +96,7 @@ test "class fn and const overrides preserve metadata and private or unmatched na
         try function.hash_compatibility.append(allocator, 456);
         try class.functions.put(allocator, name, function);
     }
-    var mixin = try Mixin.parse(std.testing.allocator,
+    var mixin: Mixin = try .parse(std.testing.allocator,
         \\pub fn replace(self: *Self) void { _ = self; }
         \\pub const alias = implementation;
         \\fn privateAfterPublic(self: *Self) void { _ = self; }
@@ -123,7 +123,7 @@ test "builtin constructors comptime markers and const aliases survive scanner ow
     const allocator = arena.allocator();
     var builtin: Context.Builtin = .{};
     try builtin.constructors.put(allocator, "init", .{ .name = "init" });
-    var mixin = try Mixin.parse(std.testing.allocator,
+    var mixin: Mixin = try .parse(std.testing.allocator,
         \\/// @comptime
         \\pub fn initValue(value: u32) Self { _ = value; return undefined; }
         \\pub const init = initValue;
@@ -165,6 +165,19 @@ test "class inheritance retains skipped API metadata" {
     try std.testing.expectEqualStrings("Parent", inherited.base.?);
     try std.testing.expectEqual(@as(?u64, 123), inherited.hash);
     try std.testing.expectEqual(@as(u64, 456), inherited.hash_compatibility.items[0]);
+}
+
+test "constant mixin allocation failures release owned names" {
+    var mixin: Mixin = try .parse(std.testing.allocator, "pub const sentinel = 7;");
+    defer mixin.deinit(std.testing.allocator);
+    var probe: std.testing.FailingAllocator = .init(std.testing.allocator, .{});
+    const constant = (try Context.Constant.fromMixin(probe.allocator(), mixin.ast, mixin.declarations.items[0].node)).?;
+    probe.allocator().free(constant.name);
+    probe.allocator().free(constant.name_api);
+    // Exercise the final name copy, not casez's separate writer OOM behavior.
+    var failing: std.testing.FailingAllocator = .init(std.testing.allocator, .{ .fail_index = probe.allocations - 1 });
+    try std.testing.expectError(error.OutOfMemory, Context.Constant.fromMixin(failing.allocator(), mixin.ast, mixin.declarations.items[0].node));
+    try std.testing.expectEqual(failing.allocated_bytes, failing.freed_bytes);
 }
 
 const std = @import("std");

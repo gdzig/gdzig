@@ -91,6 +91,7 @@ pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?Constant {
     const name_token = var_decl.ast.mut_token + 1;
     const name = ast.tokenSlice(name_token);
     const name_api = try casez.allocConvert(allocator, gdzig_case.constant, name);
+    errdefer allocator.free(name_api);
 
     return .{
         .skip = true,
