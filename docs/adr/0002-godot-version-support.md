@@ -16,4 +16,4 @@ References:
 
 - [gdzig#265](https://github.com/gdzig/gdzig/issues/265) — Godot 4.6 runtime compatibility, the first application of this policy.
 - [gdzig#266](https://github.com/gdzig/gdzig/issues/266) — the opt-in compile-time version pin accepted above.
-- [gdzig#262](https://github.com/gdzig/gdzig/pull/262) — the dual-snapshot back-compat PR and its discussion; its test-runner fixes and `@since` loader check remain salvageable on their own merits.
+- [gdzig#262](https://github.com/gdzig/gdzig/pull/262) — the dual-snapshot back-compat PR and its discussion.
