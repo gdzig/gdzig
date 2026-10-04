@@ -57,10 +57,11 @@ pub const Response = union(enum) {
 
 pub const TestResult = struct {
     index: u32,
-    passed: bool,
-    skipped: bool = false,
+    outcome: TestOutcome,
     message: ?[]const u8 = null,
 };
+
+pub const TestOutcome = enum { pass, fail, skip };
 
 /// Check if a line is a gdzig IPC message.
 pub fn isIpcMessage(line: []const u8) bool {
@@ -139,6 +140,8 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
             if (value != .bool) return null;
             break :blk value.bool;
         } else false;
+        // Legacy wire fields remain readable, but contradictory states are invalid.
+        if (skipped and passed_val.bool) return null;
 
         var message: ?[]const u8 = null;
         if (root.get("message")) |msg_val| {
@@ -149,8 +152,7 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
 
         return .{ .result = .{
             .index = @intCast(index_val.integer),
-            .passed = passed_val.bool,
-            .skipped = skipped,
+            .outcome = if (skipped) .skip else if (passed_val.bool) .pass else .fail,
             .message = message,
         } };
     }
@@ -214,8 +216,8 @@ pub fn writeResultResponse(writer: anytype, result: TestResult) !void {
     const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{result.index}) catch unreachable;
     try writer.writeAll(num_str);
     try writer.writeAll(",\"passed\":");
-    try writer.writeAll(if (result.passed) "true" else "false");
-    if (result.skipped) try writer.writeAll(",\"skipped\":true");
+    try writer.writeAll(if (result.outcome == .pass) "true" else "false");
+    if (result.outcome == .skip) try writer.writeAll(",\"skipped\":true");
 
     if (result.message) |msg| {
         try writer.writeAll(",\"message\":");
@@ -227,9 +229,9 @@ pub fn writeResultResponse(writer: anytype, result: TestResult) !void {
 
 test "result responses preserve pass fail and skip" {
     const results = [_]TestResult{
-        .{ .index = 0, .passed = true },
-        .{ .index = 1, .passed = false, .message = "real failure" },
-        .{ .index = 2, .passed = false, .skipped = true },
+        .{ .index = 0, .outcome = .pass },
+        .{ .index = 1, .outcome = .fail, .message = "real failure" },
+        .{ .index = 2, .outcome = .skip },
     };
     for (results) |expected| {
         var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
@@ -241,14 +243,18 @@ test "result responses preserve pass fail and skip" {
     }
 }
 
+test "contradictory pass and skip response is rejected" {
+    const parsed = try parseResponse(std.testing.allocator, "{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"passed\":true,\"skipped\":true}");
+    try std.testing.expect(parsed == null);
+}
+
 test "older result response defaults to not skipped" {
     var parsed = (try parseResponse(
         std.testing.allocator,
         "{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"passed\":false}",
     )).?;
     defer freeResponse(std.testing.allocator, &parsed);
-    try std.testing.expect(!parsed.result.passed);
-    try std.testing.expect(!parsed.result.skipped);
+    try std.testing.expectEqual(TestOutcome.fail, parsed.result.outcome);
 }
 
 test "parse query_metadata command" {

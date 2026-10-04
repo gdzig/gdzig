@@ -191,11 +191,10 @@ const Runner = struct {
         var godot_output: std.ArrayListUnmanaged(u8) = .empty;
         defer godot_output.deinit(self.allocator);
 
-        var failed = true;
         // A test skipped by the engine harness is neither failed nor passed.
         // In particular, resource_refcount tests intentionally skip below 4.7.
-        // Missing responses still leave failed=true.
-        var skipped = false;
+        // Missing responses still leave the outcome as a failure.
+        var outcome: protocol.TestOutcome = .fail;
         const response = try self.readResponse(&child, &godot_output);
         if (response) |resp| {
             defer {
@@ -205,8 +204,7 @@ const Runner = struct {
 
             switch (resp) {
                 .result => |result| {
-                    skipped = result.skipped;
-                    failed = !result.passed and !skipped;
+                    outcome = result.outcome;
                 },
                 .metadata => {},
             }
@@ -216,7 +214,7 @@ const Runner = struct {
         self.sendCommand(&child, .exit) catch {};
 
         // If test failed, print Godot's output to stderr
-        if (failed and godot_output.items.len > 0) {
+        if (outcome == .fail and godot_output.items.len > 0) {
             var buf: [4096]u8 = undefined;
             var stderr_writer = File.stderr().writerStreaming(self.io, &buf);
             stderr_writer.interface.writeAll(godot_output.items) catch {};
@@ -227,7 +225,11 @@ const Runner = struct {
         try self.server.serveTestResults(.{
             .index = global_index,
             .flags = .{
-                .status = if (skipped) .skip else if (failed) .fail else .pass,
+                .status = switch (outcome) {
+                    .pass => .pass,
+                    .fail => .fail,
+                    .skip => .skip,
+                },
                 .fuzz = false,
                 .log_err_count = 0,
                 .leak_count = 0,

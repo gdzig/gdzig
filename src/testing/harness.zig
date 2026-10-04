@@ -151,7 +151,7 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     if (index >= test_fns.len) {
         try protocol.writeResultResponse(writer, .{
             .index = index,
-            .passed = false,
+            .outcome = .fail,
             .message = "Test index out of bounds",
         });
         try writer.flush();
@@ -163,30 +163,28 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
 
     try protocol.writeResultResponse(writer, .{
         .index = index,
-        .passed = result.passed,
-        .skipped = result.skipped,
+        .outcome = result.outcome,
         .message = result.message,
     });
     try writer.flush();
 }
 
 const SingleTestResult = struct {
-    passed: bool,
-    skipped: bool = false,
+    outcome: protocol.TestOutcome,
     message: ?[]const u8,
 };
 
 fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
     if (test_fn.func()) |_| {
-        return .{ .passed = true, .message = null };
+        return .{ .outcome = .pass, .message = null };
     } else |err| {
         // Version-gated tests use Zig's skip error for unavailable engine features.
         // Preserve it through IPC without logging a failure or counting a pass.
-        if (err == error.SkipZigTest) return .{ .passed = false, .skipped = true, .message = null };
+        if (err == error.SkipZigTest) return .{ .outcome = .skip, .message = null };
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);
         }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
-        return .{ .passed = false, .message = null };
+        return .{ .outcome = .fail, .message = null };
     }
 }
