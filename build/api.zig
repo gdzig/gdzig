@@ -165,7 +165,12 @@ fn addExtensionWeb(
 }
 
 /// Startup phase for the integration-test IPC server.
-pub const TestStartup = enum { initialization, deferred };
+pub const TestStartup = enum {
+    /// Start during the extension's initialization callback.
+    initialization,
+    /// Start through a deferred call after initialization returns.
+    deferred,
+};
 
 /// Options for adding a Godot test.
 pub const TestOptions = struct {
@@ -179,9 +184,7 @@ pub const TestOptions = struct {
     optimize: std.builtin.OptimizeMode,
     /// Initialization level for the test extension.
     initialization_level: InitializationLevel = .scene,
-    /// IPC server startup phase. GUI tests use deferred startup because default
-    /// ThemeDB resources are not ready during the scene initialization callback.
-    /// Class-registration tests retain initialization ordering.
+    /// When to start the IPC server. Defaults to the initialization callback.
     startup: TestStartup = .initialization,
 };
 
