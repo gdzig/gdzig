@@ -50,14 +50,14 @@ pub fn nestedBuildStep(b: *Build) *Build.Step {
     return nestedToolchain(b).step;
 }
 
-// The pin for the running toolchain. Pins live in ZON configs so per-branch
-// bumps are data edits and a foreign-branch config is inert data (ZON import
-// is comptime deserialization; nothing foreign is ever analyzed). The master
-// pin tracks `main` best effort per ADR 0001; CI's master leg catches drift.
-const pin = switch (builtin.zig_version.minor) {
-    17 => @import("translate_c_0_17.zon"),
-    else => @import("translate_c_main.zon"),
-};
+// The translate-c pin. The zig-0.17.x branch is used for ALL supported
+// toolchains: it builds and translates correctly on zig master as well
+// (verified on 0.18.0-dev.1+a6c6412a8: exe build, header translation, and
+// output compilation for native and wasm32-emscripten). This is
+// works-today, not supported-by-upstream: if master drift breaks it, CI's
+// master leg is the tripwire and the remedy is a second ZON pin on the
+// translate-c `main` branch plus a zig_version switch here.
+const pin = @import("translate_c_0_17.zon");
 
 const step_name = "gdzig-translate-c-exe";
 const pkg_path_name = "gdzig-translate-c-pkg";
@@ -215,6 +215,5 @@ fn translate(b: *Build, toolchain: Toolchain, options: Options) Translated {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
