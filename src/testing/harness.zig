@@ -45,6 +45,23 @@ fn entrypoint(
 fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(.c) void {
     if (level != @intFromEnum(options.minimum_initialization_level)) return;
 
+    // Class-registration tests must stay in initialization. GUI tests opt in
+    // through TestOptions.defer_startup because default themes initialize later.
+    if (!options.defer_startup) {
+        run();
+        quit();
+        return;
+    }
+    var callable: gdzig.builtin.Callable = undefined;
+    var info = std.mem.zeroes(gdzig.c.GDExtensionCallableCustomInfo2);
+    info.token = gdzig.raw.library;
+    info.call_func = &runDeferred;
+    gdzig.raw.callableCustomCreate2.?(@ptrCast(&callable), &info);
+    defer callable.deinit();
+    callable.callDeferred(.{});
+}
+
+fn runDeferred(_: ?*anyopaque, _: [*c]const gdzig.c.GDExtensionConstVariantPtr, _: gdzig.c.GDExtensionInt, _: gdzig.c.GDExtensionVariantPtr, _: [*c]gdzig.c.GDExtensionCallError) callconv(.c) void {
     run();
     quit();
 }

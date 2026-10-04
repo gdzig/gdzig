@@ -70,6 +70,8 @@ pub const Version = extern struct {
     pub const @"4.2" = parse("4.2");
     pub const @"4.3" = parse("4.3");
     pub const @"4.4" = parse("4.4");
+    pub const @"4.5" = parse("4.5");
+    pub const @"4.6" = parse("4.6");
     pub const @"4.7" = parse("4.7");
 
     var current: Version = undefined;

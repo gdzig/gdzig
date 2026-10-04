@@ -9,6 +9,28 @@ pub fn destroy(self: *Self) void {
     raw.objectDestroy(self.ptr());
 }
 
+/// Returns whether this object inherits the named engine class.
+/// Godot 4.6 expects String, while Godot 4.7 expects StringName.
+pub fn isClass(self: *const Self, p_class: StringName) bool {
+    const modern = gdzig.version.gte(.@"4.7");
+    if (isClass_ptr == null) {
+        const hash: i64 = if (modern) 2619796661 else @import("../godot_4_6.zig").object_is_class;
+        isClass_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("Object")), @ptrCast(&StringName.fromComptimeLatin1("is_class")), hash);
+    }
+    var result: bool = false;
+    if (modern) {
+        const args = [_]c.GDExtensionConstTypePtr{@ptrCast(&p_class)};
+        raw.objectMethodBindPtrcall(isClass_ptr, @ptrCast(@constCast(self)), @ptrCast(&args), @ptrCast(&result));
+    } else {
+        var legacy_name = gdzig.builtin.String.fromStringName(p_class);
+        defer legacy_name.deinit();
+        const args = [_]c.GDExtensionConstTypePtr{@ptrCast(&legacy_name)};
+        raw.objectMethodBindPtrcall(isClass_ptr, @ptrCast(@constCast(self)), @ptrCast(&args), @ptrCast(&result));
+    }
+    return result;
+}
+var isClass_ptr: c.GDExtensionMethodBindPtr = null;
+
 /// Upcasts a child type to this type.
 pub fn upcast(value: anytype) *Self {
     return class.upcast(*Self, value);

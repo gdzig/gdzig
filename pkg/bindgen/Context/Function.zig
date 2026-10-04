@@ -10,6 +10,10 @@ base: ?[]const u8 = null,
 index: ?usize = null,
 hash: ?u64 = null,
 
+/// Older method-bind hashes accepted by the engine for forward compatibility
+/// (`hash_compatibility` in extension_api.json).
+hash_compatibility: ArrayList(u64) = .empty,
+
 // When the function is an operator, this is the name of the operator.
 operator_name: ?[]const u8 = null,
 
@@ -194,6 +198,7 @@ pub fn fromBuiltinMethod(allocator: Allocator, builtin_name: []const u8, api: Go
     self.name = try casez.allocConvert(allocator, gdzig_case.method, api.name);
     self.name_api = api.name;
     self.hash = api.hash;
+    try self.hash_compatibility.appendSlice(allocator, api.hash_compatibility orelse &.{});
     self.self = if (api.is_static)
         .static
     else if (api.is_const)
@@ -315,6 +320,7 @@ pub fn fromClass(allocator: Allocator, class_name: []const u8, has_singleton: bo
     self.name_api = api.name;
     self.base = class_name;
     self.hash = api.hash;
+    try self.hash_compatibility.appendSlice(allocator, api.hash_compatibility orelse &.{});
     self.mode = if (!api.is_virtual) .final else if (api.is_required) .abstract else .virtual;
     self.self = if (api.is_static)
         .static
@@ -424,6 +430,7 @@ pub fn fromUtilityFunction(allocator: Allocator, function: GodotApi.UtilityFunct
 pub fn deinit(self: *Function, allocator: Allocator) void {
     if (self.doc) |doc| allocator.free(doc);
     allocator.free(self.name);
+    self.hash_compatibility.deinit(allocator);
     for (self.parameters.values()) |*param| {
         param.deinit(allocator);
     }

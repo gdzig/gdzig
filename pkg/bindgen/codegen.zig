@@ -224,25 +224,73 @@ fn writeBuiltinDestructor(w: *CodeWriter, builtin: *const Context.Builtin) !void
 fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function, ctx: *const Context) !void {
     try writeFunctionHeader(w, method, null, ctx);
 
-    try w.printLine(
-        \\if ({0s}_ptr == null) {{
-        \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
-        \\}}
-        \\{0s}_ptr.?({4s}, @ptrCast(&args), {5s}, args.len);
-    , .{
-        method.name,
-        method.name_api,
-        method.hash.?,
-        builtin_name,
-        switch (method.self) {
-            .static => "null",
-            .singleton => @panic("singleton builtins not supported"),
-            .constant => "@ptrCast(@constCast(self))",
-            .mutable => "@ptrCast(self)",
-            .value => "@ptrCast(@constCast(&self))",
-        },
-        if (method.return_type != .void) "@ptrCast(&result)" else "null",
-    });
+    if (method.hash_compatibility.items.len == 0) {
+        try w.printLine(
+            \\if ({0s}_ptr == null) {{
+            \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
+            \\}}
+            \\{0s}_ptr.?({4s}, @ptrCast(&args), {5s}, args.len);
+        , .{
+            method.name,
+            method.name_api,
+            method.hash.?,
+            builtin_name,
+            switch (method.self) {
+                .static => "null",
+                .singleton => @panic("singleton builtins not supported"),
+                .constant => "@ptrCast(@constCast(self))",
+                .mutable => "@ptrCast(self)",
+                .value => "@ptrCast(@constCast(&self))",
+            },
+            if (method.return_type != .void) "@ptrCast(&result)" else "null",
+        });
+    } else {
+        try w.printLine(
+            \\if ({0s}_ptr == null) {{
+            \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({2s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {3d});
+        , .{
+            method.name,
+            method.name_api,
+            builtin_name,
+            method.hash.?,
+        });
+        w.indent += 1;
+        try w.writeAll("inline for ([_]i64{ ");
+        for (method.hash_compatibility.items, 0..) |compat_hash, i| {
+            if (i > 0) try w.writeAll(", ");
+            try w.print("{d}", .{compat_hash});
+        }
+        try w.writeLine(" }) |compat_hash| {");
+        w.indent += 1;
+        try w.printLine(
+            \\if ({0s}_ptr == null) {{
+            \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({2s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), compat_hash);
+            \\}}
+        , .{
+            method.name,
+            method.name_api,
+            builtin_name,
+        });
+        w.indent -= 1;
+        try w.writeLine("}");
+        // Preserve the unresolved-bind failure semantics of the non-compat path.
+        try w.printLine("_ = {0s}_ptr.?;", .{method.name});
+        w.indent -= 1;
+        try w.writeLine("}");
+        try w.printLine(
+            \\{0s}_ptr.?({1s}, @ptrCast(&args), {2s}, args.len);
+        , .{
+            method.name,
+            switch (method.self) {
+                .static => "null",
+                .singleton => @panic("singleton builtins not supported"),
+                .constant => "@ptrCast(@constCast(self))",
+                .mutable => "@ptrCast(self)",
+                .value => "@ptrCast(@constCast(&self))",
+            },
+            if (method.return_type != .void) "@ptrCast(&result)" else "null",
+        });
+    }
     try writeFunctionFooter(w, method, null, ctx);
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionPtrBuiltInMethod = null;
@@ -510,16 +558,7 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
         );
     }
 
-    try w.printLine(
-        \\if ({0s}_ptr == null) {{
-        \\    {0s}_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("{2s}")), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {3d});
-        \\}}
-    , .{
-        function.name,
-        function.name_api,
-        function.base.?,
-        function.hash.?,
-    });
+    try writeClassMethodBind(w, function, "");
 
     try w.print("raw.objectMethodBindPtrcall({0s}_ptr, ", .{function.name});
     try writeClassFunctionObjectPtr(w, class, function, ctx);
@@ -534,6 +573,66 @@ fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *co
     try w.printLine(
         \\var {0s}_ptr: c.GDExtensionMethodBindPtr = null;
     , .{function.name});
+}
+
+/// Lazy class bind lookup shared by fixed-arity and Alloc vararg methods.
+/// Keep primary first, then API-order compatibility hashes. A null result is
+/// deliberately passed to the caller as before, rather than changing failures.
+fn writeClassMethodBind(w: *CodeWriter, function: *const Context.Function, suffix: []const u8) !void {
+    try w.printLine("if ({s}{s}_ptr == null) {{", .{ function.name, suffix });
+    w.indent += 1;
+    try w.printLine("{s}{s}_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), @ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), {d});", .{
+        function.name, suffix, function.base.?, function.name_api, function.hash.?,
+    });
+    if (function.hash_compatibility.items.len > 0) {
+        try w.writeAll("inline for ([_]i64{ ");
+        for (function.hash_compatibility.items, 0..) |hash, i| {
+            if (i > 0) try w.writeAll(", ");
+            try w.print("{d}", .{hash});
+        }
+        try w.writeLine(" }) |compat_hash| {");
+        w.indent += 1;
+        try w.printLine("if ({s}{s}_ptr == null) {{", .{ function.name, suffix });
+        w.indent += 1;
+        try w.printLine("{s}{s}_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), @ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), compat_hash);", .{
+            function.name, suffix, function.base.?, function.name_api,
+        });
+        w.indent -= 1;
+        try w.writeLine("}");
+        w.indent -= 1;
+        try w.writeLine("}");
+    }
+    w.indent -= 1;
+    try w.writeLine("}");
+}
+
+test "class bind primary then compatibility order, including Alloc and no metadata" {
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w = CodeWriter.init(&out.writer);
+    var function: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Object", .hash = 123 };
+    try function.hash_compatibility.appendSlice(std.testing.allocator, &.{ 456, 789 });
+    defer function.hash_compatibility.deinit(std.testing.allocator);
+    for ([_][]const u8{ "", "Alloc" }) |suffix| {
+        out.clearRetainingCapacity();
+        try writeClassMethodBind(&w, &function, suffix);
+        const text = out.written();
+        const primary = std.mem.indexOf(u8, text, ", 123);").?;
+        const fallback = std.mem.indexOf(u8, text, "inline for ([_]i64{ 456, 789 }").?;
+        try std.testing.expect(primary < fallback);
+        try std.testing.expectEqual(@as(usize, 0), w.indent);
+        const guard = try std.fmt.allocPrint(std.testing.allocator, "if (probe{s}_ptr == null)", .{suffix});
+        defer std.testing.allocator.free(guard);
+        try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, guard));
+    }
+    function.hash_compatibility.clearRetainingCapacity();
+    out.clearRetainingCapacity();
+    try writeClassMethodBind(&w, &function, "");
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "inline for") == null);
+    try std.testing.expectEqualStrings(
+        "if (probe_ptr == null) {\n    probe_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"Object\")), @ptrCast(&StringName.fromComptimeLatin1(\"probe\")), 123);\n}\n",
+        out.written(),
+    );
 }
 
 /// Writes a thin vararg wrapper that does comptime check and delegates to the Alloc version.
@@ -745,16 +844,7 @@ fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: 
             try w.writeLine("}");
         }
 
-        try w.printLine("if ({0s}Alloc_ptr == null) {{", .{function.name});
-        w.indent += 1;
-        try w.printLine("{0s}Alloc_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"{1s}\")), @ptrCast(&StringName.fromComptimeLatin1(\"{2s}\")), {3d});", .{
-            function.name,
-            function.base.?,
-            function.name_api,
-            function.hash.?,
-        });
-        w.indent -= 1;
-        try w.writeLine("}");
+        try writeClassMethodBind(w, function, "Alloc");
 
         try w.print("raw.objectMethodBindCall({0s}Alloc_ptr, ", .{function.name});
         try writeClassFunctionObjectPtr(w, cls, function, ctx);

@@ -187,6 +187,9 @@ pub const TestOptions = struct {
     optimize: std.builtin.OptimizeMode,
     /// Initialization level for the test extension.
     initialization_level: InitializationLevel = .scene,
+    /// Run after engine startup, when default GUI themes are ready. Class
+    /// registration tests should retain synchronous initialization startup.
+    defer_startup: bool = false,
 };
 
 /// Add a Godot integration test to the build.
@@ -204,6 +207,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     const entry_options = b.addOptions();
     entry_options.addOption([]const u8, "entry_symbol", "gdextension_entry");
     entry_options.addOption(InitializationLevel, "minimum_initialization_level", options.initialization_level);
+    entry_options.addOption(bool, "defer_startup", options.defer_startup);
 
     const mod = b.createModule(.{
         .root_source_file = options.root_module.root_source_file,
@@ -362,7 +366,7 @@ fn generateGdextension(b: *Build, lib_name: []const u8) []const u8 {
     return b.fmt(
         \\[configuration]
         \\entry_symbol = "gdextension_entry"
-        \\compatibility_minimum = "4.7"
+        \\compatibility_minimum = "4.6"
         \\
         \\[libraries]
         \\linux.debug.x86_64 = "res://{0s}"

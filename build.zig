@@ -101,6 +101,11 @@ pub fn build(b: *Build) !void {
         .precision = precision,
         .architecture = architecture,
     });
+    const tests_bindgen = b.addTest(.{ .root_module = bindgen_exe.root_module });
+    const run_tests_bindgen = b.addRunArtifact(tests_bindgen);
+    test_step.dependOn(&run_tests_bindgen.step);
+    b.step("test-bindgen", "Run bindgen unit tests").dependOn(&run_tests_bindgen.step);
+
     const bindings = bindgen.run(b, bindgen_exe, .{
         .headers = headers,
         .precision = precision,
@@ -172,11 +177,13 @@ pub fn build(b: *Build) !void {
 
             const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
                 .name = b.dupe(entry.name),
+                .defer_startup = std.mem.eql(u8, entry.name, "compat"),
                 .root_module = test_mod,
                 .target = target,
                 .optimize = optimize,
             });
             test_step.dependOn(&run_test.step);
+            b.step(b.fmt("test-{s}", .{entry.name}), b.fmt("Run {s} integration tests", .{entry.name})).dependOn(&run_test.step);
         }
     }
 

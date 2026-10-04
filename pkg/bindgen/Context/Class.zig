@@ -96,6 +96,11 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         // Skip 'destroy' on RefCounted classes - provided by mixin instead
         if (self.is_refcounted and std.mem.eql(u8, method.name, "destroy")) continue;
 
+        // Runtime ABI shims are supplied by mixins, including inherited copies.
+        if (std.mem.eql(u8, api.name, "Object") and std.mem.eql(u8, method.name, "is_class")) continue;
+        if (std.mem.eql(u8, api.name, "RichTextLabel") and
+            (std.mem.eql(u8, method.name, "add_image") or std.mem.eql(u8, method.name, "update_image"))) continue;
+
         var function = try Function.fromClass(allocator, self.name_api, self.has_singleton, method, ctx);
 
         // Rename signal methods - mixin provides idiomatic wrappers
