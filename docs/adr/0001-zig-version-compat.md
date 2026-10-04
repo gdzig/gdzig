@@ -1,6 +1,6 @@
 # Zig version compatibility: shape-check gates in disposable compat modules
 
-gdzig pins one stable Zig release (the latest stable release, via `build.zig.zon` / `mise.toml`) and tracks zig master as a best-effort tripwire — a continue-on-error or nightly/dispatch CI leg that never blocks PRs — so version upgrades are incremental instead of big-bang (#245). Compat code is written to be deleted: the support window is the latest stable release plus (best-effort) master, and nothing else.
+gdzig pins one stable Zig release (the latest stable release, via `build.zig.zon` / `mise.toml`) and tracks zig master as a best-effort tripwire — a continue-on-error or nightly/dispatch CI leg that never blocks PRs — so version upgrades are incremental instead of big-bang. Compat code is written to be deleted: the support window is the latest stable release plus (best-effort) master, and nothing else.
 
 Where an API differs between toolchains, gate on comptime API *shape* (`@hasDecl` / `@hasField` / return-type probes), not on `builtin.zig_version`. Shape checks keep working when master drifts again (e.g. a future release renames the same API), and they document intent: the code asks "does this API exist in this form?" rather than "which compiler is this?". A version gate is reserved for changes with no API shape to probe — language-rule changes such as the empty-exhaustive-enum rule.
 
@@ -14,3 +14,7 @@ Considered and rejected:
 - **Long-term support for multiple stable Zig versions**: rejected unless multiple stable releases become common in the wild. The compat modules exist to make *upgrades* cheap, not to accumulate permanent backwards compatibility.
 - **Required green zig-master CI leg**: rejected; master can drift at any time, so a blocking leg turns upstream churn into a fire alarm that stalls unrelated PRs. The tripwire keeps the early warning, and the release-time sweep remains the moment where master compat is actually restored.
 - **Per-site `TODO(zig)` markers**: replaced by the helper-module design; a deleted helper fails the build at every call site, which is a stronger signal than a greppable comment.
+
+References:
+
+- [gdzig#245](https://github.com/gdzig/gdzig/issues/245) — progressive zig master support, the work that established this policy.
