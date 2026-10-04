@@ -1,6 +1,6 @@
 # Zig version compatibility: shape-check gates in disposable compat modules
 
-gdzig pins one stable Zig release (0.17.0, via `build.zig.zon` / `mise.toml`) but keeps the build green on zig master so version upgrades are incremental instead of big-bang (#245). Compat code is written to be deleted: the support window is the latest stable release plus master, and nothing else.
+gdzig pins one stable Zig release (the latest stable release, via `build.zig.zon` / `mise.toml`) but keeps the build green on zig master so version upgrades are incremental instead of big-bang (#245). Compat code is written to be deleted: the support window is the latest stable release plus master, and nothing else.
 
 Where an API differs between toolchains, gate on comptime API *shape* (`@hasDecl` / `@hasField` / return-type probes), not on `builtin.zig_version`. Shape checks keep working when master drifts again (e.g. a future 0.18 renames the same API), and they document intent: the code asks "does this API exist in this form?" rather than "which compiler is this?". A version gate (`compat.zig_016`) is reserved for changes with no API shape to probe — language-rule changes such as the empty-exhaustive-enum rule.
 
