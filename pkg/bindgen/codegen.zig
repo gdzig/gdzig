@@ -2232,8 +2232,9 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
 
 const std = @import("std");
 
-const CodeWriter = @import("CodeWriter.zig");
-const Context = @import("Context.zig");
 const casez = @import("casez");
 const common = @import("common");
+
+const CodeWriter = @import("CodeWriter.zig");
+const Context = @import("Context.zig");
 const util = @import("util.zig");

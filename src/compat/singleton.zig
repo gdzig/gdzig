@@ -36,4 +36,5 @@ test "singleton descendants use the nearest storage owner" {
 }
 
 const std = @import("std");
+
 const oopz = @import("oopz");
