@@ -4,7 +4,6 @@ pre-commit = "latest"
 zlint = "latest"
 usage = "latest"
 zig = "0.17.0"
-# No zls release targets zig 0.17 yet; 0.16.0 is the newest available.
 zls = "0.16.0"
 
 [tool_alias]

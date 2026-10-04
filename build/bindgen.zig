@@ -56,9 +56,6 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
         .name = "gdzig-bindgen",
         .root_module = mod,
     });
-    // The gdextension module's root and its c_builtins/helpers imports are
-    // produced by the nested translate-c build.
-    exe.step.dependOn(gdextension.toolchainStep(b));
     return exe;
 }
 

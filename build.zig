@@ -1,6 +1,4 @@
 comptime {
-    // The root package's minimum_zig_version is not enforced by the toolchain,
-    // so reject old versions explicitly with a readable message.
     if (builtin.zig_version.major == 0 and builtin.zig_version.minor < 17)
         @compileError("gdzig requires Zig 0.17.0 or later");
 }
@@ -148,9 +146,6 @@ pub fn build(b: *Build) !void {
         .linkage = .static,
         .use_llvm = true,
     });
-    // The gdextension module's root and its c_builtins/helpers imports are
-    // produced by the nested translate-c build.
-    gdzig_lib.step.dependOn(gdextension.toolchainStep(b));
 
     //
     // Tests
