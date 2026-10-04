@@ -45,9 +45,3 @@ pub inline fn enumFields(comptime T: type) []const EnumField {
         break :blk &final;
     };
 }
-
-/// Function parameter types of the function type `T` (`null` for `anytype`
-/// or generic parameters).
-pub inline fn fnParamTypes(comptime T: type) []const ?type {
-    return @typeInfo(T).@"fn".param_types;
-}

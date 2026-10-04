@@ -9,28 +9,6 @@
 
 const std = @import("std");
 const Build = std.Build;
-const Io = std.Io;
-
-/// Find a program by name candidates on PATH. Returns null when not found.
-pub fn findProgram(b: *Build, names: []const []const u8) ?[]const u8 {
-    return b.findProgram(.{ .names = names });
-}
-
-/// Directory handle for the package build root, for configure-phase
-/// directory access.
-pub fn buildRootDir(b: *Build) Io.Dir {
-    return b.root.root_dir.handle;
-}
-
-/// Whether verbose build output was requested.
-pub fn verbose(b: *Build) bool {
-    return b.graph.verbose;
-}
-
-/// Adds a directory path build option.
-pub fn addOptionPathDirectory(options: *Build.Step.Options, name: []const u8, path: Build.LazyPath) void {
-    options.addOptionPathDirectory(name, path);
-}
 
 /// Resolves a `LazyPath` to a filesystem path string during the configure
 /// phase. Only source paths and dependency paths are supported — generated

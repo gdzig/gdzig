@@ -1,5 +1,4 @@
 const std = @import("std");
-const compat = @import("../compat.zig");
 const DeclEnum = std.meta.DeclEnum;
 
 const casez = @import("casez");
@@ -59,7 +58,7 @@ pub fn MethodConfig(comptime Class: type) type {
         /// The name is what Godot sees (snake_case), decl_name is the Zig decl.
         pub fn fromName(comptime name: [:0]const u8, comptime decl_name: [:0]const u8, comptime options: Registry.Method(Class).CreateOptions) Self {
             const MethodType = @TypeOf(@field(Class, decl_name));
-            const Args = compat.fnParamTypes(MethodType);
+            const Args = @typeInfo(MethodType).@"fn".param_types;
             const ReturnType = @typeInfo(MethodType).@"fn".return_type orelse void;
             const arg_count = Args.len - 1;
 

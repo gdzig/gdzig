@@ -77,7 +77,7 @@ pub fn ClassUserdataOf(comptime T: type) type {
     if (!@hasDecl(T, "create")) {
         @compileError("Type '" ++ @typeName(T) ++ "' must have a 'create' function");
     }
-    const params = compat.fnParamTypes(@TypeOf(T.create));
+    const params = @typeInfo(@TypeOf(T.create)).@"fn".param_types;
     return switch (params.len) {
         0 => void,
         1 => params[0].?,
@@ -464,7 +464,7 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
         if (field_type_info != .@"fn") continue;
 
         // Must have at least one parameter (self) to be a virtual method
-        if (compat.fnParamTypes(@TypeOf(field)).len == 0) continue;
+        if (@typeInfo(@TypeOf(field)).@"fn".param_types.len == 0) continue;
 
         // Must not be a callback
         const is_callback = for (callbacks) |cb| {
@@ -516,7 +516,6 @@ fn UserClassVTable(comptime T: type) type {
 }
 
 const std = @import("std");
-const compat = @import("../compat.zig");
 const Allocator = std.mem.Allocator;
 const MemoryPool = std.heap.MemoryPool;
 const assert = std.debug.assert;

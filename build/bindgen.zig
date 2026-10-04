@@ -36,7 +36,7 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
     const build_options = b.addOptions();
     build_options.addOption([]const u8, "architecture", options.architecture);
     build_options.addOption([]const u8, "precision", options.precision);
-    compat.addOptionPathDirectory(build_options, "headers", options.headers);
+    build_options.addOptionPathDirectory("headers", options.headers);
 
     const mod = b.createModule(.{
         .target = target,
@@ -80,7 +80,7 @@ pub fn run(b: *Build, exe: *Build.Step.Compile, options: RunOptions) Build.LazyP
     const bindings_output = cmd.addOutputDirectoryArg("bindings");
     cmd.addArg(options.precision);
     cmd.addArg(options.architecture);
-    cmd.addArg(if (compat.verbose(b)) "verbose" else "quiet");
+    cmd.addArg(if (b.graph.verbose) "verbose" else "quiet");
 
     return bindings_output;
 }
@@ -90,5 +90,4 @@ const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
 
 const common = @import("common.zig");
-const compat = @import("compat.zig");
 const gdextension = @import("gdextension.zig");
