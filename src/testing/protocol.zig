@@ -11,8 +11,8 @@
 //!
 //! Responses (extension -> coordinator via stdout):
 //! - {"__gdzig__":"test_ipc","type":"metadata","tests":["test_one","test_two"]}
-//! - {"__gdzig__":"test_ipc","type":"result","index":5,"passed":true}
-//! - {"__gdzig__":"test_ipc","type":"result","index":5,"passed":false,"message":"error details"}
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"outcome":"pass"}
+//! - {"__gdzig__":"test_ipc","type":"result","index":5,"outcome":"fail","message":"error details"}
 
 const std = @import("std");
 
@@ -57,9 +57,11 @@ pub const Response = union(enum) {
 
 pub const TestResult = struct {
     index: u32,
-    passed: bool,
+    outcome: TestOutcome,
     message: ?[]const u8 = null,
 };
+
+pub const TestOutcome = enum { pass, fail, skip };
 
 /// Check if a line is a gdzig IPC message.
 pub fn isIpcMessage(line: []const u8) bool {
@@ -131,8 +133,9 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
         const index_val = root.get("index") orelse return null;
         if (index_val != .integer) return null;
 
-        const passed_val = root.get("passed") orelse return null;
-        if (passed_val != .bool) return null;
+        const outcome_val = root.get("outcome") orelse return null;
+        if (outcome_val != .string) return null;
+        const outcome = std.meta.stringToEnum(TestOutcome, outcome_val.string) orelse return null;
 
         var message: ?[]const u8 = null;
         if (root.get("message")) |msg_val| {
@@ -143,7 +146,7 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
 
         return .{ .result = .{
             .index = @intCast(index_val.integer),
-            .passed = passed_val.bool,
+            .outcome = outcome,
             .message = message,
         } };
     }
@@ -199,22 +202,56 @@ pub fn writeMetadataResponse(writer: anytype, tests: []const []const u8) !void {
 }
 
 /// Write a test result response as JSON to a writer.
-pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, message: ?[]const u8) !void {
+pub fn writeResultResponse(writer: anytype, result: TestResult) !void {
     try writer.writeAll("{\"__gdzig__\":\"");
     try writer.writeAll(MARKER);
     try writer.writeAll("\",\"type\":\"result\",\"index\":");
     var num_buf: [16]u8 = undefined;
-    const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{index}) catch unreachable;
+    const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{result.index}) catch unreachable;
     try writer.writeAll(num_str);
-    try writer.writeAll(",\"passed\":");
-    try writer.writeAll(if (passed) "true" else "false");
+    try writer.writeAll(",\"outcome\":");
+    try writeJsonString(writer, @tagName(result.outcome));
 
-    if (message) |msg| {
+    if (result.message) |msg| {
         try writer.writeAll(",\"message\":");
         try writeJsonString(writer, msg);
     }
 
     try writer.writeAll("}\n");
+}
+
+test "result responses preserve pass fail and skip" {
+    const results = [_]TestResult{
+        .{ .index = 0, .outcome = .pass },
+        .{ .index = 1, .outcome = .fail, .message = "real failure" },
+        .{ .index = 2, .outcome = .skip },
+    };
+    for (results) |expected| {
+        var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer out.deinit();
+        try writeResultResponse(&out.writer, expected);
+        var parsed = (try parseResponse(std.testing.allocator, out.written())).?;
+        defer freeResponse(std.testing.allocator, &parsed);
+        try std.testing.expectEqualDeep(expected, parsed.result);
+    }
+}
+
+test "wire outcomes are single enum tags" {
+    for ([_]TestOutcome{ .pass, .fail, .skip }) |expected| {
+        const line = try std.fmt.allocPrint(std.testing.allocator, "{{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0,\"outcome\":\"{s}\"}}", .{@tagName(expected)});
+        defer std.testing.allocator.free(line);
+        var parsed = (try parseResponse(std.testing.allocator, line)).?;
+        defer freeResponse(std.testing.allocator, &parsed);
+        try std.testing.expectEqual(expected, parsed.result.outcome);
+    }
+}
+
+test "missing unknown or wrong-type wire outcomes are rejected" {
+    for ([_][]const u8{ "", ",\"outcome\":\"unknown\"", ",\"outcome\":false", ",\"passed\":true,\"skipped\":true" }) |fields| {
+        const line = try std.fmt.allocPrint(std.testing.allocator, "{{\"__gdzig__\":\"test_ipc\",\"type\":\"result\",\"index\":0{s}}}", .{fields});
+        defer std.testing.allocator.free(line);
+        try std.testing.expect((try parseResponse(std.testing.allocator, line)) == null);
+    }
 }
 
 test "parse query_metadata command" {

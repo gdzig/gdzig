@@ -101,6 +101,30 @@ pub fn build(b: *Build) !void {
         .precision = precision,
         .architecture = architecture,
     });
+    const tests_bindgen = b.addTest(.{ .root_module = bindgen_exe.root_module });
+    const run_tests_bindgen = b.addRunArtifact(tests_bindgen);
+    test_step.dependOn(&run_tests_bindgen.step);
+    b.step("test-bindgen", "Run bindgen unit tests").dependOn(&run_tests_bindgen.step);
+
+    const tests_protocol = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/testing/protocol.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    }) });
+    const run_tests_protocol = b.addRunArtifact(tests_protocol);
+    test_step.dependOn(&run_tests_protocol.step);
+    b.step("test-protocol", "Run integration-test IPC unit tests").dependOn(&run_tests_protocol.step);
+
+    const tests_singleton = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/compat/singleton.zig"),
+        .imports = &.{.{ .name = "oopz", .module = oopz.module("oopz") }},
+        .target = b.graph.host,
+        .optimize = optimize,
+    }) });
+    const run_tests_singleton = b.addRunArtifact(tests_singleton);
+    test_step.dependOn(&run_tests_singleton.step);
+    b.step("test-singleton", "Run singleton-owner lookup tests").dependOn(&run_tests_singleton.step);
+
     const bindings = bindgen.run(b, bindgen_exe, .{
         .headers = headers,
         .precision = precision,
@@ -172,11 +196,13 @@ pub fn build(b: *Build) !void {
 
             const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
                 .name = b.dupe(entry.name),
+                .startup = if (std.mem.eql(u8, entry.name, "compat")) .deferred else .initialization,
                 .root_module = test_mod,
                 .target = target,
                 .optimize = optimize,
             });
             test_step.dependOn(&run_test.step);
+            b.step(b.fmt("test-{s}", .{entry.name}), b.fmt("Run {s} integration tests", .{entry.name})).dependOn(&run_test.step);
         }
     }
 

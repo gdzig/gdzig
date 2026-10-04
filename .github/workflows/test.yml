@@ -17,9 +17,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        godot: ["4.7.2"]
+        godot: ["4.6.3", "4.7.2"]
         zig: ["0.17.0", master]
         target: [native, wasm]
+        exclude:
+          # wasm is build-only, so one runtime version is sufficient.
+          - godot: "4.6.3"
+            target: wasm
 
     steps:
       - name: Checkout
@@ -57,10 +61,22 @@ jobs:
       matrix:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
-        godot: ["4.7.2"]
+        godot: ["4.6.3", "4.7.2"]
         zig: ["0.17.0", master]
         target: [native, wasm]
+        exclude:
+          # wasm is build-only, so one runtime version is sufficient.
+          - godot: "4.6.3"
+            target: wasm
         include:
+          - os: macos-latest
+            godot: "4.6.3"
+            zig: "0.17.0"
+            target: native
+          - os: macos-latest
+            godot: "4.6.3"
+            zig: master
+            target: native
           - os: macos-latest
             godot: "4.7.2"
             zig: "0.17.0"

@@ -39,6 +39,8 @@ signals: StringArrayHashMap(Signal) = .empty,
 
 /// Imports required by this class
 imports: Imports = .empty,
+/// Owned declaration names from this class and its flattened parent mixins.
+mixin_names: StringArrayHashMap(void) = .empty,
 
 pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !Class {
     var self: Class = .{};
@@ -112,6 +114,7 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
 
     // Inherited methods
     if (self.getBasePtr(ctx)) |base| {
+        try self.recordMixinNames(allocator, base.mixin_names.keys());
         // Copy the parent class functions
         for (base.functions.values()) |*function| {
             var inherited: Function = function.*;
@@ -156,7 +159,39 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !
         try self.signals.put(allocator, signal.name, try Signal.fromClass(allocator, api.name, signal, ctx));
     }
 
+    try self.loadMixinIfExists(allocator, ctx.config.io, ctx.config.input);
     return self;
+}
+
+pub fn loadMixinIfExists(self: *Class, allocator: Allocator, io: std.Io, input: std.Io.Dir) !void {
+    const path = try std.fmt.allocPrint(allocator, "class/{s}.mixin.zig", .{self.name});
+    defer allocator.free(path);
+    var mixin: Mixin = (try Mixin.load(allocator, io, input, path)) orelse return;
+    defer mixin.deinit(allocator);
+    try self.recordMixinNames(allocator, mixin.names.items);
+    self.applyMixin(&mixin);
+}
+
+/// Class overrides only suppress emission. Keep API signatures, imports,
+/// hashes and inherited skip state intact for descendants and other consumers.
+pub fn applyMixin(self: *Class, mixin: *const Mixin) void {
+    for (mixin.declarations.items) |declaration| {
+        for (self.functions.values()) |*function| {
+            if (std.mem.eql(u8, function.name, declaration.name)) {
+                function.skip = true;
+                function.mixin_override = true;
+            }
+        }
+    }
+}
+
+fn recordMixinNames(self: *Class, allocator: Allocator, names: []const []const u8) !void {
+    for (names) |name| {
+        if (self.mixin_names.contains(name)) continue;
+        const owned = try allocator.dupe(u8, name);
+        errdefer allocator.free(owned);
+        try self.mixin_names.put(allocator, owned, {});
+    }
 }
 
 fn getAllSignalsIncludingInherits(allocator: Allocator, api: GodotApi.Class, ctx: *const Context) !ArrayList(GodotApi.Class.Signal) {
@@ -213,6 +248,8 @@ pub fn deinit(self: *Class, allocator: Allocator) void {
     self.signals.deinit(allocator);
 
     self.imports.deinit(allocator);
+    for (self.mixin_names.keys()) |name| allocator.free(name);
+    self.mixin_names.deinit(allocator);
 
     self.* = .{};
 }
@@ -265,4 +302,5 @@ const Imports = Context.Imports;
 const Property = Context.Property;
 const Signal = Context.Signal;
 const GodotApi = @import("../GodotApi.zig");
+const Mixin = @import("../Mixin.zig");
 const docs = @import("docs.zig");

@@ -9,6 +9,44 @@ pub fn destroy(self: *Self) void {
     raw.objectDestroy(self.ptr());
 }
 
+/// Returns whether this object inherits the named engine class.
+/// Singleton classes accept only the class name, matching their other methods.
+pub const isClass = if (object_is_class_singleton.owner(Self) != null) isClassForSingleton else isClassWithRuntimeAbi;
+
+fn isClassForSingleton(p_class: StringName) bool {
+    const Singleton = comptime object_is_class_singleton.owner(Self).?;
+    if (comptime Singleton == Self) {
+        // Use the API's exact name, not a lossy conversion from the Zig type
+        // name (for example, Os must resolve the engine singleton named OS).
+        if (Singleton.instance == null) {
+            Singleton.instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);
+        }
+        return isClassWithRuntimeAbi(@ptrCast(Singleton.instance.?), p_class);
+    } else {
+        // The owning class initializes its storage with its own exact API name.
+        return Singleton.isClass(p_class);
+    }
+}
+
+// Shared ABI adapter for the instance and singleton isClass entry points.
+// The public API accepts StringName on both runtimes, but 4.6 ptrcall requires
+// a temporary String. Selecting a compatibility hash does not perform conversion.
+fn isClassWithRuntimeAbi(self: *const Self, p_class: StringName) bool {
+    if (gdzig.version.gte(.@"4.7")) {
+        return if (comptime object_is_class_singleton.owner(Self) != null) isClassRaw(p_class) else self.isClassRaw(p_class);
+    }
+    if (isClass_legacy_ptr == null) {
+        isClass_legacy_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("Object")), @ptrCast(&StringName.fromComptimeLatin1("is_class")), object_is_class_compat.godot_4_6.object_is_class);
+    }
+    var result: bool = false;
+    var legacy_name: gdzig.builtin.String = .fromStringName(p_class);
+    defer legacy_name.deinit();
+    const args = [_]c.GDExtensionConstTypePtr{@ptrCast(&legacy_name)};
+    raw.objectMethodBindPtrcall(isClass_legacy_ptr, @ptrCast(@constCast(self)), @ptrCast(&args), @ptrCast(&result));
+    return result;
+}
+var isClass_legacy_ptr: c.GDExtensionMethodBindPtr = null;
+
 /// Upcasts a child type to this type.
 pub fn upcast(value: anytype) *Self {
     return class.upcast(*Self, value);
@@ -170,6 +208,9 @@ const class = gdzig.class;
 
 const DestroyInstanceBinding = gdzig.extension.DestroyInstanceBinding;
 const meta = @import("../meta.zig");
+
+const object_is_class_compat = @import("../compat/method_hashes.zig");
+const object_is_class_singleton = @import("../compat/singleton.zig");
 
 // @mixin stop
 

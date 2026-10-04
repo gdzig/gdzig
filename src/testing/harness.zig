@@ -33,7 +33,7 @@ fn entrypoint(
     gdzig.raw.getGodotVersion(@ptrCast(&gdzig.version));
 
     r_initialization.* = .{
-        .minimum_initialization_level = @intFromEnum(options.minimum_initialization_level),
+        .minimum_initialization_level = @backingInt(options.minimum_initialization_level),
         .initialize = &enter,
         .deinitialize = &exit,
         .userdata = null,
@@ -43,8 +43,28 @@ fn entrypoint(
 }
 
 fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(.c) void {
-    if (level != @intFromEnum(options.minimum_initialization_level)) return;
+    if (level != @backingInt(options.minimum_initialization_level)) return;
 
+    // Class-registration tests must stay in initialization. GUI tests opt in
+    // through TestOptions.startup because default themes initialize later.
+    if (options.startup == .initialization) {
+        run();
+        quit();
+        return;
+    }
+    // Do not block scene initialization in the IPC server before ThemeDB is ready.
+    // A deferred custom Callable schedules the same metadata/run/exit loop on
+    // Godot's main thread after startup. Registration suites retain the path above.
+    var callable: gdzig.builtin.Callable = undefined;
+    var info = std.mem.zeroes(gdzig.c.GDExtensionCallableCustomInfo2);
+    info.token = gdzig.raw.library;
+    info.call_func = &runDeferred;
+    gdzig.raw.callableCustomCreate2.?(@ptrCast(&callable), &info);
+    defer callable.deinit();
+    callable.callDeferred(.{});
+}
+
+fn runDeferred(_: ?*anyopaque, _: [*c]const gdzig.c.GDExtensionConstVariantPtr, _: gdzig.c.GDExtensionInt, _: gdzig.c.GDExtensionVariantPtr, _: [*c]gdzig.c.GDExtensionCallError) callconv(.c) void {
     run();
     quit();
 }
@@ -129,7 +149,11 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fns = builtin.test_functions;
 
     if (index >= test_fns.len) {
-        try protocol.writeResultResponse(writer, index, false, "Test index out of bounds");
+        try protocol.writeResultResponse(writer, .{
+            .index = index,
+            .outcome = .fail,
+            .message = "Test index out of bounds",
+        });
         try writer.flush();
         return;
     }
@@ -137,23 +161,30 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fn = test_fns[index];
     const result = runSingleTest(test_fn);
 
-    try protocol.writeResultResponse(writer, index, result.passed, result.message);
+    try protocol.writeResultResponse(writer, .{
+        .index = index,
+        .outcome = result.outcome,
+        .message = result.message,
+    });
     try writer.flush();
 }
 
 const SingleTestResult = struct {
-    passed: bool,
+    outcome: protocol.TestOutcome,
     message: ?[]const u8,
 };
 
 fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
     if (test_fn.func()) |_| {
-        return .{ .passed = true, .message = null };
+        return .{ .outcome = .pass, .message = null };
     } else |err| {
+        // Version-gated tests use Zig's skip error for unavailable engine features.
+        // Preserve it through IPC without logging a failure or counting a pass.
+        if (err == error.SkipZigTest) return .{ .outcome = .skip, .message = null };
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);
         }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
-        return .{ .passed = false, .message = null };
+        return .{ .outcome = .fail, .message = null };
     }
 }

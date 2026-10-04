@@ -131,62 +131,28 @@ pub fn fromApi(allocator: Allocator, api: GodotApi.Builtin, ctx: *const Context)
 }
 
 pub fn loadMixinIfExists(self: *Builtin, allocator: Allocator, io: Io, input_dir: Dir) !void {
-    const mixin_file_path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name});
-    defer allocator.free(mixin_file_path);
+    const path = try std.fmt.allocPrint(allocator, "builtin/{s}.mixin.zig", .{self.name});
+    defer allocator.free(path);
+    var mixin: Mixin = (try Mixin.load(allocator, io, input_dir, path)) orelse return;
+    defer mixin.deinit(allocator);
+    try self.applyMixin(allocator, &mixin);
+}
 
-    const file = input_dir.openFile(io, mixin_file_path, .{}) catch |err| {
-        if (err == error.FileNotFound) return;
-        std.log.err("Failed to open mixin file '{s}': {}", .{ mixin_file_path, err });
-        return err;
-    };
-
-    var buf: [4096]u8 = undefined;
-    var file_reader = file.readerStreaming(io, &buf);
-
-    const contents = try allocator.allocSentinel(u8, @intCast(try file.length(io)), 0);
-    try file_reader.interface.readSliceAll(contents);
-
-    // find the @mixin start/stop markers and only parse that section
-    const parse_contents: [:0]const u8 = blk: {
-        const slice = util.mixinContents(contents);
-        const start_idx = @intFromPtr(slice.ptr) - @intFromPtr(contents.ptr);
-        const stop_idx = start_idx + slice.len;
-        contents[stop_idx] = 0;
-        break :blk contents[start_idx..stop_idx :0];
-    };
-
-    var ast = if (comptime @hasDecl(Ast, "ParseOptions"))
-        try Ast.parse(allocator, parse_contents, .{})
-    else
-        try Ast.parse(allocator, parse_contents, .zig);
-    defer ast.deinit(allocator);
-
-    if (ast.errors.len > 0) {
-        std.log.err("Failed to parse {s} mixin.", .{self.name});
-        return error.ParseError;
-    }
-
-    const root_decls = ast.rootDecls();
-    for (root_decls) |index| {
-        const node = ast.nodes.get(@intFromEnum(index));
-
-        switch (node.tag) {
-            .fn_decl => if (try Function.fromMixin(allocator, ast, index)) |result| {
+/// Builtins retain their constructor/method/constant conversion policy.
+pub fn applyMixin(self: *Builtin, allocator: Allocator, mixin: *const Mixin) !void {
+    for (mixin.declarations.items) |declaration| {
+        switch (declaration.kind) {
+            .function => if (try Function.fromMixin(allocator, mixin.ast, declaration.node)) |result| {
                 const fn_type, const function = result;
                 switch (fn_type) {
                     .constructor => try self.constructors.put(allocator, function.name, function),
                     .method => try self.methods.put(allocator, function.name, function),
                 }
             },
-            .simple_var_decl, .aligned_var_decl, .global_var_decl => if (try Constant.fromMixin(allocator, ast, index)) |constant| {
+            .constant => if (try Constant.fromMixin(allocator, mixin.ast, declaration.node)) |constant| {
                 try self.constants.put(allocator, constant.name_api, constant);
-
-                // If a constructor has the same name, mark it to be skipped during codegen
-                if (self.constructors.getPtr(constant.name)) |constructor| {
-                    constructor.skip = true;
-                }
+                if (self.constructors.getPtr(constant.name)) |constructor| constructor.skip = true;
             },
-            else => {},
         }
     }
 }
@@ -243,9 +209,6 @@ const Io = std.Io;
 const Dir = Io.Dir;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
-const Ast = std.zig.Ast;
-const Node = Ast.Node;
-
 const casez = @import("casez");
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
@@ -257,5 +220,5 @@ const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
 const GodotApi = @import("../GodotApi.zig");
-const util = @import("../util.zig");
+const Mixin = @import("../Mixin.zig");
 const docs = @import("docs.zig");

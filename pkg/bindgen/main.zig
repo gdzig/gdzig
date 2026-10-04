@@ -77,4 +77,5 @@ pub fn main(init: std.process.Init) !void {
 test {
     std.testing.log_level = .err;
     std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(@import("Mixin.zig"));
 }
