@@ -38,7 +38,7 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
                     const FnType = @TypeOf(method);
                     const fn_info = @typeInfo(FnType).@"fn";
                     const ReturnType = fn_info.return_type orelse void;
-                    const param_types = compat.fnParamTypes(FnType);
+                    const param_types = @typeInfo(FnType).@"fn".param_types;
 
                     const param_count = param_types.len;
                     if (param_count == 1) {
@@ -355,7 +355,6 @@ test "VTable ptrcall marshals virtual returns at engine width" {
 }
 
 const std = @import("std");
-const compat = @import("../compat.zig");
 
 const c = @import("gdextension");
 const casez = @import("casez");

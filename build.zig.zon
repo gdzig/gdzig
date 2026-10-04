@@ -2,7 +2,7 @@
     .name = .godot,
     .version = "0.0.0-dev",
     .fingerprint = 0x74a61aa48e9841ab,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
 
     .dependencies = .{
         .bbcodez = .{
@@ -25,6 +25,10 @@
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#2a9fac7d3ffe134608ed56d3b49211f546c0b729",
             .hash = "oopz-0.0.0-pFJy_QxZAABRjZk6dXmOZYLL8qIS-6guAChEFOP9BqTf",
+        },
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c#02ff0c523fb92a38939b04d0145c4a9602a74d56",
+            .hash = "translate_c-2.0.0-Q_BUWltOBwBYABF84EUL208pIFeUIwbBs29FmVBaafN5",
         },
     },
 

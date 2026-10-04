@@ -25,7 +25,7 @@
           default = pkgs.mkShell {
             buildInputs = [
               pkgs.lldb
-              zig.packages.${system}."0.16.0"
+              zig.packages.${system}."0.17.0"
               zls.packages.${system}.zls
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [

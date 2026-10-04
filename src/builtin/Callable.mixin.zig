@@ -1,7 +1,7 @@
 pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callable {
     // find the method on `p_instance` by pointer
     const T = comptime std.meta.Child(@TypeOf(p_instance));
-    const decls = comptime compat.declNames(T);
+    const decls = comptime std.meta.declarations(T);
 
     comptime var method_name: ?[:0]const u8 = null;
 
@@ -36,7 +36,6 @@ pub fn fromClosure(p_instance: anytype, comptime p_function_ptr: anytype) Callab
 const casez = @import("casez");
 const common = @import("common");
 const godot_case = common.godot_case;
-const compat = @import("../compat.zig");
 
 // @mixin stop
 

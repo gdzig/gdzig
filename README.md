@@ -9,16 +9,14 @@ expected until a stable version is released. Issue reports, feature requests, an
 
 ## Prerequisites
 
-1. Zig 0.16.0
+1. Zig 0.17.0
 2. Godot 4.7.2
 
 **Note:** gdzig currently targets these exact Zig and Godot releases.
 
 ### WebAssembly
 
-WebAssembly is supported on Zig 0.16.0 through a built-in workaround for [ziglang/zig#31849](https://codeberg.org/ziglang/zig/issues/31849), a standard library bug in that release. The workaround applies only to wasm32-emscripten builds on Zig 0.16.x and turns itself off on Zig releases with the upstream fix ([ziglang/zig#31850](https://codeberg.org/ziglang/zig/pulls/31850)).
-
-Build an extension for the web with the `wasm32-emscripten` target:
+WebAssembly is supported on the above Zig release via the `wasm32-emscripten` target:
 
 ```sh
 zig build -Dtarget=wasm32-emscripten
