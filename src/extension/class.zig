@@ -450,7 +450,7 @@ fn virtualMethodNames(comptime T: type) []const []const u8 {
         "_validateProperty",
     };
 
-    const decls = compat.declNames(T);
+    const decls = std.meta.declarations(T);
     var names: [decls.len][]const u8 = undefined;
     var count: usize = 0;
 

@@ -46,11 +46,6 @@ pub inline fn enumFields(comptime T: type) []const EnumField {
     };
 }
 
-/// Declaration names of `T`, public and private.
-pub inline fn declNames(comptime T: type) []const [:0]const u8 {
-    return std.meta.declarations(T);
-}
-
 /// Function parameter types of the function type `T` (`null` for `anytype`
 /// or generic parameters).
 pub inline fn fnParamTypes(comptime T: type) []const ?type {
