@@ -52,6 +52,9 @@ fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv
         quit();
         return;
     }
+    // Do not block scene initialization in the IPC server before ThemeDB is ready.
+    // A deferred custom Callable schedules the same metadata/run/exit loop on
+    // Godot's main thread after startup. Registration suites retain the path above.
     var callable: gdzig.builtin.Callable = undefined;
     var info = std.mem.zeroes(gdzig.c.GDExtensionCallableCustomInfo2);
     info.token = gdzig.raw.library;
@@ -146,7 +149,11 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fns = builtin.test_functions;
 
     if (index >= test_fns.len) {
-        try protocol.writeResultResponse(writer, index, false, false, "Test index out of bounds");
+        try protocol.writeResultResponse(writer, .{
+            .index = index,
+            .passed = false,
+            .message = "Test index out of bounds",
+        });
         try writer.flush();
         return;
     }
@@ -154,7 +161,12 @@ fn handleRunTest(writer: *Writer, index: u32) !void {
     const test_fn = test_fns[index];
     const result = runSingleTest(test_fn);
 
-    try protocol.writeResultResponse(writer, index, result.passed, result.skipped, result.message);
+    try protocol.writeResultResponse(writer, .{
+        .index = index,
+        .passed = result.passed,
+        .skipped = result.skipped,
+        .message = result.message,
+    });
     try writer.flush();
 }
 
@@ -168,6 +180,8 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
     if (test_fn.func()) |_| {
         return .{ .passed = true, .message = null };
     } else |err| {
+        // Version-gated tests use Zig's skip error for unavailable engine features.
+        // Preserve it through IPC without logging a failure or counting a pass.
         if (err == error.SkipZigTest) return .{ .passed = false, .skipped = true, .message = null };
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpErrorReturnTrace(trace);

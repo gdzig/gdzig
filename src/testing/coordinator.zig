@@ -192,6 +192,9 @@ const Runner = struct {
         defer godot_output.deinit(self.allocator);
 
         var failed = true;
+        // A test skipped by the engine harness is neither failed nor passed.
+        // In particular, resource_refcount tests intentionally skip below 4.7.
+        // Missing responses still leave failed=true.
         var skipped = false;
         const response = try self.readResponse(&child, &godot_output);
         if (response) |resp| {

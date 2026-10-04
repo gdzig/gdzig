@@ -1,8 +1,9 @@
 // @mixin start
 
-/// Adds an inline image. Godot 4.6 truncates dimensions to integers and maps
-/// image_unit_em to percent, since it only supports pixel and percent units.
-pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: struct {
+/// Adds an inline image. On Godot 4.6, fractional sizes truncate to integers
+/// and em units behave as percent. Later runtimes preserve fractional sizes
+/// and support em units.
+pub const AddImageOptions = struct {
     width: f64 = 0,
     height: f64 = 0,
     color: gdzig.builtin.Color = .initRGBA(1, 1, 1, 1),
@@ -14,7 +15,12 @@ pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: struct {
     width_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
     height_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
     alt_text: ?gdzig.builtin.String = null,
-}) void {
+};
+
+/// Adds an inline image using the selected size units.
+pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: AddImageOptions) void {
+    // Compatible hashes select binds, but cannot convert f64 dimensions to the
+    // legacy integer ABI or ImageUnit enums to legacy percent booleans.
     var actual_key: Variant = opt.key orelse .nil;
     defer if (opt.key == null) actual_key.deinit();
     var actual_tooltip: gdzig.builtin.String = opt.tooltip orelse .init();
@@ -45,16 +51,16 @@ pub fn addImage(self: *Self, p_image: *gdzig.class.Texture2d, opt: struct {
         @ptrCast(&actual_alt_text),
     };
     if (addImage_ptr == null) {
-        const hash: i64 = if (modern) 1980227702 else rich_text_image_compat.rich_text_label_add_image;
+        const hash: i64 = if (modern) rich_text_image_compat.godot_4_7.rich_text_label_add_image else rich_text_image_compat.godot_4_6.rich_text_label_add_image;
         addImage_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("RichTextLabel")), @ptrCast(&StringName.fromComptimeLatin1("add_image")), hash);
     }
     raw.objectMethodBindPtrcall(addImage_ptr, @ptrCast(self), @ptrCast(&args), null);
 }
 var addImage_ptr: c.GDExtensionMethodBindPtr = null;
 
-/// Updates images matching key, changing only fields selected by mask.
-/// Godot 4.6 truncates dimensions and maps image_unit_em to percent.
-pub fn updateImage(self: *Self, p_key: Variant, p_mask: Self.ImageUpdateMask, p_image: *gdzig.class.Texture2d, opt: struct {
+/// Options for changing fields selected by the image update mask.
+/// On Godot 4.6, fractional sizes truncate to integers and em units behave as percent.
+pub const UpdateImageOptions = struct {
     width: f64 = 0,
     height: f64 = 0,
     color: gdzig.builtin.Color = .initRGBA(1, 1, 1, 1),
@@ -64,7 +70,10 @@ pub fn updateImage(self: *Self, p_key: Variant, p_mask: Self.ImageUpdateMask, p_
     tooltip: ?gdzig.builtin.String = null,
     width_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
     height_unit: Self.ImageUnit = @fromBackingInt(@intCast(0)),
-}) void {
+};
+
+/// Updates images matching key, changing only fields selected by mask.
+pub fn updateImage(self: *Self, p_key: Variant, p_mask: Self.ImageUpdateMask, p_image: *gdzig.class.Texture2d, opt: UpdateImageOptions) void {
     var actual_tooltip: gdzig.builtin.String = opt.tooltip orelse .init();
     defer if (opt.tooltip == null) actual_tooltip.deinit();
     const modern = gdzig.version.gte(.@"4.7");
@@ -83,14 +92,14 @@ pub fn updateImage(self: *Self, p_key: Variant, p_mask: Self.ImageUpdateMask, p_
         @ptrCast(&actual_tooltip),                                     if (modern) @ptrCast(&width_unit) else @ptrCast(&legacy_width_percent), if (modern) @ptrCast(&height_unit) else @ptrCast(&legacy_height_percent),
     };
     if (updateImage_ptr == null) {
-        const hash: i64 = if (modern) 202998225 else rich_text_image_compat.rich_text_label_update_image;
+        const hash: i64 = if (modern) rich_text_image_compat.godot_4_7.rich_text_label_update_image else rich_text_image_compat.godot_4_6.rich_text_label_update_image;
         updateImage_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1("RichTextLabel")), @ptrCast(&StringName.fromComptimeLatin1("update_image")), hash);
     }
     raw.objectMethodBindPtrcall(updateImage_ptr, @ptrCast(self), @ptrCast(&args), null);
 }
 var updateImage_ptr: c.GDExtensionMethodBindPtr = null;
 
-const rich_text_image_compat = @import("../godot_4_6.zig");
+const rich_text_image_compat = @import("../compat/method_hashes.zig");
 
 // @mixin stop
 

@@ -176,8 +176,10 @@ pub const TestOptions = struct {
     optimize: std.builtin.OptimizeMode,
     /// Initialization level for the test extension.
     initialization_level: InitializationLevel = .scene,
-    /// Run after engine startup, when default GUI themes are ready. Class
-    /// registration tests should retain synchronous initialization startup.
+    /// Defer the test IPC server until Godot processes deferred calls after startup.
+    /// Use this for GUI tests: default ThemeDB resources are not ready during the
+    /// scene initialization callback, so creating RichTextLabel there can crash.
+    /// Keep false for class-registration tests, which must run during initialization.
     defer_startup: bool = false,
 };
 

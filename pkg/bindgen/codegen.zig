@@ -534,11 +534,11 @@ fn writeClassIsClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Co
             \\    if (Singleton.instance == null) {{
             \\        Singleton.instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1("{1s}"))).?);
             \\    }}
-            \\    return isClassImpl(@ptrCast(Singleton.instance.?), p_class);
+            \\    return isClassWithRuntimeAbi(@ptrCast(Singleton.instance.?), p_class);
             \\}}
         , .{ singleton.name, singleton.name_api });
     } else {
-        try w.writeLine("pub const isClass = isClassImpl;");
+        try w.writeLine("pub const isClass = isClassWithRuntimeAbi;");
     }
     try w.writeLine("");
 }

@@ -206,18 +206,18 @@ pub fn writeMetadataResponse(writer: anytype, tests: []const []const u8) !void {
 }
 
 /// Write a test result response as JSON to a writer.
-pub fn writeResultResponse(writer: anytype, index: u32, passed: bool, skipped: bool, message: ?[]const u8) !void {
+pub fn writeResultResponse(writer: anytype, result: TestResult) !void {
     try writer.writeAll("{\"__gdzig__\":\"");
     try writer.writeAll(MARKER);
     try writer.writeAll("\",\"type\":\"result\",\"index\":");
     var num_buf: [16]u8 = undefined;
-    const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{index}) catch unreachable;
+    const num_str = std.fmt.bufPrint(&num_buf, "{d}", .{result.index}) catch unreachable;
     try writer.writeAll(num_str);
     try writer.writeAll(",\"passed\":");
-    try writer.writeAll(if (passed) "true" else "false");
-    if (skipped) try writer.writeAll(",\"skipped\":true");
+    try writer.writeAll(if (result.passed) "true" else "false");
+    if (result.skipped) try writer.writeAll(",\"skipped\":true");
 
-    if (message) |msg| {
+    if (result.message) |msg| {
         try writer.writeAll(",\"message\":");
         try writeJsonString(writer, msg);
     }
@@ -234,7 +234,7 @@ test "result responses preserve pass fail and skip" {
     for (results) |expected| {
         var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
         defer out.deinit();
-        try writeResultResponse(&out.writer, expected.index, expected.passed, expected.skipped, expected.message);
+        try writeResultResponse(&out.writer, expected);
         var parsed = (try parseResponse(std.testing.allocator, out.written())).?;
         defer freeResponse(std.testing.allocator, &parsed);
         try std.testing.expectEqualDeep(expected, parsed.result);
