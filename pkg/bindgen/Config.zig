@@ -37,34 +37,25 @@ pub const Arguments = struct {
 pub const usage = "Usage: gdzig-bindgen --gdextension-interface=<header> --extension-api=<json> --input=<mixins> --output=<bindings> --precision=<float|double> --architecture=<32|64> [--verbosity=<quiet|verbose>]\n";
 
 /// Validate named values without opening files. Returned paths borrow from args.
-pub fn fromArgs(args: Args) !Arguments {
-    if (try args.flag("help")) return error.HelpRequested;
-    try args.rejectUnknown(&.{
-        "help",      "gdextension-interface", "extension-api", "input", "output",
-        "precision", "architecture",          "verbosity",
-    });
-    if (args.positionals.items.len != 0) return error.UnexpectedPositional;
-
-    const header = args.required("gdextension-interface") catch return error.MissingGdextensionInterface;
-    const api = args.required("extension-api") catch return error.MissingExtensionApi;
-    const input = args.required("input") catch return error.MissingInput;
-    const output = args.required("output") catch return error.MissingOutput;
-    const precision_text = args.required("precision") catch return error.MissingPrecision;
-    const precision = std.meta.stringToEnum(Precision, precision_text) orelse return error.InvalidPrecision;
-    const arch_text = args.required("architecture") catch return error.MissingArchitecture;
-    const arch = std.meta.stringToEnum(Arch, arch_text) orelse return error.InvalidArchitecture;
-    const verbosity_text = try args.value("verbosity") orelse "quiet";
-    const verbosity = std.meta.stringToEnum(Verbosity, verbosity_text) orelse return error.InvalidVerbosity;
-
-    return .{
-        .gdextension_interface = header,
-        .extension_api = api,
-        .input = input,
-        .output = output,
-        .arch = arch,
-        .precision = precision,
-        .verbosity = verbosity,
+pub fn fromArgs(args: *Args) !Arguments {
+    if (try args.optional(bool, "help") orelse false) return error.HelpRequested;
+    const result: Arguments = .{
+        .gdextension_interface = args.required([]const u8, "gdextension-interface") catch return error.MissingGdextensionInterface,
+        .extension_api = args.required([]const u8, "extension-api") catch return error.MissingExtensionApi,
+        .input = args.required([]const u8, "input") catch return error.MissingInput,
+        .output = args.required([]const u8, "output") catch return error.MissingOutput,
+        .precision = args.required(Precision, "precision") catch |err| return switch (err) {
+            error.InvalidValue => error.InvalidPrecision,
+            else => error.MissingPrecision,
+        },
+        .arch = args.required(Arch, "architecture") catch |err| return switch (err) {
+            error.InvalidValue => error.InvalidArchitecture,
+            else => error.MissingArchitecture,
+        },
+        .verbosity = (args.optional(Verbosity, "verbosity") catch return error.InvalidVerbosity) orelse .quiet,
     };
+    try args.reject(.strict);
+    return result;
 }
 
 /// Open validated input files and prepare the output directory.
@@ -134,7 +125,7 @@ pub fn testConfig(io: Io, output: Dir) !Config {
 fn testArguments(argv: []const []const u8) !void {
     var args: Args = try .initSlice(std.testing.allocator, argv);
     defer args.deinit(std.testing.allocator);
-    _ = try fromArgs(args);
+    _ = try fromArgs(&args);
 }
 
 test "named bindgen options accept arbitrary ordering" {
@@ -143,7 +134,7 @@ test "named bindgen options accept arbitrary ordering" {
         "--precision=float", "--extension-api=api.json", "--gdextension-interface=interface.h",
     });
     defer args.deinit(std.testing.allocator);
-    const arguments = try fromArgs(args);
+    const arguments = try fromArgs(&args);
     try std.testing.expectEqualStrings("api.json", arguments.extension_api);
     try std.testing.expectEqualStrings("bindings", arguments.output);
     try std.testing.expectEqual(Arch.@"64", arguments.arch);
@@ -176,8 +167,8 @@ test "named bindgen options report help missing unknown duplicate and malformed 
     try std.testing.expectError(error.MissingGdextensionInterface, testArguments(&.{"bindgen"}));
     try std.testing.expectError(error.MissingGdextensionInterface, testArguments(&.{ "bindgen", "--gdextension-interface" }));
     try std.testing.expectError(error.MissingGdextensionInterface, testArguments(&.{ "bindgen", "--gdextension-interface=" }));
-    try std.testing.expectError(error.UnknownArgument, testArguments(&.{ "bindgen", "--bogus=value" }));
-    try std.testing.expectError(error.UnexpectedPositional, testArguments(&.{ "bindgen", "path" }));
+    try std.testing.expectError(error.UnusedArgument, testArguments(&.{ "bindgen", "--gdextension-interface=h", "--extension-api=a", "--input=i", "--output=o", "--precision=float", "--architecture=64", "--bogus=value" }));
+    try std.testing.expectError(error.UnusedPositional, testArguments(&.{ "bindgen", "--gdextension-interface=h", "--extension-api=a", "--input=i", "--output=o", "--precision=float", "--architecture=64", "path" }));
     try std.testing.expectError(error.DuplicateArgument, testArguments(&.{ "bindgen", "--output=one", "--output=two" }));
     const Case = struct {
         precision: []const u8 = "--precision=float",
@@ -195,34 +186,67 @@ test "named bindgen options report help missing unknown duplicate and malformed 
             case.precision, case.architecture,           case.verbosity,
         });
         defer args.deinit(std.testing.allocator);
-        try std.testing.expectError(case.failure, fromArgs(args));
+        try std.testing.expectError(case.failure, fromArgs(&args));
     }
 }
 
-test "every required option has a specific missing error for absent bare and empty values" {
+test "required options distinguish missing values from invalid empty enums" {
     const argv = [_][]const u8{
         "bindgen",    "--gdextension-interface=h", "--extension-api=a", "--input=i",
         "--output=o", "--precision=float",         "--architecture=64",
     };
-    const names = [_][]const u8{ "gdextension-interface", "extension-api", "input", "output", "precision", "architecture" };
-    const errors = [_]anyerror{
-        error.MissingGdextensionInterface, error.MissingExtensionApi, error.MissingInput,
-        error.MissingOutput,               error.MissingPrecision,    error.MissingArchitecture,
+    const Case = struct {
+        name: []const u8,
+        missing_error: anyerror,
+        empty_error: anyerror,
     };
-    for (names, errors, 1..) |name, expected, index| {
+    const cases = [_]Case{
+        .{
+            .name = "gdextension-interface",
+            .missing_error = error.MissingGdextensionInterface,
+            .empty_error = error.MissingGdextensionInterface,
+        },
+        .{
+            .name = "extension-api",
+            .missing_error = error.MissingExtensionApi,
+            .empty_error = error.MissingExtensionApi,
+        },
+        .{
+            .name = "input",
+            .missing_error = error.MissingInput,
+            .empty_error = error.MissingInput,
+        },
+        .{
+            .name = "output",
+            .missing_error = error.MissingOutput,
+            .empty_error = error.MissingOutput,
+        },
+        .{
+            .name = "precision",
+            .missing_error = error.MissingPrecision,
+            .empty_error = error.InvalidPrecision,
+        },
+        .{
+            .name = "architecture",
+            .missing_error = error.MissingArchitecture,
+            .empty_error = error.InvalidArchitecture,
+        },
+    };
+    for (cases, 1..) |case, index| {
         inline for ([_][]const u8{ "--{s}", "--{s}=" }) |format| {
             var changed = argv;
-            const option = try std.fmt.allocPrint(std.testing.allocator, format, .{name});
+            const option = try std.fmt.allocPrint(std.testing.allocator, format, .{case.name});
             defer std.testing.allocator.free(option);
             changed[index] = option;
-            try std.testing.expectError(expected, testArguments(&changed));
+            const failure = if (std.mem.eql(u8, format, "--{s}=")) case.empty_error else case.missing_error;
+            try std.testing.expectError(failure, testArguments(&changed));
         }
         var missing: std.ArrayList([]const u8) = .empty;
         defer missing.deinit(std.testing.allocator);
         for (argv, 0..) |token, i| {
             if (i != index) try missing.append(std.testing.allocator, token);
         }
-        try std.testing.expectError(expected, testArguments(missing.items));
+        try std.testing.expectError(case.missing_error, testArguments(missing.items));
     }
 }
 

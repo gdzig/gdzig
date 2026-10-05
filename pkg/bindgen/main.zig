@@ -24,7 +24,7 @@ pub fn main(init: std.process.Init) !void {
         std.process.fatal("bindgen: {t}\n{s}", .{ err, Config.usage });
     };
     defer args.deinit(init.gpa);
-    const arguments = Config.fromArgs(args) catch |err| {
+    const arguments = Config.fromArgs(&args) catch |err| {
         if (err == error.HelpRequested) {
             std.debug.print("{s}", .{Config.usage});
             return;
