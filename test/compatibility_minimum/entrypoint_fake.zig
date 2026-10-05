@@ -1,17 +1,19 @@
 //! Isolated fake dispatch for the real entrypoints. Never used by engine tests.
-// SAFETY: The real entrypoint initializes isolated dispatch before its first query.
+// SAFETY: The real entrypoint initializes isolated dispatch before publishing its version.
 pub var raw: Raw = undefined;
 
 const Raw = struct {
-    getGodotVersion: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion),
+    version: Version,
 
     /// Initialize isolated dispatch while retaining the real version initializer.
     pub fn init(proc: c.GDExtensionInterfaceGetProcAddress, _: *anyopaque) Raw {
         const query: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion) =
             @ptrCast(proc.?("get_godot_version").?);
+        var actual: Version = undefined;
+        query(@ptrCast(&actual));
         // Only this field is read by the real initializeVersion implementation.
-        runtime.raw.getGodotVersion = query;
-        return .{ .getGodotVersion = query };
+        runtime.raw.version = actual;
+        return .{ .version = actual };
     }
 };
 
