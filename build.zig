@@ -177,6 +177,7 @@ pub fn build(b: *Build) !void {
         const tests_common = b.addTest(.{ .root_module = common_mod });
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
+        b.step("test-common", "Run common module unit tests").dependOn(&tests_common_run.?.step);
 
         var tests_dir = try b.root.root_dir.handle.openDir(b.graph.io, "test", .{ .iterate = true });
         defer tests_dir.close(b.graph.io);

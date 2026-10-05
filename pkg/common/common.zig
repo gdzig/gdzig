@@ -63,6 +63,7 @@ pub fn fmt(comptime config: Config, str: []const u8) std.fmt.Alt([]const u8, Fmt
 
 test {
     testing.refAllDecls(Version);
+    testing.refAllDecls(Args);
 }
 
 test "strict version parser normalizes missing patch and rejects malformed user input" {
@@ -154,4 +155,5 @@ const casez = @import("casez");
 const Config = casez.Config;
 const comptimeConvert = casez.comptimeConvert;
 
+pub const Args = @import("Args.zig");
 pub const Version = @import("Version.zig").Version;

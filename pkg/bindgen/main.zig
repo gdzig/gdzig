@@ -20,16 +20,16 @@ pub fn main(init: std.process.Init) !void {
     var arena: std.heap.ArenaAllocator = .init(init.gpa);
     defer arena.deinit();
 
-    const allocator = arena.allocator();
-
-    const args = try init.minimal.args.toSlice(allocator);
-    const arguments = Config.parseArgs(args[1..]) catch |err| {
-        if (err != error.HelpRequested) {
-            std.debug.print("Invalid bindgen arguments: {s}\n", .{@errorName(err)});
+    var args = Args.init(init.gpa, init.minimal.args) catch |err| {
+        std.process.fatal("bindgen: {t}\n{s}", .{ err, Config.usage });
+    };
+    defer args.deinit(init.gpa);
+    const arguments = Config.fromArgs(args) catch |err| {
+        if (err == error.HelpRequested) {
+            std.debug.print("{s}", .{Config.usage});
+            return;
         }
-        std.debug.print("{s}", .{Config.usage});
-        if (err == error.HelpRequested) return;
-        return err;
+        std.process.fatal("bindgen: {t}\n{s}", .{ err, Config.usage });
     };
 
     var config = try Config.load(init.io, arguments);
@@ -72,6 +72,7 @@ test {
 
 const std = @import("std");
 
+const Args = @import("common").Args;
 const codegen = @import("codegen.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
