@@ -22,6 +22,11 @@
             .url = "https://github.com/godotengine/godot-cpp/archive/refs/tags/10.0.0-stable.tar.gz",
             .hash = "N-V-__8AAPiBDgI4ZFSc7fNDjGwiILwckhuE6UrxqNraBX0S",
         },
+        .godot_versions = .{
+            .url = "git+https://github.com/gdzig/godot-versions.git#703dec5f5bebb1cde9fed1e19ca2b5b754e1d968",
+            .hash = "godot-0.0.0-Nast2oBZBwC-kvaWK7V5Q7E2IVcUWtWA3JWRNPW-RYBJ",
+            .lazy = true,
+        },
         .oopz = .{
             .url = "git+https://github.com/gdzig/oopz#2a9fac7d3ffe134608ed56d3b49211f546c0b729",
             .hash = "oopz-0.0.0-pFJy_QxZAABRjZk6dXmOZYLL8qIS-6guAChEFOP9BqTf",
