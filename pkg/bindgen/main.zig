@@ -1,10 +1,3 @@
-const std = @import("std");
-
-const codegen = @import("codegen.zig");
-const Config = @import("Config.zig");
-const Context = @import("Context.zig");
-const GodotApi = @import("GodotApi.zig");
-
 var verbose: bool = false;
 
 pub const std_options: std.Options = .{
@@ -22,27 +15,24 @@ fn logFn(
     std.log.defaultLog(level, scope, format, args);
 }
 
+/// Validate named inputs, generate API bindings, then format the output.
 pub fn main(init: std.process.Init) !void {
-    var arena = std.heap.ArenaAllocator.init(init.gpa);
+    var arena: std.heap.ArenaAllocator = .init(init.gpa);
     defer arena.deinit();
 
-    const allocator = arena.allocator();
+    var args = Args.init(init.gpa, init.minimal.args) catch |err| {
+        std.process.fatal("bindgen: {t}\n{s}", .{ err, Config.usage });
+    };
+    defer args.deinit(init.gpa);
+    const arguments = Config.fromArgs(&args) catch |err| {
+        if (err == error.HelpRequested) {
+            std.debug.print("{s}", .{Config.usage});
+            return;
+        }
+        std.process.fatal("bindgen: {t}\n{s}", .{ err, Config.usage });
+    };
 
-    var args_iter = try std.process.Args.Iterator.initAllocator(init.minimal.args, allocator);
-    defer args_iter.deinit();
-    var args_list: std.ArrayListUnmanaged([]const u8) = .empty;
-    while (args_iter.next()) |arg| {
-        try args_list.append(allocator, arg);
-    }
-    const args = args_list.items;
-
-    if (args.len < 6) {
-        std.debug.print("Usage: bindgen <gdextension_interface.h> <extension_api.json> <mixins_root> <output_path> <float|double> <32|64> <quiet|verbose>\n", .{});
-        return;
-    }
-
-    // Assemble the bindgen configuration
-    var config = try Config.loadFromArgs(init.io, args);
+    var config = try Config.load(init.io, arguments);
     defer config.deinit();
 
     verbose = config.verbosity == .verbose;
@@ -68,9 +58,9 @@ pub fn main(init: std.process.Init) !void {
     _ = try fmt_child.wait(init.io);
 
     if (config.verbosity == .verbose) {
-        std.debug.print("Output path: {s}\n", .{args[4]});
-        std.debug.print("Interface: {s}\n", .{args[1]});
-        std.debug.print("API JSON: {s}\n", .{args[2]});
+        std.debug.print("Output path: {s}\n", .{arguments.output});
+        std.debug.print("Interface: {s}\n", .{arguments.gdextension_interface});
+        std.debug.print("API JSON: {s}\n", .{arguments.extension_api});
     }
 }
 
@@ -79,3 +69,11 @@ test {
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(@import("Mixin.zig"));
 }
+
+const std = @import("std");
+
+const Args = @import("common").Args;
+const codegen = @import("codegen.zig");
+const Config = @import("Config.zig");
+const Context = @import("Context.zig");
+const GodotApi = @import("GodotApi.zig");

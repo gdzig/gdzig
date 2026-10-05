@@ -160,7 +160,7 @@ test "class inheritance retains skipped API metadata" {
     var ctx: Context = .{
         .arena = &arena,
         .api = .{ .header = undefined, .builtin_class_sizes = &.{}, .builtin_class_member_offsets = &.{}, .global_constants = &.{}, .global_enums = &.{}, .utility_functions = &.{}, .builtin_classes = &.{}, .classes = &api_classes, .singletons = &.{}, .native_structures = &.{} },
-        .config = .{ .arch = .float, .precision = .@"64", .extension_api = undefined, .gdextension_interface = undefined, .input = tmp.dir, .output = tmp.dir, .verbosity = .quiet, .io = std.testing.io },
+        .config = .{ .arch = .@"64", .precision = .float, .extension_api = undefined, .gdextension_interface = undefined, .input = tmp.dir, .output = tmp.dir, .verbosity = .quiet, .io = std.testing.io },
     };
     var parent: Context.Class = .{ .name = "Parent", .name_api = "Parent" };
     var function: Context.Function = .{ .name = "isClass", .name_api = "is_class", .base = "Parent", .hash = 123, .self = .{ .constant = "Parent" }, .skip = true, .mixin_override = true };
