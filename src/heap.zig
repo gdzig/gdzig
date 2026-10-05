@@ -15,7 +15,7 @@ fn alloc(_: *anyopaque, len: usize, alignment: Alignment, _: usize) ?[*]u8 {
         return @ptrCast(raw.memAlloc(len) orelse return null);
     }
 
-    const padding = alignment.toByteUnits();
+    const padding = @sizeOf(u32) + alignment.toByteUnits() - 1;
     const unaligned_ptr = raw.memAlloc(len + padding) orelse return null;
     const unaligned_addr = @intFromPtr(unaligned_ptr);
     const aligned_addr = alignment.forward(unaligned_addr + @sizeOf(u32));
@@ -34,15 +34,27 @@ fn remap(_: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, _: u
         return @ptrCast(raw.memRealloc(memory.ptr, new_len) orelse return null);
     }
 
-    const padding = alignment.toByteUnits();
+    const padding = @sizeOf(u32) + alignment.toByteUnits() - 1;
     const aligned_addr = @intFromPtr(memory.ptr);
-    const offset = @as(*align(1) u32, @ptrFromInt(aligned_addr - @sizeOf(u32))).*;
+    const old_payload_offset = @as(*align(1) u32, @ptrFromInt(aligned_addr - @sizeOf(u32))).*;
+    const old_unaligned_addr = aligned_addr - old_payload_offset;
+    const old_unaligned_ptr: [*]u8 = @ptrFromInt(old_unaligned_addr);
 
-    const new_unaligned_ptr = raw.memRealloc(@ptrFromInt(aligned_addr - offset), new_len + padding) orelse return null;
+    const new_unaligned_ptr = raw.memRealloc(old_unaligned_ptr, new_len + padding) orelse return null;
     const new_unaligned_addr = @intFromPtr(new_unaligned_ptr);
     const new_aligned_addr = alignment.forward(new_unaligned_addr + @sizeOf(u32));
+    const new_payload_offset = new_aligned_addr - new_unaligned_addr;
 
-    @as(*align(1) u32, @ptrFromInt(new_aligned_addr - @sizeOf(u32))).* = @intCast(new_aligned_addr - new_unaligned_addr);
+    // Raw realloc preserves the raw prefix, leaving the payload at its old offset.
+    // Move it before new metadata can overwrite any of those bytes.
+    if (old_payload_offset != new_payload_offset) {
+        const preserved_len = @min(memory.len, new_len);
+        const source: [*]const u8 = @ptrFromInt(new_unaligned_addr + old_payload_offset);
+        const destination: [*]u8 = @ptrFromInt(new_aligned_addr);
+        @memmove(destination[0..preserved_len], source[0..preserved_len]);
+    }
+
+    @as(*align(1) u32, @ptrFromInt(new_aligned_addr - @sizeOf(u32))).* = @intCast(new_payload_offset);
 
     return @ptrFromInt(new_aligned_addr);
 }
