@@ -1,4 +1,5 @@
 pub fn build(b: *Build) !void {
+    compat_metadata.add(b, @This());
     //
     // Options
     //
@@ -256,5 +257,6 @@ pub const ExtensionOptions = api.ExtensionOptions;
 pub const TestOptions = api.TestOptions;
 pub const InitializationLevel = api.InitializationLevel;
 const bindgen = @import("build/bindgen.zig");
+const compat_metadata = @import("build/compat_metadata.zig");
 const common = @import("build/common.zig");
 const gdextension = @import("build/gdextension.zig");
