@@ -45,13 +45,13 @@ pub fn fromArgs(args: Args) !Arguments {
     });
     if (args.positionals.items.len != 0) return error.UnexpectedPositional;
 
-    const header = try required(args, "gdextension-interface", error.MissingGdextensionInterface);
-    const api = try required(args, "extension-api", error.MissingExtensionApi);
-    const input = try required(args, "input", error.MissingInput);
-    const output = try required(args, "output", error.MissingOutput);
-    const precision_text = try required(args, "precision", error.MissingPrecision);
+    const header = args.required("gdextension-interface") catch return error.MissingGdextensionInterface;
+    const api = args.required("extension-api") catch return error.MissingExtensionApi;
+    const input = args.required("input") catch return error.MissingInput;
+    const output = args.required("output") catch return error.MissingOutput;
+    const precision_text = args.required("precision") catch return error.MissingPrecision;
     const precision = std.meta.stringToEnum(Precision, precision_text) orelse return error.InvalidPrecision;
-    const arch_text = try required(args, "architecture", error.MissingArchitecture);
+    const arch_text = args.required("architecture") catch return error.MissingArchitecture;
     const arch = std.meta.stringToEnum(Arch, arch_text) orelse return error.InvalidArchitecture;
     const verbosity_text = try args.value("verbosity") orelse "quiet";
     const verbosity = std.meta.stringToEnum(Verbosity, verbosity_text) orelse return error.InvalidVerbosity;
@@ -65,13 +65,6 @@ pub fn fromArgs(args: Args) !Arguments {
         .precision = precision,
         .verbosity = verbosity,
     };
-}
-
-fn required(args: Args, name: []const u8, comptime missing: anyerror) ![]const u8 {
-    const value = args.value(name) catch return missing;
-    const text = value orelse return missing;
-    if (text.len == 0) return missing;
-    return text;
 }
 
 /// Open validated input files and prepare the output directory.
