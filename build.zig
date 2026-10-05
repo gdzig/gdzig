@@ -178,7 +178,53 @@ pub fn build(b: *Build) !void {
         const tests_common = b.addTest(.{ .root_module = common_mod });
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
+        b.step("test-gdzig", "Run gdzig module unit tests").dependOn(&tests_gdzig_run.?.step);
         b.step("test-common", "Run common module unit tests").dependOn(&tests_common_run.?.step);
+
+        const entrypoint_options = b.addOptions();
+        entrypoint_options.addOption([]const u8, "entry_symbol", "gdextension_entry");
+        entrypoint_options.addOption(api.InitializationLevel, "minimum_initialization_level", .scene);
+        entrypoint_options.addOption(api.TestStartup, "startup", .initialization);
+
+        const entrypoint_extension = b.createModule(.{
+            .root_source_file = b.path("test/entrypoint_extension.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "gdzig", .module = gdzig_mod }},
+        });
+        const fake_engine = b.createModule(.{
+            .root_source_file = b.path("src/testing/fake_engine.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "gdzig", .module = gdzig_mod }},
+        });
+        const tests_extension_entrypoint = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("src/extension/entrypoint.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "gdzig", .module = gdzig_mod },
+                .{ .name = "extension", .module = entrypoint_extension },
+                .{ .name = "options", .module = entrypoint_options.createModule() },
+                .{ .name = "fake_engine", .module = fake_engine },
+            },
+        }) });
+        const tests_harness_entrypoint = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("src/testing/harness.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "gdzig", .module = gdzig_mod },
+                .{ .name = "options", .module = entrypoint_options.createModule() },
+            },
+        }) });
+        const run_tests_extension_entrypoint = b.addRunArtifact(tests_extension_entrypoint);
+        const run_tests_harness_entrypoint = b.addRunArtifact(tests_harness_entrypoint);
+        const test_entrypoints_step = b.step("test-entrypoints", "Run extension entrypoint unit tests");
+        test_entrypoints_step.dependOn(&run_tests_extension_entrypoint.step);
+        test_entrypoints_step.dependOn(&run_tests_harness_entrypoint.step);
+        test_step.dependOn(&run_tests_extension_entrypoint.step);
+        test_step.dependOn(&run_tests_harness_entrypoint.step);
 
         var tests_dir = try b.root.root_dir.handle.openDir(b.graph.io, "test", .{ .iterate = true });
         defer tests_dir.close(b.graph.io);

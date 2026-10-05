@@ -1819,6 +1819,8 @@ fn writeDispatchTable(ctx: *Context) !void {
     );
     try w.writeLine(
         \\library: Child(c.GDExtensionClassLibraryPtr),
+        \\/// Running Godot version discovered before optional interface resolution.
+        \\version: Version,
         \\
     );
 
@@ -1843,20 +1845,34 @@ fn writeDispatchTable(ctx: *Context) !void {
     w.indent += 1;
 
     try w.writeLine(
+        \\// Although deprecated in newer Godot releases, get_godot_version is required
+        \\// by 4.1. get_godot_version2 is optional, so it cannot determine which optional
+        \\// interfaces are safe to request.
+        \\const getGodotVersion: Child(c.GDExtensionInterfaceGetGodotVersion) = @ptrCast(getProcAddress("get_godot_version").?);
+        \\var version: Version = undefined;
+        \\getGodotVersion(@ptrCast(&version));
+        \\
         \\return .{
         \\    .library = library,
+        \\    .version = version,
     );
     w.indent += 1;
 
     for (ctx.dispatch_table.functions.items) |function| {
         if (function.isRequired()) {
-            try w.printLine(
-                \\.{s} = @ptrCast(getProcAddress("{s}").?),
-            , .{ function.name, function.api_name });
+            if (std.mem.eql(u8, function.api_name, "get_godot_version")) {
+                try w.printLine(
+                    \\.{s} = getGodotVersion,
+                , .{function.name});
+            } else {
+                try w.printLine(
+                    \\.{s} = @ptrCast(getProcAddress("{s}").?),
+                , .{ function.name, function.api_name });
+            }
         } else {
             try w.printLine(
-                \\.{s} = @ptrCast(getProcAddress("{s}")),
-            , .{ function.name, function.api_name });
+                \\.{s} = if (version.gte(Version.@"{s}")) @ptrCast(getProcAddress("{s}")) else null,
+            , .{ function.name, function.since, function.api_name });
         }
     }
 
@@ -1876,6 +1892,7 @@ fn writeDispatchTable(ctx: *Context) !void {
         \\const Child = std.meta.Child;
         \\
         \\const c = @import("gdextension");
+        \\const Version = @import("common").Version;
         \\
         \\const builtin = @import("builtin.zig");
         \\const class = @import("class.zig");

@@ -30,7 +30,7 @@ fn entrypoint(
     r_initialization: *gdzig.c.GDExtensionInitialization,
 ) callconv(.c) gdzig.c.GDExtensionBool {
     gdzig.raw = .init(get_proc_address.?, library.?);
-    gdzig.raw.getGodotVersion(@ptrCast(&gdzig.version));
+    gdzig.version = gdzig.raw.version;
 
     r_initialization.* = .{
         .minimum_initialization_level = @backingInt(options.minimum_initialization_level),
@@ -187,4 +187,15 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
         return .{ .outcome = .fail, .message = null };
     }
+}
+
+test "testing harness entrypoint consumes the version read during dispatch initialization" {
+    const FakeEngine = @import("fake_engine.zig");
+    FakeEngine.reset();
+
+    var initialization: gdzig.c.GDExtensionInitialization = undefined;
+    _ = entrypoint(&FakeEngine.getProcAddress, @ptrFromInt(1), &initialization);
+
+    try FakeEngine.expectVersion(gdzig.version);
+    try std.testing.expectEqual(@as(usize, 1), FakeEngine.get_godot_version_calls);
 }
