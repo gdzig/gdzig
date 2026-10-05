@@ -6,6 +6,7 @@ pub const BuildOptions = struct {
     architecture: []const u8 = "64",
 };
 
+/// Create the host bindgen executable with the requested API headers and modules.
 pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
     const target = options.target;
     const optimize = options.optimize;
@@ -73,14 +74,18 @@ pub fn run(b: *Build, exe: *Build.Step.Compile, options: RunOptions) Build.LazyP
 
     const cmd = b.addRunArtifact(exe);
     cmd.expectExitCode(0);
+    cmd.addArg("--gdextension-interface");
     cmd.addFileArg(options.headers.path(b, "gdextension_interface.h"));
+    cmd.addArg("--extension-api");
     cmd.addFileArg(options.headers.path(b, "extension_api.json"));
+    cmd.addArg("--input");
     cmd.addDirectoryArg(mixins);
 
+    cmd.addArg("--output");
     const bindings_output = cmd.addOutputDirectoryArg("bindings");
-    cmd.addArg(options.precision);
-    cmd.addArg(options.architecture);
-    cmd.addArg(if (b.graph.verbose) "verbose" else "quiet");
+    cmd.addArgs(&.{ "--precision", options.precision });
+    cmd.addArgs(&.{ "--architecture", options.architecture });
+    cmd.addArgs(&.{ "--verbosity", if (b.graph.verbose) "verbose" else "quiet" });
 
     return bindings_output;
 }

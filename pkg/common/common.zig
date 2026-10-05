@@ -61,6 +61,31 @@ pub fn fmt(comptime config: Config, str: []const u8) std.fmt.Alt([]const u8, Fmt
     return .{ .data = str };
 }
 
+test {
+    testing.refAllDecls(Version);
+}
+
+test "strict version parser normalizes missing patch and rejects malformed user input" {
+    for ([_]struct {
+        text: []const u8,
+        major: u32,
+        minor: u32,
+        patch: u32,
+    }{
+        .{ .text = "4.6", .major = 4, .minor = 6, .patch = 0 },
+        .{ .text = "4.6.3", .major = 4, .minor = 6, .patch = 3 },
+        .{ .text = "4.7.2", .major = 4, .minor = 7, .patch = 2 },
+    }) |case| {
+        const version = try Version.parseStrict(case.text);
+        try testing.expectEqual(case.major, version.major);
+        try testing.expectEqual(case.minor, version.minor);
+        try testing.expectEqual(case.patch, version.patch);
+    }
+    for ([_][]const u8{ "", "4", "4.6.", "4..6", "4.6.0.1", "4.6-stable", " 4.6", "+4.6", "4. 6", "4.6.-1", "4294967296.6", "4.4294967296", "4.6.4294967296" }) |text| {
+        try testing.expectError(error.InvalidVersion, Version.parseStrict(text));
+    }
+}
+
 test "type name conversion" {
     inline for (&.{
         // .{ godot, gdzig }
@@ -128,3 +153,5 @@ const Writer = std.Io.Writer;
 const casez = @import("casez");
 const Config = casez.Config;
 const comptimeConvert = casez.comptimeConvert;
+
+pub const Version = @import("Version.zig").Version;

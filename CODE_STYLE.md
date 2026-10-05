@@ -23,6 +23,13 @@ const casez = @import("casez");
 const Config = @import("Config.zig");
 ```
 
+## Tests
+
+Group handwritten test declarations at file scope, after production declarations
+and immediately before the final imports and aliases. Do not interleave tests
+with production declarations or nest them in types. This rule applies to actual
+handwritten tests, not Zig source text emitted by code generators.
+
 ## Initialization
 
 When a variable has a named type, put the type on the left-hand side and use an
@@ -39,6 +46,20 @@ Do not repeat the type on the right-hand side when inference is clear:
 ```zig
 var output = Writer.Allocating.init(allocator);
 ```
+
+## Readability and declarations
+
+Write each struct field on its own line and retain its trailing comma. Separate
+struct and other type declarations with a blank line.
+
+Separate logical blocks with blank lines. Keep lines short enough to read without
+horizontal scrolling. Name intermediate values instead of nesting many lookups
+or conversions in one expression. Prefer enum parsing and `switch` over long
+`if`/`else` chains that repeat string comparisons.
+
+Use comments to explain intent, invariants or safety requirements. Do not narrate
+obvious operations. Document every added or changed public function with a `///`
+comment describing its purpose, inputs and significant return or error behavior.
 
 ## Type conversion initializers
 

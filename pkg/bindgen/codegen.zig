@@ -1,9 +1,21 @@
+/// Generate the root module and all API binding modules from the built context.
 pub fn generate(ctx: *Context) !void {
+    try writeRoot(ctx);
     try writeBuiltins(ctx);
     try writeClasses(ctx);
     try writeGlobals(ctx);
     try writeDispatchTable(ctx);
     try writeModules(ctx);
+}
+
+fn writeRoot(ctx: *const Context) !void {
+    const file = try ctx.config.output.createFile(ctx.config.io, "gdzig.zig", .{});
+    defer file.close(ctx.config.io);
+    var buf: [1024]u8 = undefined;
+    var file_writer = file.writerStreaming(ctx.config.io, &buf);
+    var writer: CodeWriter = .init(&file_writer.interface);
+    try writeMixin(&writer, "gdzig.mixin.zig", .{}, ctx);
+    try file_writer.interface.flush();
 }
 
 fn writeBuiltins(ctx: *const Context) !void {
