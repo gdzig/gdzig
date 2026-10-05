@@ -94,6 +94,9 @@ pub fn add(
     host_mod.addImport("host_fixture", host_mod);
     const host_test = b.addTest(.{
         .root_module = host_mod,
+        // Imported entrypoints also have unit tests against the full dispatch table.
+        // This fixture substitutes an isolated dispatch and tests its own counters.
+        .filters = &.{"entrypoint_host."},
         .test_runner = .{
             .path = b.path("test/compatibility_minimum/entrypoint_runner.zig"),
             .mode = .simple,
