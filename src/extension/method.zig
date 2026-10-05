@@ -60,7 +60,11 @@ pub fn MethodConfig(comptime Class: type) type {
             const MethodType = @TypeOf(@field(Class, decl_name));
             const Args = @typeInfo(MethodType).@"fn".param_types;
             const ReturnType = @typeInfo(MethodType).@"fn".return_type orelse void;
-            const arg_count = Args.len - 1;
+            const has_instance = Args.len > 0 and Args[0] == *Class;
+            const arg_offset: usize = if (has_instance) 1 else 0;
+            const arg_count = Args.len - arg_offset;
+            var flags = options.flags;
+            if (!has_instance) flags.method_flag_static = true;
 
             const return_value: classdb.PropertyInfo = .{
                 .type = .forType(ReturnType),
@@ -69,7 +73,7 @@ pub fn MethodConfig(comptime Class: type) type {
             const arg_infos: [arg_count]classdb.PropertyInfo = comptime blk: {
                 var infos: [arg_count]classdb.PropertyInfo = undefined;
                 for (0..arg_count) |i| {
-                    const ArgType = Args[i + 1].?;
+                    const ArgType = Args[i + arg_offset].?;
                     infos[i] = .{ .type = .forType(ArgType) };
                 }
                 break :blk infos;
@@ -86,22 +90,22 @@ pub fn MethodConfig(comptime Class: type) type {
             const Callbacks = struct {
                 const method = @field(Class, decl_name);
 
-                fn call(instance: *Class, args: []const *const Variant) gdzig.CallError!Variant {
+                fn call(instance: ?*Class, args: []const *const Variant) gdzig.CallError!Variant {
                     var call_args: std.meta.ArgsTuple(MethodType) = undefined;
-                    call_args[0] = instance;
+                    if (has_instance) call_args[0] = instance orelse return error.InstanceIsNull;
 
                     var initialized_arg_count: usize = 0;
-                    defer inline for (1..Args.len) |i| {
-                        if (i <= initialized_arg_count) {
+                    defer inline for (arg_offset..Args.len) |i| {
+                        if (i - arg_offset < initialized_arg_count) {
                             const ArgType = Args[i].?;
                             releaseVarValue(ArgType, call_args[i]);
                         }
                     };
 
-                    inline for (1..Args.len) |i| {
+                    inline for (arg_offset..Args.len) |i| {
                         const ArgType = Args[i].?;
-                        if (i - 1 < args.len) {
-                            call_args[i] = args[i - 1].as(ArgType) orelse return error.InvalidArgument;
+                        if (i - arg_offset < args.len) {
+                            call_args[i] = args[i - arg_offset].as(ArgType) orelse return error.InvalidArgument;
                             initialized_arg_count += 1;
                         }
                     }
@@ -116,12 +120,12 @@ pub fn MethodConfig(comptime Class: type) type {
                     }
                 }
 
-                fn ptrCall(instance: *Class, args: [*]const *const anyopaque, ret: ?*anyopaque) void {
+                fn ptrCall(instance: ?*Class, args: ?[*]const *const anyopaque, ret: ?*anyopaque) void {
                     var call_args: std.meta.ArgsTuple(MethodType) = undefined;
-                    call_args[0] = instance;
-                    inline for (1..Args.len) |i| {
+                    if (has_instance) call_args[0] = instance.?;
+                    inline for (arg_offset..Args.len) |i| {
                         const ArgType = Args[i].?;
-                        call_args[i] = ptrToArg(ArgType, args[i - 1]);
+                        call_args[i] = ptrToArg(ArgType, args.?[i - arg_offset]);
                     }
                     if (ReturnType == void) {
                         @call(.auto, method, call_args);
@@ -137,7 +141,7 @@ pub fn MethodConfig(comptime Class: type) type {
             return .{
                 .name = name,
                 .return_type = ReturnType,
-                .flags = options.flags,
+                .flags = flags,
                 .return_value_info = if (ReturnType != void) @constCast(&return_value) else null,
                 .argument_info = @constCast(&arg_infos),
                 .argument_metadata = @constCast(&arg_metas),
@@ -156,13 +160,15 @@ pub fn MethodConfig(comptime Class: type) type {
             const return_value: classdb.PropertyInfo = .{ .type = .forType(FieldType) };
 
             const Callbacks = struct {
-                fn call(instance: *Class, _: []const *const Variant) gdzig.CallError!Variant {
-                    return Variant.init(FieldType, @field(instance, field_name));
+                fn call(instance: ?*Class, _: []const *const Variant) gdzig.CallError!Variant {
+                    const receiver = instance orelse return error.InstanceIsNull;
+                    return Variant.init(FieldType, @field(receiver, field_name));
                 }
 
-                fn ptrCall(instance: *Class, _: [*]const *const anyopaque, ret: ?*anyopaque) void {
+                fn ptrCall(instance: ?*Class, _: ?[*]const *const anyopaque, ret: ?*anyopaque) void {
+                    const receiver = instance.?;
                     if (ret) |r| {
-                        writePtrReturn(FieldType, r, @field(instance, field_name));
+                        writePtrReturn(FieldType, r, @field(receiver, field_name));
                     }
                 }
             };
@@ -186,15 +192,17 @@ pub fn MethodConfig(comptime Class: type) type {
             const arg_meta: [1]classdb.MethodArgumentMetadata = .{.none};
 
             const Callbacks = struct {
-                fn call(instance: *Class, args: []const *const Variant) gdzig.CallError!Variant {
+                fn call(instance: ?*Class, args: []const *const Variant) gdzig.CallError!Variant {
+                    const receiver = instance orelse return error.InstanceIsNull;
                     if (args.len < 1) return error.TooFewArguments;
                     const value = args[0].as(FieldType) orelse return error.InvalidArgument;
-                    @field(instance, field_name) = value;
+                    @field(receiver, field_name) = value;
                     return Variant.nil;
                 }
 
-                fn ptrCall(instance: *Class, args: [*]const *const anyopaque, _: ?*anyopaque) void {
-                    @field(instance, field_name) = ptrToArg(FieldType, args[0]);
+                fn ptrCall(instance: ?*Class, args: ?[*]const *const anyopaque, _: ?*anyopaque) void {
+                    const receiver = instance.?;
+                    @field(receiver, field_name) = ptrToArg(FieldType, args.?[0]);
                 }
             };
 
