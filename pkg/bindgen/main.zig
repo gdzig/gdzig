@@ -46,6 +46,10 @@ pub fn main(init: std.process.Init) !void {
 
     // Build the codegen context
     var ctx = try Context.build(&arena, godot_api.value, config);
+    var report: std.Io.Writer.Allocating = .init(init.gpa);
+    defer report.deinit();
+    try dispatch_report.write(&report.writer, ctx.classes.values(), verbose);
+    if (report.written().len != 0) std.debug.print("{s}", .{report.written()});
 
     // Generate the code
     try codegen.generate(&ctx);
@@ -78,5 +82,6 @@ const std = @import("std");
 const Args = @import("common").Args;
 const codegen = @import("codegen.zig");
 const Config = @import("Config.zig");
+const dispatch_report = @import("dispatch_report.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("common").GodotApi;

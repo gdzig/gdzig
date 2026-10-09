@@ -1,9 +1,19 @@
 # Runtime compatibility hash audit
 
 Use an engine API dump to inspect a method's signature and hash, then compare
-it with the vendored API. Keep runtime hash constants in
-`src/compat/method_hashes.zig`, not duplicated in this document. Generated
-bindings derive their hashes and option types from `vendor/extension_api.json`.
+it with the vendored API. The generated compatibility manifest holds measured
+old signatures and hashes. Bindgen emits typed `_legacy` bindings and version
+dispatch from that manifest, so mixins contain no hash constants or ptrcalls.
+Mixins provide private `<method>_<major>_<minor>` value-conversion adapters.
+
+For example, `OptimizedTranslation.generate` returns `true` on Godot 4.6 after
+calling the old void-returning binding. Godot 4.6 exposes no failure result.
+On newer engines, the generated modern binding returns the engine's boolean.
+
+An unshimmed layout does not stop generation. Calling it on an engine in that
+range panics in a runtime-dispatch build. An inside-range minimum build reports
+a compile error when the method is analyzed. Bindgen reports missing and stale
+adapters only with verbose output. Generated `refAllDecls` tests stay unchanged.
 
 ## Extract a method from an engine build
 
