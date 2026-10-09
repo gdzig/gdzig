@@ -55,6 +55,7 @@ pub fn build(arena: *ArenaAllocator, api: GodotApi, config: Config) !Context {
         .arena = arena,
         .api = api,
         .config = config,
+        .compatibility_minimum = config.godot_compatibility_minimum,
     };
 
     try self.buildSymbolLookupTable();
@@ -67,6 +68,7 @@ pub fn build(arena: *ArenaAllocator, api: GodotApi, config: Config) !Context {
 
     try self.castBuiltins();
     try self.castClasses();
+    try self.selectMethodBinds();
     try self.castEnums();
     try self.castFlags();
     try self.castModules();
@@ -114,6 +116,37 @@ fn collectLegacyBindings(self: *Context) !void {
                 }
                 try class.functions.put(arena_allocator, legacy.name, legacy);
             }
+        }
+    }
+}
+
+fn selectMethodBinds(self: *Context) !void {
+    const minimum = self.config.godot_compatibility_minimum orelse return;
+    const target = try compatibility.findExactTarget(minimum);
+
+    // Inherited methods retain their original API owner in Function.base.
+    for (self.classes.values()) |*class| {
+        for (class.functions.values()) |*function| {
+            const primary = function.hash orelse continue;
+            function.selected_hash = try compatibility.lookupOverride(
+                target,
+                .class,
+                function.base.?,
+                function.name_api,
+                primary,
+            );
+        }
+    }
+    for (self.builtins.values()) |*builtin| {
+        for (builtin.methods.values()) |*function| {
+            const primary = function.hash orelse continue;
+            function.selected_hash = try compatibility.lookupOverride(
+                target,
+                .builtin,
+                function.base.?,
+                function.name_api,
+                primary,
+            );
         }
     }
 }

@@ -28,6 +28,22 @@ See the [example](example/) for a browser export preset and instructions.
 
 See the [example](example/) folder for reference.
 
+### Compile-time Godot compatibility minimum
+
+Default builds discover the running engine version. To fold version gates and
+method-bind selection at compile time, select a measured minimum:
+
+```sh
+zig build -Dgodot_compatibility_minimum=4.6
+```
+
+This is a floor, not an exact engine lock. Matching and newer engines are
+accepted, and older engines are rejected during initialization. Bindings still
+come from the current vendored API. With the option, `gdzig.version` is the
+constant effective floor rather than the actual runtime version. See the
+[compatibility minimum guide](docs/compatibility-minimum.md) for supported
+manifest targets, downstream build usage and limitations.
+
 ## Code Sample:
 
 https://github.com/gdzig/gdzig/blob/1cdfec61d185a9440e6419b122a08e003ad3dcde/example/src/GuiNode.zig#L1-L56

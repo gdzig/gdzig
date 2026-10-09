@@ -4,11 +4,12 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const godot_path = b.option([]const u8, "godot-path", "Directory containing Godot executable [default: $PATH]");
+    const minimum = b.option([]const u8, "godot_compatibility_minimum", "Minimum Godot version for compile-time binding");
     const single_threaded = b.option(bool, "single_threaded", "Target single threaded GdExtension [default: false]") orelse false;
 
     if (!single_threaded and target.result.cpu.arch.isWasm()) {
-        target.query.cpu_features_add.addFeature(@intFromEnum(std.Target.wasm.Feature.atomics));
-        target.query.cpu_features_add.addFeature(@intFromEnum(std.Target.wasm.Feature.bulk_memory));
+        target.query.cpu_features_add.addFeature(@backingInt(std.Target.wasm.Feature.atomics));
+        target.query.cpu_features_add.addFeature(@backingInt(std.Target.wasm.Feature.bulk_memory));
     }
 
     // Dependencies
@@ -16,6 +17,7 @@ pub fn build(b: *Build) !void {
         .target = target,
         .optimize = optimize,
         .@"godot-path" = godot_path,
+        .godot_compatibility_minimum = minimum,
     });
 
     // Extension module

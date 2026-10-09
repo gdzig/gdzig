@@ -6,12 +6,14 @@ test "isClass marshals the runtime's class-name layout" {
     try testing.expect(!node.isClass(.fromComptimeLatin1("Sprite2D")));
     // Exercise the cached bind too.
     try testing.expect(node.isClass(.fromComptimeLatin1("Node")));
-    if (gdzig.version.range(.@"4.6", .@"4.7")) {
-        var old_name: gdzig.builtin.String = .fromLatin1("Node");
-        defer old_name.deinit();
-        const object = gdzig.class.Object.upcast(node);
-        try testing.expect(object.isClass_4_6_legacy(old_name));
-        try testing.expect(object.isClass_4_6_legacy(old_name));
+    if (comptime @hasDecl(gdzig.class.Object, "isClass_4_6_legacy")) {
+        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+            var old_name: gdzig.builtin.String = .fromLatin1("Node");
+            defer old_name.deinit();
+            const object = gdzig.class.Object.upcast(node);
+            try testing.expect(object.isClass_4_6_legacy(old_name));
+            try testing.expect(object.isClass_4_6_legacy(old_name));
+        }
     }
 }
 
@@ -20,13 +22,15 @@ test "isClass preserves singleton convenience signatures" {
     try testing.expect(gdzig.class.Engine.isClass(.fromComptimeLatin1("Object")));
     try testing.expect(!gdzig.class.Engine.isClass(.fromComptimeLatin1("Node")));
     try testing.expect(gdzig.class.Os.isClass(.fromComptimeLatin1("OS")));
-    if (gdzig.version.range(.@"4.6", .@"4.7")) {
-        var engine_name: gdzig.builtin.String = .fromLatin1("Engine");
-        defer engine_name.deinit();
-        var os_name: gdzig.builtin.String = .fromLatin1("OS");
-        defer os_name.deinit();
-        try testing.expect(gdzig.class.Engine.isClass_4_6_legacy(engine_name));
-        try testing.expect(gdzig.class.Os.isClass_4_6_legacy(os_name));
+    if (comptime @hasDecl(gdzig.class.Engine, "isClass_4_6_legacy")) {
+        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+            var engine_name: gdzig.builtin.String = .fromLatin1("Engine");
+            defer engine_name.deinit();
+            var os_name: gdzig.builtin.String = .fromLatin1("OS");
+            defer os_name.deinit();
+            try testing.expect(gdzig.class.Engine.isClass_4_6_legacy(engine_name));
+            try testing.expect(gdzig.class.Os.isClass_4_6_legacy(os_name));
+        }
     }
 }
 
@@ -77,41 +81,43 @@ test "RichTextLabel images support pixel and percent units on both runtimes" {
     }
 
     // The public old layout takes positional pixel/percentage flags, not modern units.
-    if (gdzig.version.range(.@"4.6", .@"4.7")) {
-        var empty: gdzig.builtin.String = .fromLatin1("");
-        defer empty.deinit();
-        label.clear();
-        label.addImage_4_6_legacy(
-            gdzig.class.Texture2d.upcast(texture),
-            40,
-            20,
-            .initRGBA(1, 1, 1, 1),
-            .inline_alignment_center,
-            .initPositionSize(.initXY(0, 0), .initXY(0, 0)),
-            key,
-            false,
-            empty,
-            false,
-            false,
-            empty,
-        );
-        try testing.expectEqual(@as(i32, 40), label.getContentWidth());
-        label.updateImage_4_6_legacy(
-            key,
-            .{ .update_size = true, .update_width_unit = true },
-            gdzig.class.Texture2d.upcast(texture),
-            60,
-            30,
-            .initRGBA(1, 1, 1, 1),
-            .inline_alignment_center,
-            .initPositionSize(.initXY(0, 0), .initXY(0, 0)),
-            false,
-            empty,
-            true,
-            false,
-        );
-        try testing.expectEqual(@as(i32, 120), label.getContentWidth());
-        try testing.expectEqual(@as(i32, 1), label.getTotalCharacterCount());
+    if (comptime @hasDecl(RichTextLabel, "addImage_4_6_legacy")) {
+        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+            var empty: gdzig.builtin.String = .fromLatin1("");
+            defer empty.deinit();
+            label.clear();
+            label.addImage_4_6_legacy(
+                gdzig.class.Texture2d.upcast(texture),
+                40,
+                20,
+                .initRGBA(1, 1, 1, 1),
+                .inline_alignment_center,
+                .initPositionSize(.initXY(0, 0), .initXY(0, 0)),
+                key,
+                false,
+                empty,
+                false,
+                false,
+                empty,
+            );
+            try testing.expectEqual(@as(i32, 40), label.getContentWidth());
+            label.updateImage_4_6_legacy(
+                key,
+                .{ .update_size = true, .update_width_unit = true },
+                gdzig.class.Texture2d.upcast(texture),
+                60,
+                30,
+                .initRGBA(1, 1, 1, 1),
+                .inline_alignment_center,
+                .initPositionSize(.initXY(0, 0), .initXY(0, 0)),
+                false,
+                empty,
+                true,
+                false,
+            );
+            try testing.expectEqual(@as(i32, 120), label.getContentWidth());
+            try testing.expectEqual(@as(i32, 1), label.getTotalCharacterCount());
+        }
     }
 }
 
@@ -125,8 +131,10 @@ test "OptimizedTranslation generate preserves messages and initializes legacy re
     translation.addMessage(source, destination, .{});
     const generated = optimized.generate(translation);
     try testing.expect(generated);
-    if (gdzig.version.range(.@"4.6", .@"4.7")) {
-        optimized.generate_4_6_legacy(translation);
+    if (comptime @hasDecl(gdzig.class.OptimizedTranslation, "generate_4_6_legacy")) {
+        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+            optimized.generate_4_6_legacy(translation);
+        }
     }
     var result = optimized.getMessage(source, .{});
     defer result.deinit();

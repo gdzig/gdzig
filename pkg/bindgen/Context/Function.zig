@@ -9,6 +9,8 @@ base: ?[]const u8 = null,
 
 index: ?usize = null,
 hash: ?u64 = null,
+/// When set, emit one manifest-selected bind without runtime fallback probing.
+selected_hash: ?u64 = null,
 
 /// Older method-bind hashes accepted by the engine for forward compatibility
 /// (`hash_compatibility` in extension_api.json).

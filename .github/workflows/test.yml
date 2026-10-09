@@ -52,6 +52,40 @@ jobs:
         working-directory: example
 
   # Full matrix for push to master and manual dispatch
+  test-minimum:
+    name: Minimum ${{ matrix.pair.minimum }} on Godot ${{ matrix.pair.godot }} (${{ matrix.os }}, Zig ${{ matrix.zig }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.zig == 'master' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        zig: ["0.17.0", master]
+        pair:
+          - {minimum: "4.6", godot: "4.6.3"}
+          - {minimum: "4.6", godot: "4.7.2"}
+          - {minimum: "4.7", godot: "4.7.2"}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig }}
+          cache-key: ${{ matrix.os }}-minimum-${{ matrix.pair.minimum }}-godot-${{ matrix.pair.godot }}-zig-${{ matrix.zig }}
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: ${{ matrix.pair.godot }}
+          use-dotnet: false
+      - name: Run the full native suite with a compatibility minimum
+        run: >-
+          zig build test
+          -Dgodot_compatibility_minimum=${{ matrix.pair.minimum }}
+          -Dgodot-path="$(command -v godot)"
+
+  # Full default matrix for push to master and manual dispatch
   test-full:
     name: Test Godot ${{ matrix.godot }} on ${{ matrix.os }} (zig ${{ matrix.zig }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}

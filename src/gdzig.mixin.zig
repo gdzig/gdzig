@@ -13,6 +13,7 @@
 //! - `c` - C type definitions from `gdextension_interface.h`
 //!
 
+// @mixin start
 pub const c = @import("gdextension");
 pub const builtin = @import("builtin.zig");
 pub const class = @import("class.zig");
@@ -32,8 +33,26 @@ const DispatchTable = @import("DispatchTable.zig");
 /// Godot function pointers, populated at load time.
 pub var raw: DispatchTable = undefined;
 
-/// The current running version of Godot, initialized during extension initialization.
-pub var version: Version = undefined;
+/// Query the actual engine once and reject an unmet floor before startup.
+/// Default builds publish the actual version. Minimum builds retain their constant floor.
+pub fn initializeVersion() bool {
+    var actual: Version = undefined;
+    raw.getGodotVersion(@ptrCast(&actual));
+    if (!compatibility_minimum.accepts(actual, godot_compatibility_minimum)) {
+        const minimum = godot_compatibility_minimum.?;
+        std.log.err("gdzig requires Godot {d}.{d}.{d} or newer; running {d}.{d}.{d}", .{
+            minimum.major,
+            minimum.minor,
+            minimum.patch,
+            actual.major,
+            actual.minor,
+            actual.patch,
+        });
+        return false;
+    }
+    if (comptime godot_compatibility_minimum == null) version = actual;
+    return true;
+}
 
 pub const CallError = error{
     InvalidMethod,
@@ -67,3 +86,10 @@ test {
 }
 
 const std = @import("std");
+
+const compatibility_minimum = @import("common").compatibility_minimum;
+
+// @mixin stop
+// Source-only stand-ins. Bindgen emits these declarations before the mixin.
+const godot_compatibility_minimum: ?Version = null;
+pub var version: Version = undefined;

@@ -2,11 +2,35 @@
 
 pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.zon");
 
+/// Find the exact measured release, including aliases normalized by the parser.
+pub fn findExactTarget(minimum: Version) !compat_manifest.Target {
+    for (manifest.targets) |target| {
+        const measured = try Version.parseStrict(target.source.version);
+        if (minimum.major == measured.major and minimum.minor == measured.minor and
+            minimum.patch == measured.patch) return target;
+    }
+    return error.UnsupportedCompatibilityMinimum;
+}
+
 fn tableFor(metadata: compat_manifest.Manifest, target: compat_manifest.Target) !compat_manifest.Table {
     for (metadata.tables) |table| {
         if (std.mem.eql(u8, table.id, target.table_id)) return table;
     }
     return error.MissingCompatibilityTable;
+}
+
+/// Require the measured current API header and raw bytes for minimum selection.
+pub fn validateSnapshot(header: GodotApi.Header, checksum: []const u8) !void {
+    const current = try Version.parseStrict(manifest.current.version);
+    if (header.version_major != current.major or header.version_minor != current.minor or
+        header.version_patch != current.patch or
+        !std.mem.eql(u8, header.version_status, manifest.current.status) or
+        !std.mem.eql(u8, header.version_build, manifest.current.build) or
+        !std.mem.eql(u8, header.precision orelse "single", manifest.current.precision) or
+        !std.mem.eql(u8, checksum, manifest.current.sha256))
+    {
+        return error.StaleCompatibilitySnapshot;
+    }
 }
 
 /// Reject malformed provenance and duplicate or dangling target/table identities.
@@ -118,6 +142,87 @@ fn validOldHash(primary: ?u64, compatible: []const u64, old: u64) bool {
     return primary != old and std.mem.indexOfScalar(u64, compatible, old) != null;
 }
 
+/// Select only an ABI-compatible legacy hash; generated dispatch owns shim layouts.
+pub fn lookupOverride(
+    target: compat_manifest.Target,
+    kind: records.Kind,
+    owner: []const u8,
+    method: []const u8,
+    primary: u64,
+) !u64 {
+    const table = try tableFor(manifest, target);
+    for (table.overrides) |record| {
+        if (record.kind == kind and std.mem.eql(u8, record.owner, owner) and
+            std.mem.eql(u8, record.method, method))
+        {
+            return switch (record.layout) {
+                .identical, .trailing_defaults, .abi_compatible => record.old_hash,
+                .incompatible, .return_added => primary,
+            };
+        }
+    }
+    return primary;
+}
+
+test "minimum selection skips shim layouts and preserves absent modern methods" {
+    const target = manifest.targets[0];
+    const table = try tableFor(manifest, target);
+    for (table.overrides) |record| {
+        const expected: u64 = switch (record.layout) {
+            .identical, .trailing_defaults, .abi_compatible => record.old_hash,
+            .incompatible, .return_added => 999,
+        };
+        try std.testing.expectEqual(expected, try lookupOverride(
+            target,
+            record.kind,
+            record.owner,
+            record.method,
+            999,
+        ));
+    }
+    try std.testing.expectEqual(@as(u64, 999), try lookupOverride(
+        target,
+        .class,
+        "Node",
+        "new_method_not_in_older_api",
+        999,
+    ));
+}
+
+test "every measured target resolves exactly without inferring support from table identity" {
+    for (manifest.targets) |target| {
+        const minimum = try Version.parseStrict(target.source.version);
+        const selected = try findExactTarget(minimum);
+        try std.testing.expectEqualStrings(target.source.version, selected.source.version);
+        try std.testing.expectEqualStrings(target.table_id, selected.table_id);
+    }
+    const alias = try findExactTarget(try Version.parseStrict("4.6"));
+    try std.testing.expectEqualStrings("4.6.0", alias.source.version);
+    try std.testing.expectError(
+        error.UnsupportedCompatibilityMinimum,
+        findExactTarget(Version.parse("4.6.99")),
+    );
+}
+
+test "minimum snapshot rejects changed header family and raw checksum" {
+    var header: GodotApi.Header = .{
+        .version_major = 4,
+        .version_minor = 7,
+        .version_patch = 2,
+        .version_status = "stable",
+        .version_build = "official",
+        .version_full_name = "Godot Engine v4.7.2.stable.official",
+    };
+    try validateSnapshot(header, manifest.current.sha256);
+    header.version_minor = 8;
+    try std.testing.expectError(
+        error.StaleCompatibilitySnapshot,
+        validateSnapshot(header, manifest.current.sha256),
+    );
+    header.version_minor = 7;
+    try std.testing.expectError(error.StaleCompatibilitySnapshot, validateSnapshot(header, "changed"));
+}
+
 test "sparse hashes must be distinct measured compatibility members" {
     try std.testing.expect(validOldHash(202, &.{101}, 101));
     try std.testing.expect(!validOldHash(101, &.{101}, 101));
@@ -138,3 +243,4 @@ const std = @import("std");
 const compat_manifest = @import("compat").manifest;
 const GodotApi = @import("common").GodotApi;
 const records = @import("compat").records;
+const Version = @import("common").Version;

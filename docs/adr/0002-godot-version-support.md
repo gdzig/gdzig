@@ -1,19 +1,55 @@
-# Godot version support: single latest API snapshot, backwards compatibility via runtime discovery
+# Godot version support: one current API snapshot
 
-gdzig generates bindings from a single API snapshot of the latest stable Godot release (`vendor/extension_api.json` / `vendor/gdextension_interface.h`). Backwards compatibility with older engines within the same major version is supported at runtime, by discovery rather than build-time variation: by default the same compiled extension binds against whatever engine version loads it.
+## Decision
 
-Two properties of Godot's release model drive this. First, GDExtension is forward-compatible by design within a major version, and Godot maintains `hash_compatibility` metadata in the API description for exactly this reason: `classdbGetMethodBind` accepts compatibility hashes, so a method bind that fails under the latest hash can fall back to the hash the running engine actually serves. Second, Godot has no minor-version LTS: a stable branch is guaranteed support only until the next minor's first patch release (best-effort beyond that), with long-term support existing only at major boundaries (the 3.x branch after 4.0 shipped). Build-time version targeting would mean snapshotting engine branches whose upstream maintenance is on a countdown to end-of-life; runtime discovery covers them from the one latest snapshot instead.
+Generate bindings from the single latest stable snapshot in
+`vendor/extension_api.json` and `vendor/gdextension_interface.h`. Do not vendor
+one snapshot per engine version or filter the API to an older release.
 
-Whether an older minor is supportable this way is assessed per release from the API diff, not assumed. Methods whose signatures changed get their binds routed through the `hash_compatibility` entries emitted by bindgen; changes that alter the argument *layout* get runtime-version-gated marshaling keyed off the runtime engine version; engine-called virtuals with changed signatures are documented as latest-only rather than shimmed. If a minor's delta proves not absorbable by these mechanisms, that minor is not supported and this ADR is revisited; incompatibilities are never absorbed silently. The shipped default always performs this discovery at runtime. An opt-in build option may pin a minimum engine version and fold the gates and bind-hash selection away at comptime as a pure optimization, but it never changes which API snapshot the bindings come from, and a pinned build still verifies the running engine at init. The pin is a floor, not an exact target: a pinned build remains valid on newer engines through the engine's own compatibility registrations.
+Default extensions discover the actual engine version during initialization.
+Generated methods try the current hash and then the API's compatibility hashes.
+Handwritten adapters handle measured argument or return layout changes. Changed
+engine-called virtuals remain latest-only unless separately adapted. Compatibility
+is assessed from actual API differences, never inferred from a hash alone.
 
-Considered and rejected:
+## Optional compile-time compatibility minimum
 
-- **Dual API snapshots with a versioned build option**: checking in one API description per supported engine and generating bindings from the selected one. Rejected: an ongoing cost (another snapshot to vendor, paired CI runs per engine, another engine version to keep in mind for every change) for a problem runtime discovery solves from the single latest snapshot.
-- **Compile-time floor** (filter or down-level the API snapshot at build time via a `-Dgodot-version`-style option): rejected; bindings always come from the single latest snapshot, and this splits the build and test matrix per engine version for a problem runtime discovery solves without any build-time switching. (Distinct from the accepted opt-in version *pin*, which leaves the snapshot untouched and only folds discovery at comptime.)
-- **Treating latest-generated bindings as implicitly back-compatible without shims**: rejected; signature changes that alter argument layout would misread memory on older engines without gates. The runtime gates exist precisely for those cases.
+`-Dgodot_compatibility_minimum=major.minor[.patch]` is an optimization of this
+runtime-discovery policy. It does not select a different API snapshot. The name
+matches Godot's `.gdextension` `compatibility_minimum` key: it is a floor, not an
+exact version lock. A missing patch means zero. Accepted floors are measured
+targets in the generated compatibility manifest, with no handwritten allowlist.
 
-References:
+Bindgen emits one selected binding per generated class or builtin method.
+Sparse historical overrides replace current hashes only for ABI-compatible
+layouts. Incompatible and return-added layouts use generated range dispatch to
+private conversion adapters and typed legacy bindings. A method absent from the
+older API retains its current hash. The full API remains visible, so applications
+must not call unavailable methods on older engines.
 
-- [gdzig#265](https://github.com/gdzig/gdzig/issues/265) — Godot 4.6 runtime compatibility, the first application of this policy.
-- [gdzig#266](https://github.com/gdzig/gdzig/issues/266) — the opt-in compile-time version pin accepted above.
-- [gdzig#262](https://github.com/gdzig/gdzig/pull/262) — the dual-snapshot back-compat PR and its discussion.
+There is one public version declaration. Without a minimum, `gdzig.version` is
+mutable and records the actual engine identity. With a minimum, it is a constant
+representing the effective compatibility floor. This folds existing version
+gates at compile time without exposing a second public minimum field.
+
+Both extension entrypoints still query the actual engine once before startup.
+An older engine is rejected before registration, callbacks or IPC startup.
+Matching and newer engines are accepted through Godot's compatibility bindings.
+Minimum selection also checks the current snapshot's header and raw checksum
+against the measured manifest provenance, so stale metadata cannot silently
+select hashes for a changed snapshot.
+
+## Alternatives rejected
+
+- Multiple vendored API snapshots add ongoing maintenance and split the public API.
+- Filtering the current API to the floor is not this optimization and would change
+  application-visible declarations.
+- Hash membership without layout adapters can corrupt legacy ptrcall arguments
+  or return storage.
+- Calling the floor a version pin implies an exact lock and misstates acceptance
+  of newer engines.
+
+See the [compatibility minimum guide](../compatibility-minimum.md) and
+[layout audit](../runtime-compatibility-hashes.md) for usage and maintenance.
+Godot 4.6 runtime adapters originated in issue #265. Issue #266 adds this opt-in
+compile-time optimization without changing the default version-discovery policy.
