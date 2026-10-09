@@ -10,6 +10,7 @@ pub const Symbol = struct {
 arena: *ArenaAllocator,
 api: GodotApi,
 config: Config,
+metadata: manifest.Manifest,
 /// Optional compile-time floor supplied by higher-level minimum plumbing.
 compatibility_minimum: ?common.Version = null,
 
@@ -55,9 +56,13 @@ pub fn build(arena: *ArenaAllocator, api: GodotApi, config: Config) !Context {
         .arena = arena,
         .api = api,
         .config = config,
+        .metadata = try config.loadCompatibility(arena.allocator()),
         .compatibility_minimum = config.godot_compatibility_minimum,
     };
 
+    if (config.godot_compatibility_minimum != null) {
+        try compatibility.validateOverridesAgainstApi(self.metadata, api);
+    }
     try self.buildSymbolLookupTable();
 
     try self.parseGdExtensionHeaders();
@@ -97,7 +102,7 @@ fn collectLegacyBindings(self: *Context) !void {
             const owner = function.base orelse continue;
             const ranges = try version_dispatch.collect(
                 arena_allocator,
-                compatibility.manifest,
+                self.metadata,
                 owner,
                 function.name_api,
                 function.name,
@@ -122,13 +127,14 @@ fn collectLegacyBindings(self: *Context) !void {
 
 fn selectMethodBinds(self: *Context) !void {
     const minimum = self.config.godot_compatibility_minimum orelse return;
-    const target = try compatibility.findExactTarget(minimum);
+    const target = try compatibility.findExactTarget(self.metadata, minimum);
 
     // Inherited methods retain their original API owner in Function.base.
     for (self.classes.values()) |*class| {
         for (class.functions.values()) |*function| {
             const primary = function.hash orelse continue;
             function.selected_hash = try compatibility.lookupOverride(
+                self.metadata,
                 target,
                 .class,
                 function.base.?,
@@ -141,6 +147,7 @@ fn selectMethodBinds(self: *Context) !void {
         for (builtin.methods.values()) |*function| {
             const primary = function.hash orelse continue;
             function.selected_hash = try compatibility.lookupOverride(
+                self.metadata,
                 target,
                 .builtin,
                 function.base.?,
@@ -746,6 +753,7 @@ const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
 const Config = @import("Config.zig");
 const compatibility = @import("compatibility.zig");
+const manifest = @import("compat").manifest;
 const legacy_binding = @import("legacy_binding.zig");
 const version_dispatch = @import("version_dispatch.zig");
 pub const Builtin = @import("Context/Builtin.zig");

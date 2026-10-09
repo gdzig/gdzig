@@ -45,6 +45,10 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
     build_options.addOption([]const u8, "architecture", options.architecture);
     build_options.addOption([]const u8, "precision", options.precision);
     build_options.addOptionPathDirectory("headers", options.headers);
+    build_options.addOptionPath(
+        "compatibility",
+        b.path("pkg/bindgen/generated/compatibility.zon"),
+    );
 
     const mod = b.createModule(.{
         .target = target,
@@ -69,6 +73,7 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
 
 pub const RunOptions = struct {
     headers: Build.LazyPath,
+    compatibility: Build.LazyPath,
     precision: []const u8 = "float",
     architecture: []const u8 = "64",
     godot_compatibility_minimum: ?Version = null,
@@ -85,6 +90,7 @@ pub fn run(b: *Build, exe: *Build.Step.Compile, options: RunOptions) Build.LazyP
     cmd.expectExitCode(0);
     cmd.addPrefixedFileArg("--gdextension-interface=", options.headers.path(b, "gdextension_interface.h"));
     cmd.addPrefixedFileArg("--extension-api=", options.headers.path(b, "extension_api.json"));
+    cmd.addPrefixedFileArg("--compatibility=", options.compatibility);
     cmd.addPrefixedDirectoryArg("--input=", mixins);
     const bindings_output = cmd.addPrefixedOutputDirectoryArg("--output=", "bindings");
     cmd.addArg(b.fmt("--precision={s}", .{options.precision}));

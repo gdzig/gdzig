@@ -40,9 +40,11 @@ zig build -Dgodot_compatibility_minimum=4.6
 This is a floor, not an exact engine lock. Matching and newer engines are
 accepted, and older engines are rejected during initialization. Bindings still
 come from the current vendored API. With the option, `gdzig.version` is the
-constant effective floor rather than the actual runtime version. See the
-[compatibility minimum guide](docs/compatibility-minimum.md) for supported
-manifest targets, downstream build usage and limitations.
+constant effective floor rather than the actual runtime version. Cached minima
+use the vendored metadata directly. An uncached minimum downloads that exact
+stable Godot release to measure compatibility, without changing the API snapshot.
+See the [compatibility minimum guide](docs/compatibility-minimum.md) for catalog
+requirements, downstream build usage and limitations.
 
 ## Code Sample:
 

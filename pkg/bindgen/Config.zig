@@ -9,6 +9,8 @@ precision: Precision,
 verbosity: Verbosity,
 io: Io,
 godot_compatibility_minimum: ?Version = null,
+compatibility_path: []const u8 = build_options.compatibility,
+metadata: ?manifest.Manifest = null,
 
 pub const Precision = enum {
     float,
@@ -34,9 +36,10 @@ pub const Arguments = struct {
     precision: Precision,
     verbosity: Verbosity,
     godot_compatibility_minimum: ?Version = null,
+    compatibility: ?[]const u8 = null,
 };
 
-pub const usage = "Usage: gdzig-bindgen --gdextension-interface=<header> --extension-api=<json> --input=<mixins> --output=<bindings> --precision=<float|double> --architecture=<32|64> [--verbosity=<quiet|verbose>] [--godot-compatibility-minimum=<major.minor[.patch]>]\n";
+pub const usage = "Usage: gdzig-bindgen --gdextension-interface=<header> --extension-api=<json> --input=<mixins> --output=<bindings> --precision=<float|double> --architecture=<32|64> [--compatibility=<manifest.zon>] [--verbosity=<quiet|verbose>] [--godot-compatibility-minimum=<major.minor[.patch]>]\n";
 
 /// Validate named values without opening files. Returned paths borrow from args.
 pub fn fromArgs(args: *Args) !Arguments {
@@ -44,7 +47,7 @@ pub fn fromArgs(args: *Args) !Arguments {
     const minimum_text = args.optional([]const u8, "godot-compatibility-minimum") catch
         return error.InvalidCompatibilityMinimum;
     const minimum: ?Version = if (minimum_text) |text|
-        try compatibility_minimum.parse(text, compatibility.manifest.targets)
+        Version.parseStrict(text) catch return error.InvalidCompatibilityMinimum
     else
         null;
     const result: Arguments = .{
@@ -62,6 +65,7 @@ pub fn fromArgs(args: *Args) !Arguments {
         },
         .verbosity = (args.optional(Verbosity, "verbosity") catch return error.InvalidVerbosity) orelse .quiet,
         .godot_compatibility_minimum = minimum,
+        .compatibility = try args.optional([]const u8, "compatibility"),
     };
     try args.reject(.strict);
     return result;
@@ -87,7 +91,28 @@ pub fn load(io: Io, arguments: Arguments) !Config {
         .verbosity = arguments.verbosity,
         .io = io,
         .godot_compatibility_minimum = arguments.godot_compatibility_minimum,
+        .compatibility_path = arguments.compatibility orelse build_options.compatibility,
     };
+}
+
+/// Read the supplied manifest into memory owned by the caller's arena.
+pub fn loadCompatibility(self: Config, allocator: std.mem.Allocator) !manifest.Manifest {
+    if (self.metadata) |metadata| return metadata;
+    const bytes = try Dir.cwd().readFileAlloc(
+        self.io,
+        self.compatibility_path,
+        allocator,
+        .limited(16 * 1024 * 1024),
+    );
+    var diagnostics: std.zon.parse.Diagnostics = undefined;
+    const metadata = try std.zon.parse.fromSlice(manifest.Manifest, .{
+        .gpa = allocator,
+        .arena = allocator,
+        .source = try allocator.dupeSentinel(u8, bytes, 0),
+        .diagnostics = &diagnostics,
+    });
+    try compatibility.validateManifest(metadata);
+    return metadata;
 }
 
 /// Return the API layout name corresponding to configured width and precision.
@@ -279,13 +304,53 @@ test "named compatibility minimum is accepted before input files are opened" {
     try std.testing.expectEqual(@as(u32, 0), minimum.patch);
 }
 
+test "external compatibility input permits a syntactically valid uncached minimum" {
+    var args: Args = try .initSlice(std.testing.allocator, &.{
+        "bindgen",
+        "--gdextension-interface=h",
+        "--extension-api=a",
+        "--input=i",
+        "--output=o",
+        "--precision=float",
+        "--architecture=64",
+        "--compatibility=measured.zon",
+        "--godot-compatibility-minimum=4.5.0",
+    });
+    defer args.deinit(std.testing.allocator);
+    const arguments = try fromArgs(&args);
+    try std.testing.expectEqual(@as(u32, 5), arguments.godot_compatibility_minimum.?.minor);
+    try std.testing.expectEqualStrings("measured.zon", arguments.compatibility.?);
+}
+
+test "external minimum grammar errors are named before file access" {
+    for ([_][]const u8{ "", "4.5.0-dev", "4.5.4294967296", "4", "4.5.bad" }) |text| {
+        const option = try std.fmt.allocPrint(
+            std.testing.allocator,
+            "--godot-compatibility-minimum={s}",
+            .{text},
+        );
+        defer std.testing.allocator.free(option);
+        try std.testing.expectError(error.InvalidCompatibilityMinimum, testArguments(&.{
+            "bindgen",
+            "--gdextension-interface=h",
+            "--extension-api=a",
+            "--input=i",
+            "--output=o",
+            "--precision=float",
+            "--architecture=64",
+            "--compatibility=measured.zon",
+            option,
+        }));
+    }
+}
+
 const std = @import("std");
 const Io = std.Io;
 const Dir = Io.Dir;
 const File = Io.File;
 
 const Version = @import("common").Version;
-const compatibility_minimum = @import("common").compatibility_minimum;
+const manifest = @import("compat").manifest;
 const compatibility = @import("compatibility.zig");
 
 const build_options = @import("build_options");

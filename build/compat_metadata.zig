@@ -69,6 +69,82 @@ const Generator = struct {
     }
 };
 
+pub const Selection = struct {
+    minimum: ?Version,
+    manifest: Build.LazyPath,
+};
+
+/// Use cached metadata without resolving Godot, or append one downloaded release.
+pub fn select(b: *Build, comptime owner: type, text: ?[]const u8) ?Selection {
+    const cached_path = b.path("pkg/bindgen/generated/compatibility.zon");
+    const requested = text orelse return .{ .minimum = null, .manifest = cached_path };
+    const minimum = Version.parseStrict(requested) catch {
+        std.debug.panic("invalid stable Godot minimum '{s}': use major.minor[.patch]", .{requested});
+    };
+    const current = Version.parseStrict(cached.current.version) catch {
+        @panic("invalid current version in vendored compatibility cache");
+    };
+    if (minimum.gt(current)) {
+        std.debug.panic("Godot minimum {s} is newer than snapshot {s}", .{
+            requested,
+            cached.current.version,
+        });
+    }
+    inline for (cached.targets) |target| {
+        const measured = Version.parseStrict(target.source.version) catch {
+            @panic("invalid target version in vendored compatibility cache");
+        };
+        if (minimum.major == measured.major and minimum.minor == measured.minor and
+            minimum.patch == measured.patch)
+        {
+            return .{ .minimum = minimum, .manifest = cached_path };
+        }
+    }
+
+    // Only this uncached branch can request the optional resolver package.
+    _ = b.lazyImport(owner, "godot_versions") orelse return null;
+    const casez = b.dependency("casez", .{});
+    const common_mod = common.build(b, .{
+        .target = b.graph.host,
+        .optimize = .debug,
+        .casez = casez.module("casez"),
+    });
+    const compat_mod = b.createModule(.{
+        .root_source_file = b.path("pkg/compat/compat.zig"),
+        .target = b.graph.host,
+        .optimize = .debug,
+        .imports = &.{.{ .name = "common", .module = common_mod }},
+    });
+    var generator: Generator = .{
+        .b = b,
+        .extractor = b.addExecutable(.{
+            .name = "gdzig-compat-extract",
+            .root_module = toolModule(b, "pkg/tools/compat_extract/main.zig", common_mod, compat_mod),
+        }),
+        .merger = b.addExecutable(.{
+            .name = "gdzig-compat-metadata",
+            .root_module = toolModule(b, "pkg/tools/compat_metadata/main.zig", common_mod, compat_mod),
+        }),
+    };
+    const version = b.fmt("{d}.{d}.{d}", .{ minimum.major, minimum.minor, minimum.patch });
+    const current_records = generator.extract(owner, cached.current.version) orelse return null;
+    const old_records = generator.extract(owner, version) orelse return null;
+
+    // Preserve every cached target and merge exactly one requested release.
+    const run = b.addRunArtifact(generator.merger);
+    run.addArg("--mode=append");
+    run.addPrefixedFileArg("--input=", cached_path);
+    run.addPrefixedFileArg("--current=", current_records);
+    run.addPrefixedFileArg("--old=", old_records);
+    const candidate = run.addPrefixedOutputFileArg("--output=", "compatibility.zon");
+    const report = run.addPrefixedOutputFileArg("--report=", b.fmt("{s}.json", .{version}));
+    b.getInstallStep().dependOn(&b.addInstallFile(
+        report,
+        b.fmt("compat/reports/{s}.json", .{version}),
+    ).step);
+    return .{ .minimum = minimum, .manifest = candidate };
+}
+
 /// Add independently cached extraction, canonical merge, preview and maintenance.
 pub fn add(b: *Build, comptime asking_build_zig: type) void {
     const casez = b.dependency("casez", .{});
