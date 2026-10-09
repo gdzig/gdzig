@@ -1,13 +1,14 @@
 //! Version ranges and adapter names derived solely from measured manifest layouts.
+
+/// A canonical numeric range with its required legacy signature.
 pub const Group = struct {
     lower: Version,
     upper: Version,
     old_hash: u64,
-    layout: method_layout.Class,
-    difference: []const u8,
+    layout: std.meta.Tag(manifest.Layout),
     adapter: []const u8,
     available: bool,
-    signature: ?manifest.Override = null,
+    signature: manifest.Legacy,
 };
 
 /// Owned range names; layout text borrows the manifest.
@@ -52,14 +53,28 @@ pub fn collect(
     // Plain layouts end a legacy range but need no adapter themselves.
     for (targets) |target| {
         const version = try Version.parseStrict(target.source.version);
-        const record = findOverride(metadata, target, owner, method);
-        const legacy = if (record) |value| requiresAdapter(value.layout) else false;
+        const record = findOverride(metadata, target, owner, method) orelse {
+            if (active) |index| {
+                groups.items[index].upper = version;
+                active = null;
+            }
+            continue;
+        };
+        const signature = switch (record.layout) {
+            .incompatible, .return_added => |payload| payload,
+            else => {
+                if (active) |index| {
+                    groups.items[index].upper = version;
+                    active = null;
+                }
+                continue;
+            },
+        };
         if (active) |index| {
-            if (legacy and sameLayout(groups.items[index], record.?)) continue;
+            if (sameLayout(groups.items[index], record)) continue;
             groups.items[index].upper = version;
             active = null;
         }
-        if (!legacy) continue;
 
         // A later distinct range in the same minor needs a patch suffix.
         var patch_suffix = false;
@@ -84,12 +99,11 @@ pub fn collect(
         try groups.append(allocator, .{
             .lower = version,
             .upper = current,
-            .old_hash = record.?.old_hash,
-            .layout = record.?.layout,
-            .difference = record.?.layout_diff orelse "incompatible layout",
+            .old_hash = record.old_hash,
+            .layout = std.meta.activeTag(record.layout),
             .adapter = adapter,
             .available = available,
-            .signature = record.?,
+            .signature = signature,
         });
         active = groups.items.len - 1;
     }
@@ -123,12 +137,8 @@ fn findOverride(
     return null;
 }
 
-fn requiresAdapter(layout: method_layout.Class) bool {
-    return layout == .incompatible or layout == .return_added;
-}
-
 fn sameLayout(group: Group, record: manifest.Override) bool {
-    return group.old_hash == record.old_hash and group.layout == record.layout;
+    return group.old_hash == record.old_hash and group.layout == std.meta.activeTag(record.layout);
 }
 
 fn allocationProbe(allocator: Allocator) !void {
@@ -155,7 +165,16 @@ test "numeric ordering separates distinct patch ranges and names later adapters"
         .owner = "Probe",
         .method = "probe",
         .old_hash = 101,
-        .layout = .incompatible,
+        .layout = .{ .incompatible = .{
+            .difference = "fixture",
+            .arguments = &.{},
+            .@"return" = null,
+            .flags = .{
+                .is_const = false,
+                .is_static = false,
+                .is_vararg = false,
+            },
+        } },
     };
     var second = first;
     second.old_hash = 202;
@@ -216,5 +235,4 @@ const Allocator = std.mem.Allocator;
 
 const Version = @import("common").Version;
 const manifest = @import("compat").manifest;
-const method_layout = @import("compat").method_layout;
 const cached: manifest.Manifest = @import("generated/compatibility.zon");

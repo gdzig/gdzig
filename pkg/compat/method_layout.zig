@@ -1,5 +1,6 @@
 //! Compare ptrcall layouts from independently extracted API records.
 
+/// ABI classifications produced from a measured old and current signature.
 pub const Result = union(enum) {
     identical,
     trailing_defaults: struct { added_arguments: []const []const u8 },
@@ -8,12 +9,11 @@ pub const Result = union(enum) {
     incompatible: []const u8,
 };
 
+/// The ABI-neutral difference between otherwise compatible signatures.
 pub const Reason = enum {
     const_flag,
     renamed_enum,
 };
-
-pub const Class = std.meta.Tag(Result);
 
 fn mismatch(allocator: Allocator, comptime format: []const u8, args: anytype) !Result {
     return .{
@@ -172,15 +172,15 @@ test "identical trailing default and required trailing arguments" {
     defer arena.deinit();
     const allocator = arena.allocator();
     const old = probe();
-    try std.testing.expectEqual(Class.identical, std.meta.activeTag(try classify(allocator, old, old, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, old, &.{}, &.{}) == .identical);
     var current = old;
     current.arguments = &.{.{ .name = "enabled", .type = "bool", .has_default = true }};
     const result = try classify(allocator, old, current, &.{}, &.{});
-    try std.testing.expectEqual(Class.trailing_defaults, std.meta.activeTag(result));
+    try std.testing.expect(result == .trailing_defaults);
     try std.testing.expectEqualStrings("enabled", result.trailing_defaults.added_arguments[0]);
     current.arguments = &.{.{ .name = "enabled", .type = "bool" }};
     const incompatible = try classify(allocator, old, current, &.{}, &.{});
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(incompatible));
+    try std.testing.expect(incompatible == .incompatible);
     try std.testing.expectEqualStrings("argument 0 (enabled): added without default", incompatible.incompatible);
 }
 
@@ -192,24 +192,24 @@ test "argument return meta static vararg and const changes remain visible" {
     old.arguments = &.{.{ .type = "int", .meta = "int64" }};
     var current = old;
     current.arguments = &.{.{ .type = "float", .meta = "double" }};
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, current, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, current, &.{}, &.{}) == .incompatible);
     current.arguments = &.{.{ .type = "int", .meta = "int32" }};
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, current, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, current, &.{}, &.{}) == .incompatible);
     current.arguments = &.{};
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, current, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, current, &.{}, &.{}) == .incompatible);
     current = old;
     current.@"return" = .{ .type = "bool", .meta = "" };
-    try std.testing.expectEqual(Class.return_added, std.meta.activeTag(try classify(allocator, old, current, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, current, &.{}, &.{}) == .return_added);
     current = old;
     current.is_static = true;
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, current, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, current, &.{}, &.{}) == .incompatible);
     current = old;
     current.is_vararg = true;
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, current, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, current, &.{}, &.{}) == .incompatible);
     current = old;
     current.is_const = true;
     const result = try classify(allocator, old, current, &.{}, &.{});
-    try std.testing.expectEqual(Class.abi_compatible, std.meta.activeTag(result));
+    try std.testing.expect(result == .abi_compatible);
     try std.testing.expectEqual(Reason.const_flag, result.abi_compatible);
 }
 
@@ -228,15 +228,15 @@ test "enum renames require equal values and missing tables fail even for unchang
     var current = old;
     current.@"return" = .{ .type = "enum::New.Mode", .meta = "" };
     const result = try classify(allocator, old, current, old_enums, new_enums);
-    try std.testing.expectEqual(Class.abi_compatible, std.meta.activeTag(result));
+    try std.testing.expect(result == .abi_compatible);
     try std.testing.expectEqual(Reason.renamed_enum, result.abi_compatible);
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, old, &.{}, &.{})));
+    try std.testing.expect(try classify(allocator, old, old, &.{}, &.{}) == .incompatible);
     const changed = &.{records.Enum{
         .name = "New.Mode",
         .is_bitfield = false,
         .values = &.{.{ .name = "ON", .value = 2 }},
     }};
-    try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, current, old_enums, changed)));
+    try std.testing.expect(try classify(allocator, old, current, old_enums, changed) == .incompatible);
 }
 
 test "layout result stores only its active classification payload" {

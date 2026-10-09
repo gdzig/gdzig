@@ -13,7 +13,68 @@ const Report = struct {
     current: manifest.Provenance,
     source: manifest.Provenance,
     content: manifest.Provenance,
-    comparison: manifest.Comparison,
+    comparison: ReportComparison,
+};
+
+// The report remains a stable JSON view, independent of the manifest's ZON schema.
+const ReportOverride = struct {
+    kind: records.Kind,
+    owner: []const u8,
+    method: []const u8,
+    old_hash: u64,
+    layout: std.meta.Tag(manifest.Layout),
+    added_arguments: []const []const u8 = &.{},
+    layout_diff: ?[]const u8 = null,
+    old_arguments: ?[]const records.Argument = null,
+    old_return: ?records.Return = null,
+    old_flags: ?manifest.Flags = null,
+
+    fn fromOverride(value: manifest.Override) ReportOverride {
+        var result: ReportOverride = .{
+            .kind = value.kind,
+            .owner = value.owner,
+            .method = value.method,
+            .old_hash = value.old_hash,
+            .layout = std.meta.activeTag(value.layout),
+        };
+        switch (value.layout) {
+            .identical => {},
+            .trailing_defaults => |details| result.added_arguments = details.added_arguments,
+            .abi_compatible => |reason| result.layout_diff = switch (reason) {
+                .const_flag => "const",
+                .renamed_enum => "enum_renamed",
+            },
+            .return_added, .incompatible => |legacy| {
+                result.layout_diff = legacy.difference;
+                result.old_arguments = legacy.arguments;
+                result.old_return = legacy.@"return";
+                result.old_flags = legacy.flags;
+            },
+        }
+        return result;
+    }
+};
+
+const ReportComparison = struct {
+    overrides: []const ReportOverride,
+    virtual: []const manifest.Audit,
+    absent: []const manifest.Audit,
+    multi_compat: []const manifest.Audit,
+    unresolved: []const manifest.Audit,
+
+    fn fromComparison(allocator: std.mem.Allocator, comparison: manifest.Comparison) !ReportComparison {
+        const overrides = try allocator.alloc(ReportOverride, comparison.overrides.len);
+        for (comparison.overrides, overrides) |value, *result| {
+            result.* = .fromOverride(value);
+        }
+        return .{
+            .overrides = overrides,
+            .virtual = comparison.virtual,
+            .absent = comparison.absent,
+            .multi_compat = comparison.multi_compat,
+            .unresolved = comparison.unresolved,
+        };
+    }
 };
 
 const usage = "Usage: gdzig-compat-metadata --mode=overwrite|append [--input=<zon>] --current=<records.zon> --old=<records.zon> --output=<zon> --report=<json> [--expect=<zon>]\n";
@@ -63,13 +124,13 @@ fn writeReport(
         .current = .fromSnapshot(current, false),
         .source = .fromSnapshot(old, false),
         .content = .fromSnapshot(old, !std.mem.eql(u8, old.version, current.version)),
-        .comparison = try .compare(
+        .comparison = try .fromComparison(allocator, try manifest.Comparison.compare(
             allocator,
             old.records,
             current.records,
             old.enums,
             current.enums,
-        ),
+        )),
     }, .{ .whitespace = .indent_2 }, &report.writer);
     try report.writer.writeByte('\n');
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = report.written() });

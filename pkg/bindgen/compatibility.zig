@@ -2,18 +2,6 @@
 
 pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.zon");
 
-/// Return owned legacy ranges and conventional adapter names for one API method.
-/// This query describes measured layouts without requiring any adapter source.
-pub fn groups(
-    allocator: std.mem.Allocator,
-    metadata: compat_manifest.Manifest,
-    owner: []const u8,
-    method: []const u8,
-    zig_name: []const u8,
-) !version_dispatch.Groups {
-    return version_dispatch.collect(allocator, metadata, owner, method, zig_name, &.{});
-}
-
 fn tableFor(metadata: compat_manifest.Manifest, target: compat_manifest.Target) !compat_manifest.Table {
     for (metadata.tables) |table| {
         if (std.mem.eql(u8, table.id, target.table_id)) return table;
@@ -23,7 +11,7 @@ fn tableFor(metadata: compat_manifest.Manifest, target: compat_manifest.Target) 
 
 /// Reject malformed provenance and duplicate or dangling target/table identities.
 pub fn validateManifest(metadata: compat_manifest.Manifest) !void {
-    if (metadata.schema_version != 2) return error.UnsupportedCompatibilitySchema;
+    if (metadata.schema_version != 3) return error.UnsupportedCompatibilitySchema;
     try validateSource(metadata.current);
     if (metadata.current.checksum_kind != .raw_sha256) return error.InvalidCompatibilityProvenance;
     const current = try records.exactVersion(metadata.current.version);
@@ -147,7 +135,6 @@ test "manifest validation rejects malformed schema and dangling tables" {
 
 const std = @import("std");
 
-const version_dispatch = @import("version_dispatch.zig");
 const compat_manifest = @import("compat").manifest;
 const GodotApi = @import("common").GodotApi;
 const records = @import("compat").records;
