@@ -84,6 +84,68 @@ jobs:
           zig build test
           -Dgodot_compatibility_minimum=${{ matrix.pair.minimum }}
           -Dgodot-path="$(command -v godot)"
+      - name: Verify normal entrypoint registration on matching or newer engines
+        run: >-
+          zig build test-compatibility-minimum-init
+          -Dgodot_compatibility_minimum=${{ matrix.pair.minimum }}
+          -Dgodot-path="$(command -v godot)"
+
+  test-minimum-rejection:
+    name: Reject minimum 4.7 on Godot 4.6.3 (Zig ${{ matrix.zig }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.zig == 'master' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        zig: ["0.17.0", master]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig }}
+          cache-key: minimum-rejection-zig-${{ matrix.zig }}
+      - name: Setup older Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: "4.6.3"
+          use-dotnet: false
+      - name: Require the floor diagnostic and no registration
+        run: >-
+          zig build test-compatibility-minimum-init
+          -Dgodot_compatibility_minimum=4.7
+          -Dgodot-path="$(command -v godot)"
+
+  test-minimum-wasm:
+    name: Build wasm minimum ${{ matrix.minimum }} (Zig ${{ matrix.zig }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: ${{ matrix.zig == 'master' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        minimum: ["4.6", "4.7"]
+        zig: ["0.17.0", master]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ matrix.zig }}
+          cache-key: wasm-minimum-${{ matrix.minimum }}-zig-${{ matrix.zig }}
+      - name: Setup Godot for build dependency resolution
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: "4.7.2"
+          use-dotnet: false
+      - name: Build minimum example for wasm32-emscripten
+        working-directory: example
+        run: >-
+          zig build -Dtarget=wasm32-emscripten
+          -Dgodot_compatibility_minimum=${{ matrix.minimum }}
 
   # Full default matrix for push to master and manual dispatch
   test-full:

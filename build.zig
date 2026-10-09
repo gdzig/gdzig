@@ -187,6 +187,8 @@ pub fn build(b: *Build) !void {
         tests_common_run = b.addRunArtifact(tests_common);
         b.step("test-common", "Run common module unit tests").dependOn(&tests_common_run.?.step);
 
+        compatibility_minimum_tests.add(b, gdzig_mod, target, optimize, godot_exe, minimum_text);
+
         var tests_dir = try b.root.root_dir.handle.openDir(b.graph.io, "test", .{ .iterate = true });
         defer tests_dir.close(b.graph.io);
 
@@ -202,6 +204,12 @@ pub fn build(b: *Build) !void {
                     .{ .name = "gdzig", .module = gdzig_mod },
                 },
             });
+
+            if (std.mem.eql(u8, entry.name, "compatibility_minimum")) {
+                const fixture_options = b.addOptions();
+                fixture_options.addOption([]const u8, "compatibility_minimum", minimum_text orelse "none");
+                test_mod.addImport("fixture_options", fixture_options.createModule());
+            }
 
             const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
                 .name = b.dupe(entry.name),
@@ -264,6 +272,7 @@ pub const ExtensionOptions = api.ExtensionOptions;
 pub const TestOptions = api.TestOptions;
 pub const InitializationLevel = api.InitializationLevel;
 const bindgen = @import("build/bindgen.zig");
+const compatibility_minimum_tests = @import("build/compatibility_minimum_tests.zig");
 const compat_metadata = @import("build/compat_metadata.zig");
 const common = @import("build/common.zig");
 const gdextension = @import("build/gdextension.zig");
