@@ -10,8 +10,8 @@ pub fn groups(
     owner: []const u8,
     method: []const u8,
     zig_name: []const u8,
-) !VersionDispatch.Groups {
-    return VersionDispatch.collect(allocator, metadata, owner, method, zig_name, &.{});
+) !version_dispatch.Groups {
+    return version_dispatch.collect(allocator, metadata, owner, method, zig_name, &.{});
 }
 
 fn tableFor(metadata: compat_manifest.Manifest, target: compat_manifest.Target) !compat_manifest.Table {
@@ -147,7 +147,7 @@ test "manifest validation rejects malformed schema and dangling tables" {
 
 const std = @import("std");
 
-const VersionDispatch = @import("VersionDispatch.zig");
+const version_dispatch = @import("version_dispatch.zig");
 const compat_manifest = @import("compat").manifest;
 const GodotApi = @import("common").GodotApi;
 const records = @import("compat").records;

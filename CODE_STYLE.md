@@ -23,6 +23,25 @@ const casez = @import("casez");
 const Config = @import("Config.zig");
 ```
 
+## File names
+
+A file is a struct. Name the file after what that struct is:
+
+- If the file declares top-level fields, it is a type. Use TitleCase,
+  for example `GodotApi.zig` or `Args.zig`, and import it with the same name:
+  `const GodotApi = @import("GodotApi.zig");`.
+- If the file has no top-level fields, it is a namespace of declarations.
+  Use snake_case, for example `version_dispatch.zig`, and import it with a
+  lowercase alias: `const version_dispatch = @import("version_dispatch.zig");`.
+
+When a namespace file holds a single named type that cannot be the file struct,
+such as an `extern struct`, keep the TitleCase name on the type and reach it
+through the namespace:
+
+```zig
+const Version = @import("version.zig").Version;
+```
+
 ## Tests
 
 Group handwritten test declarations at file scope, after production declarations
