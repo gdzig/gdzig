@@ -40,4 +40,4 @@ const Context = @import("../Context.zig");
 const Function = Context.Function;
 const Type = Context.Type;
 
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;

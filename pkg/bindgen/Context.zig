@@ -691,5 +691,5 @@ pub const Property = @import("Context/Property.zig");
 pub const Signal = @import("Context/Signal.zig");
 pub const Type = @import("Context/type.zig").Type;
 pub const Value = @import("Context/value.zig").Value;
-const GodotApi = @import("GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const util = @import("util.zig");

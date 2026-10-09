@@ -155,5 +155,6 @@ const casez = @import("casez");
 const Config = casez.Config;
 const comptimeConvert = casez.comptimeConvert;
 
+pub const GodotApi = @import("GodotApi.zig");
 pub const Args = @import("Args.zig");
 pub const Version = @import("Version.zig").Version;

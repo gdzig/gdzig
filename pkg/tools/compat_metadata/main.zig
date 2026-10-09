@@ -1,5 +1,5 @@
 const Arguments = struct {
-    mode: Metadata.Mode,
+    mode: manifest.Mode,
     current: []const u8,
     old: []const u8,
     input: ?[]const u8,
@@ -10,16 +10,16 @@ const Arguments = struct {
 
 const Report = struct {
     schema_version: u32 = 2,
-    current: Metadata.Provenance,
-    source: Metadata.Provenance,
-    content: Metadata.Provenance,
-    comparison: Metadata.Comparison,
+    current: manifest.Provenance,
+    source: manifest.Provenance,
+    content: manifest.Provenance,
+    comparison: manifest.Comparison,
 };
 
 const usage = "Usage: gdzig-compat-metadata --mode=overwrite|append [--input=<zon>] --current=<records.zon> --old=<records.zon> --output=<zon> --report=<json> [--expect=<zon>]\n";
 
 fn fromArgs(args: *Args) !Arguments {
-    const mode = args.required(Metadata.Mode, "mode") catch |err| return switch (err) {
+    const mode = args.required(manifest.Mode, "mode") catch |err| return switch (err) {
         error.InvalidValue => error.InvalidMode,
         else => err,
     };
@@ -55,15 +55,15 @@ fn writeReport(
     allocator: std.mem.Allocator,
     io: std.Io,
     path: []const u8,
-    current: Records.Snapshot,
-    old: Records.Snapshot,
+    current: records.Snapshot,
+    old: records.Snapshot,
 ) !void {
     var report: std.Io.Writer.Allocating = .init(allocator);
     try std.json.Stringify.value(Report{
-        .current = Metadata.provenance(current, false),
-        .source = Metadata.provenance(old, false),
-        .content = Metadata.provenance(old, !std.mem.eql(u8, old.version, current.version)),
-        .comparison = try Metadata.compare(
+        .current = .fromSnapshot(current, false),
+        .source = .fromSnapshot(old, false),
+        .content = .fromSnapshot(old, !std.mem.eql(u8, old.version, current.version)),
+        .comparison = try .compare(
             allocator,
             old.records,
             current.records,
@@ -85,15 +85,15 @@ fn run(init: std.process.Init) !void {
     var arena: std.heap.ArenaAllocator = .init(init.gpa);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
-    const current = try load(Records.Snapshot, arena_allocator, init.io, arguments.current);
-    const old = try load(Records.Snapshot, arena_allocator, init.io, arguments.old);
+    const current = try load(records.Snapshot, arena_allocator, init.io, arguments.current);
+    const old = try load(records.Snapshot, arena_allocator, init.io, arguments.old);
     const previous = if (arguments.input) |path|
-        try load(Metadata.Manifest, arena_allocator, init.io, path)
+        try load(manifest.Manifest, arena_allocator, init.io, path)
     else
         null;
 
     // Preserve the comparison report before a merge failure aborts the update.
-    const manifest = Metadata.merge(arena_allocator, current, old, arguments.mode, previous) catch |err| {
+    const result_manifest = manifest.Manifest.merge(arena_allocator, current, old, arguments.mode, previous) catch |err| {
         try writeReport(arena_allocator, init.io, arguments.report, current, old);
         return err;
     };
@@ -103,7 +103,7 @@ fn run(init: std.process.Init) !void {
 
     // Merge the target and write the canonical generated cache.
     var output: std.Io.Writer.Allocating = .init(arena_allocator);
-    try Metadata.writeManifest(&output.writer, manifest);
+    try result_manifest.write(&output.writer);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = arguments.output, .data = output.written() });
 
     // Check the expected bytes only when maintenance requested a stale-output guard.
@@ -114,7 +114,7 @@ fn run(init: std.process.Init) !void {
             arena_allocator,
             .limited(16 * 1024 * 1024),
         );
-        try Metadata.checkExpected(output.written(), expected);
+        try manifest.Manifest.checkExpected(output.written(), expected);
     }
 }
 
@@ -149,5 +149,5 @@ test "merge CLI enforces explicit mode and unread input policy before IO" {
 const std = @import("std");
 
 const Args = @import("common").Args;
-const Metadata = @import("CompatMetadata.zig");
-const Records = @import("CompatRecords.zig");
+const manifest = @import("compat").manifest;
+const records = @import("compat").records;

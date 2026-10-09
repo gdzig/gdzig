@@ -96,4 +96,4 @@ test "mixinContents handles CRLF markers" {
 
 const std = @import("std");
 
-const GodotApi = @import("GodotApi.zig");
+const GodotApi = @import("common").GodotApi;

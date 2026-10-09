@@ -21,7 +21,7 @@ fn mismatch(allocator: Allocator, comptime format: []const u8, args: anytype) !R
     };
 }
 
-fn enumTable(tables: []const Records.Enum, type_name: []const u8) ?Records.Enum {
+fn enumTable(tables: []const records.Enum, type_name: []const u8) ?records.Enum {
     const prefix: usize = if (std.mem.startsWith(u8, type_name, "enum::"))
         6
     else if (std.mem.startsWith(u8, type_name, "bitfield::"))
@@ -39,7 +39,7 @@ fn isEnum(type_name: []const u8) bool {
         std.mem.startsWith(u8, type_name, "bitfield::");
 }
 
-fn sameEnum(before: Records.Enum, after: Records.Enum) bool {
+fn sameEnum(before: records.Enum, after: records.Enum) bool {
     if (before.is_bitfield != after.is_bitfield or before.values.len != after.values.len) {
         return false;
     }
@@ -58,8 +58,8 @@ fn sameEnum(before: Records.Enum, after: Records.Enum) bool {
 fn compatibleType(
     before: []const u8,
     after: []const u8,
-    old_enums: []const Records.Enum,
-    new_enums: []const Records.Enum,
+    old_enums: []const records.Enum,
+    new_enums: []const records.Enum,
 ) bool {
     if (isEnum(before) or isEnum(after)) {
         const old = enumTable(old_enums, before) orelse return false;
@@ -75,10 +75,10 @@ fn compatibleType(
 /// Enum renames require complete, identical name-to-value sets on both sides.
 pub fn classify(
     allocator: Allocator,
-    before: Records.Record,
-    after: Records.Record,
-    old_enums: []const Records.Enum,
-    new_enums: []const Records.Enum,
+    before: records.Record,
+    after: records.Record,
+    old_enums: []const records.Enum,
+    new_enums: []const records.Enum,
 ) !Result {
     // Static and vararg changes alter invocation shape, unlike constness alone.
     if (before.is_static != after.is_static) {
@@ -88,8 +88,8 @@ pub fn classify(
         return mismatch(allocator, "is_vararg: {} -> {}", .{ before.is_vararg, after.is_vararg });
     }
 
-    const old_return = before.@"return" orelse Records.Return{ .type = "void", .meta = "" };
-    const new_return = after.@"return" orelse Records.Return{ .type = "void", .meta = "" };
+    const old_return = before.@"return" orelse records.Return{ .type = "void", .meta = "" };
+    const new_return = after.@"return" orelse records.Return{ .type = "void", .meta = "" };
     if (!compatibleType(old_return.type, new_return.type, old_enums, new_enums) or
         !std.mem.eql(u8, old_return.meta, new_return.meta))
     {
@@ -151,7 +151,7 @@ pub fn classify(
     return .identical;
 }
 
-fn probe() Records.Record {
+fn probe() records.Record {
     return .{
         .kind = .class,
         .owner = "Probe",
@@ -217,12 +217,12 @@ test "enum renames require equal values and missing tables fail even for unchang
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const values: []const Records.EnumValue = &.{
+    const values: []const records.EnumValue = &.{
         .{ .name = "OFF", .value = 0 },
         .{ .name = "ON", .value = 1 },
     };
-    const old_enums = &.{Records.Enum{ .name = "Old.Mode", .is_bitfield = false, .values = values }};
-    const new_enums = &.{Records.Enum{ .name = "New.Mode", .is_bitfield = false, .values = values }};
+    const old_enums = &.{records.Enum{ .name = "Old.Mode", .is_bitfield = false, .values = values }};
+    const new_enums = &.{records.Enum{ .name = "New.Mode", .is_bitfield = false, .values = values }};
     var old = probe();
     old.@"return" = .{ .type = "enum::Old.Mode", .meta = "" };
     var current = old;
@@ -231,7 +231,7 @@ test "enum renames require equal values and missing tables fail even for unchang
     try std.testing.expectEqual(Class.abi_compatible, std.meta.activeTag(result));
     try std.testing.expectEqual(Reason.renamed_enum, result.abi_compatible);
     try std.testing.expectEqual(Class.incompatible, std.meta.activeTag(try classify(allocator, old, old, &.{}, &.{})));
-    const changed = &.{Records.Enum{
+    const changed = &.{records.Enum{
         .name = "New.Mode",
         .is_bitfield = false,
         .values = &.{.{ .name = "ON", .value = 2 }},
@@ -246,4 +246,4 @@ test "layout result stores only its active classification payload" {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Records = @import("CompatRecords.zig");
+const records = @import("records.zig");

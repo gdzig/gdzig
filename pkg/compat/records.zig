@@ -40,17 +40,6 @@ pub const Enum = struct {
     values: []const EnumValue,
 };
 
-pub const Snapshot = struct {
-    version: []const u8,
-    status: []const u8,
-    build: []const u8,
-    precision: []const u8,
-    raw_sha256: []const u8,
-    classes_sha256: []const u8,
-    records: []const Record,
-    enums: []const Enum,
-};
-
 /// Parse a canonical exact stable release, rejecting abbreviated and tagged forms.
 pub fn exactVersion(text: []const u8) !std.SemanticVersion {
     const version = std.SemanticVersion.parse(text) catch return error.InvalidExactVersion;
@@ -65,77 +54,88 @@ pub fn exactVersion(text: []const u8) !std.SemanticVersion {
     return version;
 }
 
-/// Extract validated provenance and sorted original method and enum identities.
-/// Returned allocations are owned by the caller's allocator; callers use an arena.
-pub fn extract(allocator: Allocator, bytes: []const u8, version_text: []const u8) !Snapshot {
-    // Validate the exact release and the raw dump's stable official header.
-    const version = try exactVersion(version_text);
-    const parsed = try std.json.parseFromSlice(
-        GodotApi,
-        allocator,
-        bytes,
-        .{ .ignore_unknown_fields = true },
-    );
-    const api = parsed.value;
-    const header = api.header;
-    if (header.version_major != version.major or header.version_minor != version.minor or
-        header.version_patch != version.patch) return error.VersionHeaderMismatch;
-    if (!std.mem.eql(u8, header.version_status, "stable") or
-        !std.mem.eql(u8, header.version_build, "official")) return error.UnauditedBuild;
-    const precision = header.precision orelse return error.MissingPrecision;
-    if (!std.mem.eql(u8, precision, "single")) return error.UnsupportedPrecision;
+pub const Snapshot = struct {
+    version: []const u8,
+    status: []const u8,
+    build: []const u8,
+    precision: []const u8,
+    raw_sha256: []const u8,
+    classes_sha256: []const u8,
+    records: []const Record,
+    enums: []const Enum,
 
-    // Collect original identities and retain each signature and enum's raw values.
-    var records: std.ArrayList(Record) = .empty;
-    var enums: std.ArrayList(Enum) = .empty;
-    for (api.global_enums) |item| {
-        try appendEnum(allocator, &enums, item.name, item);
-    }
-    for (api.classes) |owner| {
-        for (owner.methods orelse &.{}) |method| {
-            try appendMethod(allocator, &records, .class, owner.name, method);
-        }
-        for (owner.enums orelse &.{}) |item| {
-            const name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ owner.name, item.name });
-            try appendEnum(allocator, &enums, name, item);
-        }
-    }
-    for (api.builtin_classes) |owner| {
-        for (owner.methods orelse &.{}) |method| {
-            try appendMethod(allocator, &records, .builtin, owner.name, method);
-        }
-        for (owner.enums orelse &.{}) |item| {
-            const name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ owner.name, item.name });
-            try appendEnum(allocator, &enums, name, item);
-        }
-    }
+    /// Extract validated provenance and sorted original method and enum identities.
+    /// Returned allocations are owned by the caller's allocator; callers use an arena.
+    pub fn extract(allocator: Allocator, bytes: []const u8, version_text: []const u8) !Snapshot {
+        // Validate the exact release and the raw dump's stable official header.
+        const version = try exactVersion(version_text);
+        const parsed = try std.json.parseFromSlice(
+            GodotApi,
+            allocator,
+            bytes,
+            .{ .ignore_unknown_fields = true },
+        );
+        const api = parsed.value;
+        const header = api.header;
+        if (header.version_major != version.major or header.version_minor != version.minor or
+            header.version_patch != version.patch) return error.VersionHeaderMismatch;
+        if (!std.mem.eql(u8, header.version_status, "stable") or
+            !std.mem.eql(u8, header.version_build, "official")) return error.UnauditedBuild;
+        const precision = header.precision orelse return error.MissingPrecision;
+        if (!std.mem.eql(u8, precision, "single")) return error.UnsupportedPrecision;
 
-    // Sort method identities and reject duplicate owner/method records.
-    std.mem.sort(Record, records.items, {}, lessRecord);
-    for (records.items, 0..) |record, i| {
-        if (i > 0 and sameIdentity(records.items[i - 1], record)) return error.DuplicateIdentity;
-    }
-
-    // Sort fully qualified enum identities and reject duplicate names.
-    std.mem.sort(Enum, enums.items, {}, lessEnum);
-    for (enums.items, 0..) |item, i| {
-        if (i > 0 and std.mem.eql(u8, enums.items[i - 1].name, item.name)) {
-            return error.DuplicateEnum;
+        // Collect original identities and retain each signature and enum's raw values.
+        var records: std.ArrayList(Record) = .empty;
+        var enums: std.ArrayList(Enum) = .empty;
+        for (api.global_enums) |item| {
+            try appendEnum(allocator, &enums, item.name, item);
         }
-    }
+        for (api.classes) |owner| {
+            for (owner.methods orelse &.{}) |method| {
+                try appendMethod(allocator, &records, .class, owner.name, method);
+            }
+            for (owner.enums orelse &.{}) |item| {
+                const name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ owner.name, item.name });
+                try appendEnum(allocator, &enums, name, item);
+            }
+        }
+        for (api.builtin_classes) |owner| {
+            for (owner.methods orelse &.{}) |method| {
+                try appendMethod(allocator, &records, .builtin, owner.name, method);
+            }
+            for (owner.enums orelse &.{}) |item| {
+                const name = try std.fmt.allocPrint(allocator, "{s}.{s}", .{ owner.name, item.name });
+                try appendEnum(allocator, &enums, name, item);
+            }
+        }
 
-    // Record both raw and historical-normalized checksums in the extracted snapshot.
-    return .{
-        .version = version_text,
-        .status = header.version_status,
-        .build = header.version_build,
-        .precision = precision,
-        .raw_sha256 = try digest(allocator, bytes),
-        .classes_sha256 = try digest(allocator, try normalizeHistorical(allocator, bytes)),
-        .records = try records.toOwnedSlice(allocator),
-        .enums = try enums.toOwnedSlice(allocator),
-    };
-}
+        // Sort method identities and reject duplicate owner/method records.
+        std.mem.sort(Record, records.items, {}, lessRecord);
+        for (records.items, 0..) |record, i| {
+            if (i > 0 and sameIdentity(records.items[i - 1], record)) return error.DuplicateIdentity;
+        }
+
+        // Sort fully qualified enum identities and reject duplicate names.
+        std.mem.sort(Enum, enums.items, {}, lessEnum);
+        for (enums.items, 0..) |item, i| {
+            if (i > 0 and std.mem.eql(u8, enums.items[i - 1].name, item.name)) {
+                return error.DuplicateEnum;
+            }
+        }
+
+        // Record both raw and historical-normalized checksums in the extracted snapshot.
+        return .{
+            .version = version_text,
+            .status = header.version_status,
+            .build = header.version_build,
+            .precision = precision,
+            .raw_sha256 = try digest(allocator, bytes),
+            .classes_sha256 = try digest(allocator, try normalizeHistorical(allocator, bytes)),
+            .records = try records.toOwnedSlice(allocator),
+            .enums = try enums.toOwnedSlice(allocator),
+        };
+    }
+};
 
 fn appendMethod(
     allocator: Allocator,
@@ -260,7 +260,7 @@ test "extract validates header and retains signatures and sorted qualified enums
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const snapshot = try extract(a, fixture, "4.6.3");
+    const snapshot = try Snapshot.extract(a, fixture, "4.6.3");
     try std.testing.expectEqualStrings("Error", snapshot.enums[0].name);
     try std.testing.expectEqualStrings("Owner.Mode", snapshot.enums[1].name);
     try std.testing.expectEqualStrings("A", snapshot.enums[0].values[0].name);
@@ -271,7 +271,7 @@ test "extract validates header and retains signatures and sorted qualified enums
     try std.testing.expect(snapshot.records[0].is_const);
     try std.testing.expectEqual(@as(usize, 64), snapshot.raw_sha256.len);
     try std.testing.expectEqual(@as(usize, 64), snapshot.classes_sha256.len);
-    try std.testing.expectError(error.VersionHeaderMismatch, extract(a, fixture, "4.6.2"));
+    try std.testing.expectError(error.VersionHeaderMismatch, Snapshot.extract(a, fixture, "4.6.2"));
 }
 
 test "extract rejects unstable builds and duplicate method and enum identities" {
@@ -282,17 +282,17 @@ test "extract rejects unstable builds and duplicate method and enum identities" 
     const header = parsed.value.object.getPtr("header").?;
     header.object.getPtr("version_status").?.* = .{ .string = "beta" };
     const unstable = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.UnauditedBuild, extract(a, unstable, "4.6.3"));
+    try std.testing.expectError(error.UnauditedBuild, Snapshot.extract(a, unstable, "4.6.3"));
     header.object.getPtr("version_status").?.* = .{ .string = "stable" };
     const enums = parsed.value.object.getPtr("global_enums").?;
     try enums.array.append(enums.array.items[0]);
     const duplicate = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.DuplicateEnum, extract(a, duplicate, "4.6.3"));
+    try std.testing.expectError(error.DuplicateEnum, Snapshot.extract(a, duplicate, "4.6.3"));
     _ = enums.array.pop();
     const methods = parsed.value.object.getPtr("classes").?.array.items[0].object.getPtr("methods").?;
     try methods.array.append(methods.array.items[0]);
     const duplicate_method = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.DuplicateIdentity, extract(a, duplicate_method, "4.6.3"));
+    try std.testing.expectError(error.DuplicateIdentity, Snapshot.extract(a, duplicate_method, "4.6.3"));
 }
 
 test "extract sorts owners and methods without changing signatures" {
@@ -312,7 +312,7 @@ test "extract sorts owners and methods without changing signatures" {
     another.object.getPtr("name").?.* = .{ .string = "a" };
     try methods.array.append(another);
     try classes.array.append(alpha);
-    const result = try extract(a, try std.json.Stringify.valueAlloc(a, first.value, .{}), "4.6.3");
+    const result = try Snapshot.extract(a, try std.json.Stringify.valueAlloc(a, first.value, .{}), "4.6.3");
     try std.testing.expectEqual(@as(usize, 3), result.records.len);
     try std.testing.expectEqualStrings("A", result.records[0].owner);
     try std.testing.expectEqualStrings("a", result.records[1].method);
@@ -351,4 +351,4 @@ test "historical normalization ignores only class order and preserves nested con
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const GodotApi = @import("GodotApi.zig");
+const GodotApi = @import("common").GodotApi;

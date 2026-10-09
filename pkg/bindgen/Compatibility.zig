@@ -1,12 +1,12 @@
 //! Validate measured compatibility manifests before emitting method binds.
 
-pub const manifest: Metadata.Manifest = @import("generated/compatibility.zon");
+pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.zon");
 
 /// Return owned legacy ranges and conventional adapter names for one API method.
 /// This query describes measured layouts without requiring any adapter source.
 pub fn groups(
     allocator: std.mem.Allocator,
-    metadata: Metadata.Manifest,
+    metadata: compat_manifest.Manifest,
     owner: []const u8,
     method: []const u8,
     zig_name: []const u8,
@@ -14,7 +14,7 @@ pub fn groups(
     return VersionDispatch.collect(allocator, metadata, owner, method, zig_name, &.{});
 }
 
-fn tableFor(metadata: Metadata.Manifest, target: Metadata.Target) !Metadata.Table {
+fn tableFor(metadata: compat_manifest.Manifest, target: compat_manifest.Target) !compat_manifest.Table {
     for (metadata.tables) |table| {
         if (std.mem.eql(u8, table.id, target.table_id)) return table;
     }
@@ -22,14 +22,14 @@ fn tableFor(metadata: Metadata.Manifest, target: Metadata.Target) !Metadata.Tabl
 }
 
 /// Reject malformed provenance and duplicate or dangling target/table identities.
-pub fn validateManifest(metadata: Metadata.Manifest) !void {
+pub fn validateManifest(metadata: compat_manifest.Manifest) !void {
     if (metadata.schema_version != 2) return error.UnsupportedCompatibilitySchema;
     try validateSource(metadata.current);
     if (metadata.current.checksum_kind != .raw_sha256) return error.InvalidCompatibilityProvenance;
-    const current = try Records.exactVersion(metadata.current.version);
+    const current = try records.exactVersion(metadata.current.version);
 
     for (metadata.tables, 0..) |table, index| {
-        _ = try Records.exactVersion(table.id);
+        _ = try records.exactVersion(table.id);
         for (metadata.tables[0..index]) |previous| {
             if (std.mem.eql(u8, table.id, previous.id)) return error.DuplicateCompatibilityTable;
         }
@@ -49,7 +49,7 @@ pub fn validateManifest(metadata: Metadata.Manifest) !void {
     }
     for (metadata.targets, 0..) |target, index| {
         try validateSource(target.source);
-        const version = try Records.exactVersion(target.source.version);
+        const version = try records.exactVersion(target.source.version);
         switch (version.order(current)) {
             .gt => return error.InvalidCompatibilityProvenance,
             .eq => {
@@ -74,8 +74,8 @@ pub fn validateManifest(metadata: Metadata.Manifest) !void {
     }
 }
 
-fn validateSource(source: Metadata.Provenance) !void {
-    _ = try Records.exactVersion(source.version);
+fn validateSource(source: compat_manifest.Provenance) !void {
+    _ = try records.exactVersion(source.version);
     if (!std.mem.eql(u8, source.status, "stable") or
         !std.mem.eql(u8, source.build, "official") or
         !std.mem.eql(u8, source.precision, "single") or source.sha256.len != 64)
@@ -90,7 +90,7 @@ fn validateSource(source: Metadata.Provenance) !void {
 }
 
 /// Check sparse legacy hashes against the current API's compatibility evidence.
-pub fn validateOverridesAgainstApi(metadata: Metadata.Manifest, api: GodotApi) !void {
+pub fn validateOverridesAgainstApi(metadata: compat_manifest.Manifest, api: GodotApi) !void {
     try validateManifest(metadata);
     for (metadata.tables) |table| {
         for (table.overrides) |record| {
@@ -148,6 +148,6 @@ test "manifest validation rejects malformed schema and dangling tables" {
 const std = @import("std");
 
 const VersionDispatch = @import("VersionDispatch.zig");
-const Metadata = @import("CompatMetadata.zig");
-const GodotApi = @import("GodotApi.zig");
-const Records = @import("CompatRecords.zig");
+const compat_manifest = @import("compat").manifest;
+const GodotApi = @import("common").GodotApi;
+const records = @import("compat").records;

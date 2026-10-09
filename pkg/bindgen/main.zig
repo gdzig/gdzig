@@ -78,4 +78,4 @@ const Args = @import("common").Args;
 const codegen = @import("codegen.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
-const GodotApi = @import("GodotApi.zig");
+const GodotApi = @import("common").GodotApi;

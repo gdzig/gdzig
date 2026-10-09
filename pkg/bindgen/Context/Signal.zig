@@ -74,4 +74,4 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Context = @import("../Context.zig");
 const Type = Context.Type;
 
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;

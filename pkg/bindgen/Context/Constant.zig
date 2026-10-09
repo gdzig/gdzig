@@ -139,6 +139,6 @@ const gdzig_case = common.gdzig_case;
 const Context = @import("../Context.zig");
 const Type = Context.Type;
 const Builtin = Context.Builtin;
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const docs = @import("docs.zig");
 const Value = @import("value.zig").Value;

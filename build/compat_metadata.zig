@@ -77,9 +77,16 @@ pub fn add(b: *Build, comptime asking_build_zig: type) void {
         .optimize = .debug,
         .casez = casez.module("casez"),
     });
-    const extract_mod = toolModule(b, "pkg/bindgen/compat_extract.zig", common_mod);
-    const merge_mod = toolModule(b, "pkg/bindgen/compat_metadata.zig", common_mod);
+    const compat_mod = b.createModule(.{
+        .root_source_file = b.path("pkg/compat/compat.zig"),
+        .target = b.graph.host,
+        .optimize = .debug,
+        .imports = &.{.{ .name = "common", .module = common_mod }},
+    });
+    const extract_mod = toolModule(b, "pkg/tools/compat_extract/main.zig", common_mod, compat_mod);
+    const merge_mod = toolModule(b, "pkg/tools/compat_metadata/main.zig", common_mod, compat_mod);
     const test_step = b.step("test-compat-metadata", "Run optional extraction and merge host tests");
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = compat_mod })).step);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = extract_mod })).step);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = merge_mod })).step);
     var generator: Generator = .{
@@ -126,12 +133,20 @@ pub fn add(b: *Build, comptime asking_build_zig: type) void {
     }
 }
 
-fn toolModule(b: *Build, path: []const u8, common_mod: *Build.Module) *Build.Module {
+fn toolModule(
+    b: *Build,
+    path: []const u8,
+    common_mod: *Build.Module,
+    compat_mod: *Build.Module,
+) *Build.Module {
     return b.createModule(.{
         .root_source_file = b.path(path),
         .target = b.graph.host,
         .optimize = .debug,
-        .imports = &.{.{ .name = "common", .module = common_mod }},
+        .imports = &.{
+            .{ .name = "common", .module = common_mod },
+            .{ .name = "compat", .module = compat_mod },
+        },
     });
 }
 

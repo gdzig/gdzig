@@ -3,11 +3,11 @@ pub const Group = struct {
     lower: Version,
     upper: Version,
     old_hash: u64,
-    layout: MethodLayout.Class,
+    layout: method_layout.Class,
     difference: []const u8,
     adapter: []const u8,
     available: bool,
-    signature: ?Metadata.Override = null,
+    signature: ?manifest.Override = null,
 };
 
 /// Owned range names; layout text borrows the manifest.
@@ -26,19 +26,19 @@ pub const Groups = struct {
 /// Group consecutive measured legacy layouts and match naming-only adapters.
 pub fn collect(
     allocator: Allocator,
-    metadata: Metadata.Manifest,
+    metadata: manifest.Manifest,
     owner: []const u8,
     method: []const u8,
     zig_name: []const u8,
     declarations: []const []const u8,
 ) !Groups {
     // Canonical numeric ordering makes range boundaries independent of table order.
-    const targets = try allocator.dupe(Metadata.Target, metadata.targets);
+    const targets = try allocator.dupe(manifest.Target, metadata.targets);
     defer allocator.free(targets);
     for (targets) |target| {
         _ = try Version.parseStrict(target.source.version);
     }
-    std.mem.sort(Metadata.Target, targets, {}, targetLess);
+    std.mem.sort(manifest.Target, targets, {}, targetLess);
     var groups: std.ArrayList(Group) = .empty;
     errdefer {
         for (groups.items) |group| {
@@ -96,7 +96,7 @@ pub fn collect(
     return .{ .items = try groups.toOwnedSlice(allocator) };
 }
 
-fn targetLess(_: void, lhs: Metadata.Target, rhs: Metadata.Target) bool {
+fn targetLess(_: void, lhs: manifest.Target, rhs: manifest.Target) bool {
     const left = Version.parseStrict(lhs.source.version) catch
         std.debug.panic("invalid manifest target version {s}", .{lhs.source.version});
     const right = Version.parseStrict(rhs.source.version) catch
@@ -105,11 +105,11 @@ fn targetLess(_: void, lhs: Metadata.Target, rhs: Metadata.Target) bool {
 }
 
 fn findOverride(
-    metadata: Metadata.Manifest,
-    target: Metadata.Target,
+    metadata: manifest.Manifest,
+    target: manifest.Target,
     owner: []const u8,
     method: []const u8,
-) ?Metadata.Override {
+) ?manifest.Override {
     for (metadata.tables) |table| {
         if (!std.mem.eql(u8, table.id, target.table_id)) continue;
         for (table.overrides) |record| {
@@ -123,21 +123,22 @@ fn findOverride(
     return null;
 }
 
-fn requiresAdapter(layout: MethodLayout.Class) bool {
+fn requiresAdapter(layout: method_layout.Class) bool {
     return layout == .incompatible or layout == .return_added;
 }
 
-fn sameLayout(group: Group, record: Metadata.Override) bool {
+fn sameLayout(group: Group, record: manifest.Override) bool {
     return group.old_hash == record.old_hash and group.layout == record.layout;
 }
 
 fn allocationProbe(allocator: Allocator) !void {
-    const result = try Compatibility.groups(
+    const result = try collect(
         allocator,
-        Compatibility.manifest,
+        cached,
         "Object",
         "is_class",
         "isClass",
+        &.{},
     );
     defer result.deinit(allocator);
     try std.testing.expectEqual(@as(usize, 1), result.items.len);
@@ -148,8 +149,8 @@ test "Compatibility range query releases every allocation on success and failure
 }
 
 test "numeric ordering separates distinct patch ranges and names later adapters" {
-    var metadata = Compatibility.manifest;
-    const first: Metadata.Override = .{
+    var metadata = cached;
+    const first: manifest.Override = .{
         .kind = .class,
         .owner = "Probe",
         .method = "probe",
@@ -181,7 +182,7 @@ test "numeric ordering separates distinct patch ranges and names later adapters"
 test "measured Object layout forms one range with a naming-only adapter" {
     const groups = try collect(
         std.testing.allocator,
-        Compatibility.manifest,
+        cached,
         "Object",
         "is_class",
         "isClass",
@@ -200,7 +201,7 @@ test "measured Object layout forms one range with a naming-only adapter" {
 test "plain measured layouts do not introduce adapter dispatch" {
     const groups = try collect(
         std.testing.allocator,
-        Compatibility.manifest,
+        cached,
         "Resource",
         "duplicate",
         "duplicate",
@@ -214,6 +215,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Version = @import("common").Version;
-const Metadata = @import("CompatMetadata.zig");
-const MethodLayout = @import("MethodLayout.zig");
-const Compatibility = @import("Compatibility.zig");
+const manifest = @import("compat").manifest;
+const method_layout = @import("compat").method_layout;
+const cached: manifest.Manifest = @import("generated/compatibility.zon");
