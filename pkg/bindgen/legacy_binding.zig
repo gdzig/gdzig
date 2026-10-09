@@ -95,7 +95,12 @@ test "legacy signatures retain positional old types flags hash and range" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .metadata = compatibility.manifest,
+    };
     const modern: Context.Function = .{
         .name = "probe",
         .name_api = "probe",
@@ -142,7 +147,12 @@ test "legacy signatures retain positional old types flags hash and range" {
 test "missing old enums become i64 while existing enum names retain normal mapping" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    var ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    var ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .metadata = compatibility.manifest,
+    };
     try ctx.symbol_lookup.put(arena.allocator(), "Probe.Mode", .{
         .path = "Probe.Mode",
         .label = "Probe.Mode",
@@ -165,7 +175,12 @@ test "missing old enums become i64 while existing enum names retain normal mappi
 test "missing enum argument and return signatures use i64 regardless of old metadata" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .metadata = compatibility.manifest,
+    };
     const function: Context.Function = .{
         .name = "probe",
         .name_api = "probe",
@@ -208,4 +223,5 @@ const Version = @import("common").Version;
 const GodotApi = @import("common").GodotApi;
 const Context = @import("Context.zig");
 const manifest = @import("compat").manifest;
+const compatibility = @import("compatibility.zig");
 const version_dispatch = @import("version_dispatch.zig");

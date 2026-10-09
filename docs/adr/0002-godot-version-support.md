@@ -17,8 +17,14 @@ is assessed from actual API differences, never inferred from a hash alone.
 `-Dgodot_compatibility_minimum=major.minor[.patch]` is an optimization of this
 runtime-discovery policy. It does not select a different API snapshot. The name
 matches Godot's `.gdextension` `compatibility_minimum` key: it is a floor, not an
-exact version lock. A missing patch means zero. Accepted floors are measured
-targets in the generated compatibility manifest, with no handwritten allowlist.
+exact version lock. A missing patch means zero. Cached floors use measured
+targets in the vendored compatibility manifest, with no handwritten allowlist.
+An uncached stable release at or below the current snapshot is resolved through
+`godot-versions`, downloaded and extracted on demand. One append operation
+produces a build-cache manifest without changing the vendored cache. Bindgen
+reads that manifest as an input file. Default builds and cached floors do not
+resolve the historical dependency or execute the metadata tools. Unresolved
+comparison evidence remains a named error rather than implied support.
 
 Bindgen emits one selected binding per generated class or builtin method.
 Sparse historical overrides replace current hashes only for ABI-compatible
