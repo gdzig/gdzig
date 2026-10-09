@@ -3,6 +3,18 @@ pub const Override = struct {
     owner: []const u8,
     method: []const u8,
     old_hash: u64,
+    layout: MethodLayout.Class,
+    added_arguments: []const []const u8 = &.{},
+    layout_diff: ?[]const u8 = null,
+    old_arguments: ?[]const Records.Argument = null,
+    old_return: ?Records.Return = null,
+    old_flags: ?Flags = null,
+};
+
+pub const Flags = struct {
+    is_const: bool,
+    is_static: bool,
+    is_vararg: bool,
 };
 
 pub const Audit = struct {
@@ -76,11 +88,13 @@ pub fn provenance(snapshot: Records.Snapshot, historical: bool) Provenance {
     };
 }
 
-/// Compare only extracted hashes, retaining measured compatibility audit evidence.
+/// Compare extracted hashes and layouts, retaining every measured ABI difference.
 pub fn compare(
     allocator: Allocator,
     older: []const Records.Record,
     current: []const Records.Record,
+    old_enums: []const Records.Enum,
+    new_enums: []const Records.Enum,
 ) !Comparison {
     try validateRecords(older);
     try validateRecords(current);
@@ -116,12 +130,47 @@ pub fn compare(
             if (std.mem.indexOfScalar(u64, record.compatibility, p.hash) == null) {
                 return error.MissingCompatibilityEvidence;
             }
-            try overrides.append(allocator, .{
+            const layout = try MethodLayout.classify(allocator, p, record, old_enums, new_enums);
+            var override: Override = .{
                 .kind = record.kind,
                 .owner = record.owner,
                 .method = record.method,
                 .old_hash = p.hash,
-            });
+                .layout = std.meta.activeTag(layout),
+            };
+            // Preserve the serialized cache while consuming only the active payload.
+            switch (layout) {
+                .identical => {},
+                .trailing_defaults => |details| {
+                    override.added_arguments = details.added_arguments;
+                },
+                .abi_compatible => |reason| {
+                    override.layout_diff = switch (reason) {
+                        .const_flag => "const",
+                        .renamed_enum => "enum_renamed",
+                    };
+                },
+                .incompatible => |diff| override.layout_diff = diff,
+                .return_added => {
+                    const old_return = p.@"return" orelse Records.Return{ .type = "void", .meta = "" };
+                    const new_return = record.@"return" orelse Records.Return{ .type = "void", .meta = "" };
+                    override.layout_diff = try std.fmt.allocPrint(
+                        allocator,
+                        "return: {s}/{s} -> {s}/{s}",
+                        .{ old_return.type, old_return.meta, new_return.type, new_return.meta },
+                    );
+                },
+            }
+            if (layout == .incompatible or layout == .return_added) {
+                override.old_arguments = p.arguments;
+                override.old_return = p.@"return";
+                override.old_flags = .{
+                    .is_const = p.is_const,
+                    .is_static = p.is_static,
+                    .is_vararg = p.is_vararg,
+                };
+            }
+            try overrides.append(allocator, override);
         } else {
             try absent.append(allocator, row);
             if (record.compatibility.len > 0) try unresolved.append(allocator, row);
@@ -182,7 +231,7 @@ pub fn merge(
     }
 
     // Add the measured target, then sort releases into canonical order.
-    const comparison = try compare(allocator, old.records, current.records);
+    const comparison = try compare(allocator, old.records, current.records, old.enums, current.enums);
     if (comparison.unresolved.len > 0) return error.UnresolvedCompatibilityEvidence;
     try rows.append(allocator, .{
         .source = provenance(old, !std.mem.eql(u8, old.version, current.version)),
@@ -226,8 +275,47 @@ fn sameOverrides(a: []const Override, b: []const Override) bool {
     if (a.len != b.len) return false;
     for (a, b) |left, right| {
         if (left.kind != right.kind or left.old_hash != right.old_hash or
+            left.layout != right.layout or
             !std.mem.eql(u8, left.owner, right.owner) or
             !std.mem.eql(u8, left.method, right.method)) return false;
+        if (!std.meta.eql(left.layout_diff, right.layout_diff)) {
+            const left_diff = left.layout_diff orelse return false;
+            const right_diff = right.layout_diff orelse return false;
+            if (!std.mem.eql(u8, left_diff, right_diff)) return false;
+        }
+        if (left.added_arguments.len != right.added_arguments.len) return false;
+        for (left.added_arguments, right.added_arguments) |before, after| {
+            if (!std.mem.eql(u8, before, after)) return false;
+        }
+        // Compare nested signature text by value, not borrowed slice addresses.
+        if (!sameSignature(left, right)) return false;
+    }
+    return true;
+}
+
+fn sameSignature(left: Override, right: Override) bool {
+    if (!std.meta.eql(left.old_flags, right.old_flags)) return false;
+    if ((left.old_return == null) != (right.old_return == null)) return false;
+    if (left.old_return) |before| {
+        const after = right.old_return.?;
+        if (!std.mem.eql(u8, before.type, after.type) or
+            !std.mem.eql(u8, before.meta, after.meta))
+        {
+            return false;
+        }
+    }
+    if ((left.old_arguments == null) != (right.old_arguments == null)) return false;
+    const before = left.old_arguments orelse return true;
+    const after = right.old_arguments.?;
+    if (before.len != after.len) return false;
+    for (before, after) |a, b| {
+        if (!std.mem.eql(u8, a.name, b.name) or
+            !std.mem.eql(u8, a.type, b.type) or
+            !std.mem.eql(u8, a.meta, b.meta) or
+            a.has_default != b.has_default)
+        {
+            return false;
+        }
     }
     return true;
 }
@@ -273,6 +361,28 @@ fn fixtureRecord(hash: u64, compatibility: []const u64) Records.Record {
     };
 }
 
+test "shim-layout overrides serialize their original signature and flags" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var old = fixtureRecord(101, &.{});
+    old.arguments = &.{.{ .name = "value", .type = "String" }};
+    var modern = fixtureRecord(202, &.{101});
+    modern.arguments = &.{.{ .name = "value", .type = "StringName" }};
+    const manifest = try merge(
+        allocator,
+        fixtureSnapshot("4.7.2", &.{modern}),
+        fixtureSnapshot("4.6.0", &.{old}),
+        .overwrite,
+        null,
+    );
+    var output: std.Io.Writer.Allocating = .init(allocator);
+    try writeManifest(&output.writer, manifest);
+    try std.testing.expect(std.mem.indexOf(u8, output.written(), ".old_arguments") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output.written(), ".old_flags") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output.written(), "\"String\"") != null);
+}
+
 test "merge overwrite append replacement table cleanup and order-independent bytes" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -312,25 +422,47 @@ test "hash comparison preserves primary membership virtual absent multi and dupl
     const a = arena.allocator();
     const current = [_]Records.Record{fixtureRecord(202, &.{ 101, 303 })};
     const old = [_]Records.Record{fixtureRecord(101, &.{})};
-    const result = try compare(a, &old, &current);
+    const result = try compare(a, &old, &current, &.{}, &.{});
     try std.testing.expectEqual(@as(u64, 101), result.overrides[0].old_hash);
     try std.testing.expectEqual(@as(usize, 1), result.multi_compat.len);
-    try std.testing.expectEqual(@as(usize, 0), (try compare(a, &current, &current)).overrides.len);
-    try std.testing.expectError(error.MissingCompatibilityEvidence, compare(a, &old, &.{fixtureRecord(202, &.{303})}));
-    try std.testing.expectError(error.DuplicateIdentity, compare(a, &.{ old[0], old[0] }, &current));
+    try std.testing.expectEqual(@as(usize, 0), (try compare(a, &current, &current, &.{}, &.{})).overrides.len);
+    try std.testing.expectError(error.MissingCompatibilityEvidence, compare(a, &old, &.{fixtureRecord(202, &.{303})}, &.{}, &.{}));
+    try std.testing.expectError(error.DuplicateIdentity, compare(a, &.{ old[0], old[0] }, &current, &.{}, &.{}));
     var virtual = current[0];
     virtual.virtual = true;
     var old_virtual = old[0];
     old_virtual.virtual = true;
-    try std.testing.expectEqual(@as(usize, 1), (try compare(a, &.{old_virtual}, &.{virtual})).virtual.len);
-    const absent = try compare(a, &.{}, &current);
+    try std.testing.expectEqual(@as(usize, 1), (try compare(a, &.{old_virtual}, &.{virtual}, &.{}, &.{})).virtual.len);
+    const absent = try compare(a, &.{}, &current, &.{}, &.{});
     try std.testing.expectEqual(@as(usize, 1), absent.absent.len);
     try std.testing.expectEqual(@as(usize, 1), absent.unresolved.len);
     try checkExpected("candidate", "candidate");
     try std.testing.expectError(error.StaleCompatibilityMetadata, checkExpected("candidate", "candidatf"));
 }
 
+test "return-added union classification preserves serialized diff and legacy flags" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const old = fixtureRecord(101, &.{});
+    var current = fixtureRecord(202, &.{101});
+    current.@"return" = .{ .type = "bool", .meta = "" };
+    const result = try compare(arena.allocator(), &.{old}, &.{current}, &.{}, &.{});
+    const override = result.overrides[0];
+    try std.testing.expectEqual(MethodLayout.Class.return_added, override.layout);
+    try std.testing.expectEqualStrings("return: void/ -> bool/", override.layout_diff.?);
+    try std.testing.expectEqual(@as(usize, 0), override.old_arguments.?.len);
+    try std.testing.expect(override.old_return == null);
+    try std.testing.expect(!override.old_flags.?.is_static);
+
+    current.@"return" = null;
+    current.is_const = true;
+    const const_result = try compare(arena.allocator(), &.{old}, &.{current}, &.{}, &.{});
+    try std.testing.expectEqualStrings("const", const_result.overrides[0].layout_diff.?);
+    try std.testing.expect(const_result.overrides[0].old_flags == null);
+}
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Records = @import("CompatRecords.zig");
+const MethodLayout = @import("MethodLayout.zig");

@@ -68,19 +68,30 @@ fn run(init: std.process.Init) !void {
     else
         null;
 
-    // Preserve the comparison report before merging the target into the cache.
+    // Accumulate measured targets independently of available source adapters.
+    const merged = Metadata.merge(arena_allocator, current, old, arguments.mode, previous);
+
+    // Preserve the measured comparison beside the cache.
     var report: std.Io.Writer.Allocating = .init(arena_allocator);
     try std.json.Stringify.value(Report{
         .current = Metadata.provenance(current, false),
         .source = Metadata.provenance(old, false),
         .content = Metadata.provenance(old, !std.mem.eql(u8, old.version, current.version)),
-        .comparison = try Metadata.compare(arena_allocator, old.records, current.records),
+        .comparison = try Metadata.compare(
+            arena_allocator,
+            old.records,
+            current.records,
+            old.enums,
+            current.enums,
+        ),
     }, .{ .whitespace = .indent_2 }, &report.writer);
     try report.writer.writeByte('\n');
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = arguments.report, .data = report.written() });
 
+    // Reject unresolved evidence only after preserving its comparison report.
+    const manifest = try merged;
+
     // Merge the target and write the canonical generated cache.
-    const manifest = try Metadata.merge(arena_allocator, current, old, arguments.mode, previous);
     var output: std.Io.Writer.Allocating = .init(arena_allocator);
     try Metadata.writeManifest(&output.writer, manifest);
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = arguments.output, .data = output.written() });

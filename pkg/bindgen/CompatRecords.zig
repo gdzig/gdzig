@@ -4,9 +4,10 @@ pub const Kind = enum {
 };
 
 pub const Argument = struct {
+    name: []const u8 = "",
     type: []const u8,
-    meta: []const u8,
-    has_default: bool,
+    meta: []const u8 = "",
+    has_default: bool = false,
 };
 
 pub const Return = struct {
@@ -146,6 +147,7 @@ fn appendMethod(
     var arguments: std.ArrayList(Argument) = .empty;
     for (method.arguments orelse &.{}) |arg| {
         try arguments.append(allocator, .{
+            .name = arg.name,
             .type = arg.type,
             .meta = if (@hasField(@TypeOf(arg), "meta")) arg.meta else "",
             .has_default = arg.default_value.len != 0,

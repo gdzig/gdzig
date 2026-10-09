@@ -68,6 +68,8 @@ test {
     std.testing.log_level = .err;
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(@import("Mixin.zig"));
+    std.testing.refAllDecls(@import("Compatibility.zig"));
+    std.testing.refAllDecls(@import("VersionDispatch.zig"));
 }
 
 const std = @import("std");
