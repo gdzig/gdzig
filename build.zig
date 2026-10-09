@@ -106,6 +106,7 @@ pub fn build(b: *Build) !void {
     const run_tests_bindgen = b.addRunArtifact(tests_bindgen);
     test_step.dependOn(&run_tests_bindgen.step);
     b.step("test-bindgen", "Run bindgen unit tests").dependOn(&run_tests_bindgen.step);
+    test_step.dependOn(legacy_tests.add(b, bindgen_exe));
 
     const tests_protocol = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/testing/protocol.zig"),
@@ -260,3 +261,4 @@ const bindgen = @import("build/bindgen.zig");
 const compat_metadata = @import("build/compat_metadata.zig");
 const common = @import("build/common.zig");
 const gdextension = @import("build/gdextension.zig");
+const legacy_tests = @import("build/legacy_tests.zig");
