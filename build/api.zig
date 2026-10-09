@@ -272,6 +272,9 @@ pub fn addTestImpl(b: *Build, resolver: Resolver, options: TestOptions) *Step.Ru
     });
 
     const run = b.addRunArtifact(coordinator);
+    // Installation orders the loaded extension but does not key coordinator caching.
+    // Every requested engine test must observe the extension currently installed.
+    run.has_side_effects = true;
     run.enableTestRunnerMode();
     run.step.dependOn(&install_project.step);
     return run;

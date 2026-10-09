@@ -9,6 +9,11 @@ pub fn build(b: *Build) !void {
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
     const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
+    const minimum_text = b.option([]const u8, "godot_compatibility_minimum", "Measured minimum Godot version: major.minor[.patch]");
+    const minimum = if (minimum_text) |text|
+        try compatibility_minimum.parse(text, compatibility_manifest.targets)
+    else
+        null;
     const regenerate_interface = b.option(bool, "regenerate-interface", "Regenerate the vendored GDExtension interface header (requires Python)") orelse false;
 
     //
@@ -131,6 +136,7 @@ pub fn build(b: *Build) !void {
         .headers = headers,
         .precision = precision,
         .architecture = architecture,
+        .godot_compatibility_minimum = minimum,
     });
 
     //
@@ -262,3 +268,5 @@ const compat_metadata = @import("build/compat_metadata.zig");
 const common = @import("build/common.zig");
 const gdextension = @import("build/gdextension.zig");
 const legacy_tests = @import("build/legacy_tests.zig");
+const compatibility_minimum = @import("pkg/common/compatibility_minimum.zig");
+const compatibility_manifest = @import("pkg/bindgen/generated/compatibility.zon");

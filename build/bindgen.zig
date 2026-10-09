@@ -71,6 +71,7 @@ pub const RunOptions = struct {
     headers: Build.LazyPath,
     precision: []const u8 = "float",
     architecture: []const u8 = "64",
+    godot_compatibility_minimum: ?Version = null,
 };
 
 /// Run bindgen and return the output directory containing generated bindings.
@@ -89,6 +90,13 @@ pub fn run(b: *Build, exe: *Build.Step.Compile, options: RunOptions) Build.LazyP
     cmd.addArg(b.fmt("--precision={s}", .{options.precision}));
     cmd.addArg(b.fmt("--architecture={s}", .{options.architecture}));
     cmd.addArg(b.fmt("--verbosity={s}", .{if (b.graph.verbose) "verbose" else "quiet"}));
+    if (options.godot_compatibility_minimum) |minimum| {
+        cmd.addArg(b.fmt("--godot-compatibility-minimum={d}.{d}.{d}", .{
+            minimum.major,
+            minimum.minor,
+            minimum.patch,
+        }));
+    }
 
     return bindings_output;
 }
@@ -97,5 +105,6 @@ const std = @import("std");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
 
+const Version = @import("../pkg/common/version.zig").Version;
 const common = @import("common.zig");
 const gdextension = @import("gdextension.zig");
