@@ -197,5 +197,5 @@ const Allocator = std.mem.Allocator;
 const Ast = std.zig.Ast;
 
 const Context = @import("Context.zig");
-const GodotApi = @import("GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const util = @import("util.zig");

@@ -8,7 +8,7 @@ const usage = "Usage: gdzig-compat-extract --api=<json> --version=<x.y.z> --outp
 
 fn fromArgs(args: *Args) !Arguments {
     const version = try args.required([]const u8, "version");
-    _ = try Records.exactVersion(version);
+    _ = try records.exactVersion(version);
     const result: Arguments = .{
         .api = try args.required([]const u8, "api"),
         .version = version,
@@ -26,9 +26,9 @@ fn run(init: std.process.Init) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
     const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, arguments.api, allocator, .limited(128 * 1024 * 1024));
-    const records = try Records.extract(allocator, bytes, arguments.version);
+    const snapshot: records.Snapshot = try .extract(allocator, bytes, arguments.version);
     var output: std.Io.Writer.Allocating = .init(allocator);
-    try std.zon.stringify.serialize(records, .{}, &output.writer);
+    try std.zon.stringify.serialize(snapshot, .{}, &output.writer);
     try output.writer.writeByte('\n');
     try std.Io.Dir.cwd().writeFile(init.io, .{ .sub_path = arguments.output, .data = output.written() });
 }
@@ -53,4 +53,4 @@ test "extract arguments reject unknown positional and abbreviated versions befor
 const std = @import("std");
 
 const Args = @import("common").Args;
-const Records = @import("CompatRecords.zig");
+const records = @import("compat").records;

@@ -193,5 +193,5 @@ const casez = @import("casez");
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const docs = @import("docs.zig");

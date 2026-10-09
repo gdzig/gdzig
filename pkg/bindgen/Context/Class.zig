@@ -301,6 +301,6 @@ const Function = Context.Function;
 const Imports = Context.Imports;
 const Property = Context.Property;
 const Signal = Context.Signal;
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const Mixin = @import("../Mixin.zig");
 const docs = @import("docs.zig");

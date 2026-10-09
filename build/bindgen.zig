@@ -24,6 +24,13 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
         .casez = casez.module("casez"),
     });
 
+    const compat_mod = b.createModule(.{
+        .root_source_file = b.path("pkg/compat/compat.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "common", .module = common_mod }},
+    });
+
     const gdextension_mod = gdextension.build(b, .{
         .headers = options.headers,
         .target = target,
@@ -49,6 +56,7 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
             .{ .name = "build_options", .module = build_options.createModule() },
             .{ .name = "casez", .module = casez.module("casez") },
             .{ .name = "common", .module = common_mod },
+            .{ .name = "compat", .module = compat_mod },
             .{ .name = "gdextension", .module = gdextension_mod },
         },
     });

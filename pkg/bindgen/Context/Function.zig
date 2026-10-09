@@ -565,6 +565,6 @@ const godot_case = common.godot_case;
 const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const docs = @import("docs.zig");
 const Value = @import("value.zig").Value;

@@ -68,6 +68,8 @@ test {
     std.testing.log_level = .err;
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(@import("Mixin.zig"));
+    std.testing.refAllDecls(@import("compatibility.zig"));
+    std.testing.refAllDecls(@import("version_dispatch.zig"));
 }
 
 const std = @import("std");
@@ -76,4 +78,4 @@ const Args = @import("common").Args;
 const codegen = @import("codegen.zig");
 const Config = @import("Config.zig");
 const Context = @import("Context.zig");
-const GodotApi = @import("GodotApi.zig");
+const GodotApi = @import("common").GodotApi;

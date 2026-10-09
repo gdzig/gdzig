@@ -219,6 +219,6 @@ const Enum = Context.Enum;
 const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
-const GodotApi = @import("../GodotApi.zig");
+const GodotApi = @import("common").GodotApi;
 const Mixin = @import("../Mixin.zig");
 const docs = @import("docs.zig");
