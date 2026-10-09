@@ -48,6 +48,8 @@ mixin_override: bool = false,
 is_public: bool = true,
 /// Old-layout bindings carry a range independently of modern method dispatch.
 legacy_range: ?version_dispatch.Group = null,
+/// Measured ranges for modern dispatch; names share the Context arena lifetime.
+dispatch_ranges: []const version_dispatch.Group = &.{},
 
 /// This maps the API's operator name to a function name
 const operator_fn_names: StaticStringMap([]const u8) = .initComptime(.{

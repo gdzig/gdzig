@@ -590,6 +590,39 @@ pub fn writeLegacyFixture(
     call: bool,
     runtime_minor: u32,
 ) !void {
+    try writeBindingFixture(output, allocator, minimum, call, runtime_minor, null, false);
+}
+
+/// Write real dispatcher output with a private adapter or an unshimmed range.
+pub fn writeDispatchFixture(
+    output: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    minimum: ?common.Version,
+    call: bool,
+    runtime_minor: u32,
+    adapter: bool,
+) !void {
+    try writeBindingFixture(output, allocator, minimum, call, runtime_minor, adapter, false);
+}
+
+/// Emit a non-vacuous optimized witness whose selected hash reaches an opaque call.
+pub fn writeDispatchIrFixture(
+    output: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    minimum: common.Version,
+) !void {
+    try writeBindingFixture(output, allocator, minimum, false, 6, true, true);
+}
+
+fn writeBindingFixture(
+    output: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    minimum: ?common.Version,
+    call: bool,
+    runtime_minor: u32,
+    dispatch: ?bool,
+    inspect_ir: bool,
+) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     var ctx: Context = .{
@@ -599,7 +632,7 @@ pub fn writeLegacyFixture(
         .compatibility_minimum = minimum,
     };
     const class: Context.Class = .{ .name = "Probe", .name_api = "Probe" };
-    const function: Context.Function = .{
+    var function: Context.Function = .{
         .name = "probe_4_6_legacy",
         .name_api = "probe",
         .base = "Probe",
@@ -614,6 +647,14 @@ pub fn writeLegacyFixture(
             .signature = fixtureSignature("fixture"),
         },
     };
+    var group = function.legacy_range.?;
+    group.available = dispatch orelse false;
+    if (dispatch != null) {
+        function.name = "probe";
+        function.hash = 222;
+        function.legacy_range = null;
+        function.dispatch_ranges = &.{group};
+    }
     var w: CodeWriter = .init(output);
     try w.writeLine(
         \\const std = @import("std");
@@ -628,9 +669,11 @@ pub fn writeLegacyFixture(
         \\var lookups: usize = 0;
         \\var calls: usize = 0;
         \\var token: u8 = 0;
+        \\extern fn observeHash(hash: i64) void;
         \\const raw = struct {
         \\    fn classdbGetMethodBind(_: *const anyopaque, _: *const anyopaque, hash: i64) c.GDExtensionMethodBindPtr {
-        \\        std.debug.assert(hash == 111);
+        \\        std.debug.assert(hash == 111 or hash == 222);
+        \\        if (@hasDecl(@import("root"), "dispatch_ir")) observeHash(hash);
         \\        lookups += 1;
         \\        return &token;
         \\    }
@@ -647,17 +690,30 @@ pub fn writeLegacyFixture(
     try w.writeLine("const Probe = struct {");
     w.indent += 1;
     try writeClassFunction(&w, &class, &function, &ctx);
+    if (dispatch orelse false) {
+        var legacy = function;
+        legacy.name = "probe_4_6_legacy";
+        legacy.hash = 111;
+        legacy.dispatch_ranges = &.{};
+        legacy.legacy_range = group;
+        try writeClassFunction(&w, &class, &legacy, &ctx);
+        try w.writeLine("fn probe_4_6() void { @This().probe_4_6_legacy(); }");
+    }
     try w.writeLine("test { std.testing.refAllDecls(@This()); }");
     w.indent -= 1;
     try w.writeLine("};");
     try w.writeLine("test { std.testing.refAllDecls(Probe); }");
     try w.writeLine("pub fn main() void {");
     if (call) {
-        try w.writeLine("    Probe.probe_4_6_legacy();");
-        try w.writeLine("    Probe.probe_4_6_legacy();");
+        try w.printLine("    Probe.{s}();", .{function.name});
+        try w.printLine("    Probe.{s}();", .{function.name});
         try w.writeLine("    std.debug.assert(lookups == 1 and calls == 2);");
     }
     try w.writeLine("}");
+    if (inspect_ir) {
+        try w.writeLine("pub const dispatch_ir = true;");
+        try w.writeLine("export fn dispatchWitness() void { Probe.probe(); }");
+    }
 }
 
 fn shouldEmitLegacy(function: *const Context.Function, ctx: *const Context) bool {
@@ -691,6 +747,68 @@ fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx:
     try w.writeLine("@panic(message);");
     w.indent -= 1;
     try w.writeLine("}");
+}
+
+fn writeVersionDispatch(
+    w: *CodeWriter,
+    function: *const Context.Function,
+    ctx: *const Context,
+) !void {
+    for (function.dispatch_ranges) |group| {
+        if (ctx.compatibility_minimum) |minimum| {
+            if (!minimum.lt(group.upper)) continue;
+        }
+        try w.printLine(
+            "if (gdzig.version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, " ++
+                ".{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
+            .{ group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
+        );
+        w.indent += 1;
+        if (group.available) {
+            try w.print("return {s}(", .{group.adapter});
+            var first = true;
+            switch (function.self) {
+                .static, .singleton => {},
+                else => {
+                    try w.writeAll("self");
+                    first = false;
+                },
+            }
+            const optional = firstOptionalParameter(function);
+            for (function.parameters.values()[0..optional]) |parameter| {
+                if (!first) try w.writeAll(", ");
+                try w.writeAll(parameter.name);
+                first = false;
+            }
+            if (optional < function.parameters.count()) {
+                if (!first) try w.writeAll(", ");
+                try w.writeAll("opt");
+            }
+            try w.writeLine(");");
+        } else {
+            const message = try missingShimMessage(ctx.rawAllocator(), function, group);
+            defer ctx.rawAllocator().free(message);
+            try w.printLine("{s}(\"{f}\");", .{
+                if (ctx.compatibility_minimum != null) "@compileError" else "@panic",
+                std.zig.fmtString(message),
+            });
+        }
+        w.indent -= 1;
+        try w.writeLine("}");
+    }
+}
+
+fn missingShimMessage(
+    allocator: std.mem.Allocator,
+    function: *const Context.Function,
+    group: version_dispatch.Group,
+) ![]const u8 {
+    return std.fmt.allocPrint(
+        allocator,
+        "{s}.{s}: Godot {d}.{d}.{d} layout is {t} ({s}) and has no shim; " ++
+            "add {s} or build with -Dgodot_compatibility_minimum={d}.{d}.{d}",
+        .{ function.base.?, function.name_api, group.lower.major, group.lower.minor, group.lower.patch, group.layout, group.signature.difference, group.adapter, group.upper.major, group.upper.minor, group.upper.patch },
+    );
 }
 
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
@@ -737,7 +855,7 @@ fn writeClassMethodBind(w: *CodeWriter, function: *const Context.Function, suffi
     try w.printLine("{s}{s}_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), @ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), {d});", .{
         function.name, suffix, function.base.?, function.name_api, function.hash.?,
     });
-    if (function.hash_compatibility.items.len > 0) {
+    if (function.hash_compatibility.items.len > 0 and function.dispatch_ranges.len == 0) {
         try w.writeAll("inline for ([_]i64{ ");
         for (function.hash_compatibility.items, 0..) |hash, i| {
             if (i > 0) try w.writeAll(", ");
@@ -1405,6 +1523,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     try w.writeLine(" {");
     w.indent += 1;
     try writeLegacyRangeGuard(w, function, ctx);
+    if (class != null) try writeVersionDispatch(w, function, ctx);
     switch (function.type_selected_scalar) {
         .none => {},
         .float => try w.writeLine("if (T != f32 and T != f64) @compileError(\"result type must be f32 or f64\");"),
@@ -2393,6 +2512,77 @@ test "legacy writer guards runtime ranges and omits declarations above a minimum
     try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 
+test "dispatch preserves range order patch adapters and above-range omission" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+    };
+    const group: version_dispatch.Group = .{
+        .lower = .@"4.6",
+        .upper = .{ .major = 4, .minor = 6, .patch = 2 },
+        .old_hash = 111,
+        .layout = .incompatible,
+        .adapter = "probe_4_6",
+        .available = true,
+        .signature = fixtureSignature("argument type"),
+    };
+    var later = group;
+    later.lower = group.upper;
+    later.upper = .@"4.7";
+    later.adapter = "probe_4_6_2";
+    const function: Context.Function = .{
+        .name = "probe",
+        .name_api = "probe",
+        .base = "Probe",
+        .dispatch_ranges = &.{ group, later },
+    };
+    var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer output.deinit();
+    var writer: CodeWriter = .init(&output.writer);
+    try writeVersionDispatch(&writer, &function, &ctx);
+    const first = std.mem.indexOf(u8, output.written(), "return probe_4_6();").?;
+    const second = std.mem.indexOf(u8, output.written(), "return probe_4_6_2();").?;
+    try std.testing.expect(first < second);
+
+    ctx.compatibility_minimum = .@"4.7";
+    var above: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer above.deinit();
+    var above_writer: CodeWriter = .init(&above.writer);
+    try writeVersionDispatch(&above_writer, &function, &ctx);
+    try std.testing.expectEqual(@as(usize, 0), above.written().len);
+}
+
+test "unshimmed dispatch emits runtime panic or inside-minimum compile error" {
+    const cases = [_]struct {
+        minimum: ?common.Version,
+        required: []const u8,
+        excluded: []const u8,
+    }{
+        .{
+            .minimum = null,
+            .required = "@panic",
+            .excluded = "@compileError",
+        },
+        .{
+            .minimum = .@"4.6",
+            .required = "@compileError",
+            .excluded = "@panic",
+        },
+    };
+    for (cases) |case| {
+        var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer output.deinit();
+        try writeDispatchFixture(&output.writer, std.testing.allocator, case.minimum, true, 6, false);
+        try std.testing.expect(std.mem.indexOf(u8, output.written(), case.required) != null);
+        try std.testing.expect(std.mem.indexOf(u8, output.written(), case.excluded) == null);
+        try std.testing.expect(std.mem.indexOf(u8, output.written(), "add probe_4_6") != null);
+        try std.testing.expect(std.mem.indexOf(u8, output.written(), "refAllDecls(@This())") != null);
+    }
+}
+
 fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
     return .fromRecord(.{
         .kind = .class,
@@ -2417,3 +2607,4 @@ const common = @import("common");
 const CodeWriter = @import("CodeWriter.zig");
 const Context = @import("Context.zig");
 const util = @import("util.zig");
+const version_dispatch = @import("version_dispatch.zig");

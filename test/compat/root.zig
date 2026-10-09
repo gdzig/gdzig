@@ -124,7 +124,7 @@ test "OptimizedTranslation generate preserves messages and initializes legacy re
     const destination: StringName = .fromComptimeLatin1("bonjour");
     translation.addMessage(source, destination, .{});
     const generated = optimized.generate(translation);
-    try testing.expectEqual(gdzig.version.gte(.@"4.7"), generated);
+    try testing.expect(generated);
     if (gdzig.version.range(.@"4.6", .@"4.7")) {
         optimized.generate_4_6_legacy(translation);
     }

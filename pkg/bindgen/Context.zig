@@ -99,8 +99,9 @@ fn collectLegacyBindings(self: *Context) !void {
                 owner,
                 function.name_api,
                 function.name,
-                &.{},
+                class.mixin_names.keys(),
             );
+            class.functions.getPtr(function.name_api).?.dispatch_ranges = ranges.items;
             // Range names share the Context arena lifetime with these declarations.
             for (ranges.items) |group| {
                 const legacy = try legacy_binding.build(arena_allocator, function, group, self);
