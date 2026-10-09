@@ -46,6 +46,8 @@ skip: bool = false,
 mixin_override: bool = false,
 /// Visibility of generated declarations. Override delegates are private.
 is_public: bool = true,
+/// Old-layout bindings carry a range independently of modern method dispatch.
+legacy_range: ?version_dispatch.Group = null,
 
 /// This maps the API's operator name to a function name
 const operator_fn_names: StaticStringMap([]const u8) = .initComptime(.{
@@ -562,6 +564,7 @@ const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
 
+const version_dispatch = @import("../version_dispatch.zig");
 const Config = @import("../Config.zig");
 const Context = @import("../Context.zig");
 const Type = Context.Type;

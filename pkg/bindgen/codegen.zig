@@ -479,6 +479,7 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Functions
     for (class.functions.values()) |*function| {
+        if (!shouldEmitLegacy(function, ctx)) continue;
         if (function.mode != .final) continue;
         if (function.skip and !function.mixin_override) continue;
         var emitted: Context.Function = function.*;
@@ -581,7 +582,119 @@ fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, class: *const Cont
     try w.writeLine("};");
 }
 
+/// Write a standalone class using the real legacy method writer for range tests.
+pub fn writeLegacyFixture(
+    output: *std.Io.Writer,
+    allocator: std.mem.Allocator,
+    minimum: ?common.Version,
+    call: bool,
+    runtime_minor: u32,
+) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    var ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .compatibility_minimum = minimum,
+    };
+    const class: Context.Class = .{ .name = "Probe", .name_api = "Probe" };
+    const function: Context.Function = .{
+        .name = "probe_4_6_legacy",
+        .name_api = "probe",
+        .base = "Probe",
+        .hash = 111,
+        .legacy_range = .{
+            .lower = .{ .major = 4, .minor = 6, .patch = 0 },
+            .upper = .{ .major = 4, .minor = 7, .patch = 0 },
+            .old_hash = 111,
+            .layout = .incompatible,
+            .adapter = "probe_4_6",
+            .available = false,
+            .signature = fixtureSignature("fixture"),
+        },
+    };
+    var w: CodeWriter = .init(output);
+    try w.writeLine(
+        \\const std = @import("std");
+        \\const Version = @import("common").Version;
+        \\const c = struct {
+        \\    const GDExtensionMethodBindPtr = ?*anyopaque;
+        \\    const GDExtensionConstTypePtr = ?*const anyopaque;
+        \\};
+        \\const StringName = struct {
+        \\    fn fromComptimeLatin1(comptime text: []const u8) u8 { _ = text; return 0; }
+        \\};
+        \\var lookups: usize = 0;
+        \\var calls: usize = 0;
+        \\var token: u8 = 0;
+        \\const raw = struct {
+        \\    fn classdbGetMethodBind(_: *const anyopaque, _: *const anyopaque, hash: i64) c.GDExtensionMethodBindPtr {
+        \\        std.debug.assert(hash == 111);
+        \\        lookups += 1;
+        \\        return &token;
+        \\    }
+        \\    fn objectMethodBindPtrcall(_: c.GDExtensionMethodBindPtr, _: ?*anyopaque, _: *const anyopaque, result: ?*anyopaque) void {
+        \\        std.debug.assert(result == null);
+        \\        calls += 1;
+        \\    }
+        \\};
+    );
+    try w.printLine(
+        "const gdzig = struct {{ {s} version: Version = .{{ .major = 4, .minor = {d}, .patch = 2 }}; }};",
+        .{ if (minimum != null) "const" else "var", if (minimum) |value| value.minor else runtime_minor },
+    );
+    try w.writeLine("const Probe = struct {");
+    w.indent += 1;
+    try writeClassFunction(&w, &class, &function, &ctx);
+    try w.writeLine("test { std.testing.refAllDecls(@This()); }");
+    w.indent -= 1;
+    try w.writeLine("};");
+    try w.writeLine("test { std.testing.refAllDecls(Probe); }");
+    try w.writeLine("pub fn main() void {");
+    if (call) {
+        try w.writeLine("    Probe.probe_4_6_legacy();");
+        try w.writeLine("    Probe.probe_4_6_legacy();");
+        try w.writeLine("    std.debug.assert(lookups == 1 and calls == 2);");
+    }
+    try w.writeLine("}");
+}
+
+fn shouldEmitLegacy(function: *const Context.Function, ctx: *const Context) bool {
+    const group = function.legacy_range orelse return true;
+    const minimum = ctx.compatibility_minimum orelse return true;
+    return minimum.lt(group.upper);
+}
+
+fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
+    const group = function.legacy_range orelse return;
+    if (ctx.compatibility_minimum) |minimum| {
+        if (minimum.range(group.lower, group.upper)) return;
+    }
+
+    try w.printLine(
+        "if (!gdzig.version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, .{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
+        .{ group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
+    );
+    w.indent += 1;
+    const message = try std.fmt.allocPrint(
+        ctx.rawAllocator(),
+        "{s}.{s} is only valid on Godot [{d}.{d}.{d}, {d}.{d}.{d}); running {{d}}.{{d}}.{{d}}",
+        .{ function.base.?, function.name, group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
+    );
+    defer ctx.rawAllocator().free(message);
+    try w.printLine("var legacy_message: [{d}]u8 = undefined;", .{message.len + 30});
+    try w.printLine(
+        "const message = std.fmt.bufPrint(&legacy_message, \"{f}\", .{{ gdzig.version.major, gdzig.version.minor, gdzig.version.patch }}) catch std.debug.panic(\"legacy range message overflow\", .{{}});",
+        .{std.zig.fmtString(message)},
+    );
+    try w.writeLine("@panic(message);");
+    w.indent -= 1;
+    try w.writeLine("}");
+}
+
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
+    if (!shouldEmitLegacy(function, ctx)) return;
     // For vararg functions, generate a thin wrapper that does comptime check + delegates to Alloc version
     if (function.is_vararg) {
         try writeClassFunctionVarargWrapper(w, class, function, ctx);
@@ -644,35 +757,6 @@ fn writeClassMethodBind(w: *CodeWriter, function: *const Context.Function, suffi
     }
     w.indent -= 1;
     try w.writeLine("}");
-}
-
-test "class bind primary then compatibility order, including Alloc and no metadata" {
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    var w: CodeWriter = .init(&out.writer);
-    var function: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Object", .hash = 123 };
-    try function.hash_compatibility.appendSlice(std.testing.allocator, &.{ 456, 789 });
-    defer function.hash_compatibility.deinit(std.testing.allocator);
-    for ([_][]const u8{ "", "Alloc" }) |suffix| {
-        out.clearRetainingCapacity();
-        try writeClassMethodBind(&w, &function, suffix);
-        const text = out.written();
-        const primary = std.mem.indexOf(u8, text, ", 123);").?;
-        const fallback = std.mem.indexOf(u8, text, "inline for ([_]i64{ 456, 789 }").?;
-        try std.testing.expect(primary < fallback);
-        try std.testing.expectEqual(@as(usize, 0), w.indent);
-        const guard = try std.fmt.allocPrint(std.testing.allocator, "if (probe{s}_ptr == null)", .{suffix});
-        defer std.testing.allocator.free(guard);
-        try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, guard));
-    }
-    function.hash_compatibility.clearRetainingCapacity();
-    out.clearRetainingCapacity();
-    try writeClassMethodBind(&w, &function, "");
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "inline for") == null);
-    try std.testing.expectEqualStrings(
-        "if (probe_ptr == null) {\n    probe_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"Object\")), @ptrCast(&StringName.fromComptimeLatin1(\"probe\")), 123);\n}\n",
-        out.written(),
-    );
 }
 
 /// Writes a thin vararg wrapper that does comptime check and delegates to the Alloc version.
@@ -1156,75 +1240,6 @@ fn writeFlag(w: *CodeWriter, flag: *const Context.Flag, ctx: *const Context) !vo
     try w.writeLine("};");
 }
 
-test "named options use original API names and preserve runtime defaults" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
-    var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123 };
-    try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
-    try function.parameters.put(arena.allocator(), "label", .{ .name = "label", .type = .string, .default = .{ .string = "default" } });
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    var w: CodeWriter = .init(&out.writer);
-    try writeFunctionHeader(&w, &function, null, &ctx);
-    const text = out.written();
-    try std.testing.expect(std.mem.indexOf(u8, text, "pub const ProbeOptions = struct") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "opt: ProbeOptions") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "count: i64 = 7") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "label: ?String = null") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "actual_label = opt.label orelse") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "defer if (opt.label == null) actual_label.deinit();") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "ProbeRawOptions") == null);
-}
-
-test "private fixed and Alloc delegates share API options and singleton shape" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
-    const cls: Context.Class = .{ .name = "Probe" };
-    var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123, .is_public = false, .self = .singleton };
-    try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
-    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
-    defer out.deinit();
-    var w: CodeWriter = .init(&out.writer);
-    try writeClassFunction(&w, &cls, &function, &ctx);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "fn probeRaw(opt: ProbeOptions)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "pub fn probeRaw") == null);
-    out.clearRetainingCapacity();
-    function.is_vararg = true;
-    try writeClassFunctionVarargWrapper(&w, &cls, &function, &ctx);
-    try writeFunctionAlloc(&w, &function, &cls, &ctx);
-    const text = out.written();
-    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "pub const ProbeOptions"));
-    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, "opt: ProbeOptions"));
-    try std.testing.expect(std.mem.indexOf(u8, text, "probeRawAlloc(@\"...\", opt)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "pub fn probeRaw") == null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "self:") == null);
-    out.clearRetainingCapacity();
-    try writeModuleFunctionVarargWrapper(&w, &function, &ctx);
-    try writeFunctionAlloc(&w, &function, null, &ctx);
-    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, out.written(), "pub const ProbeOptions"));
-    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, out.written(), "opt: ProbeOptions"));
-    try function.parameters.put(arena.allocator(), "value", .{ .name = "value", .type = .variant, .default = .null });
-    out.clearRetainingCapacity();
-    try writeFunctionAlloc(&w, &function, null, &ctx);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "actual_value: Variant = opt.value orelse .nil") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "@constCast(&actual_value)") != null);
-}
-
-test "generated declaration names reject API and private mixin collisions" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    var cls: Context.Class = .{};
-    try cls.functions.put(arena.allocator(), "other", .{ .name = "probeRaw" });
-    try cls.mixin_names.put(arena.allocator(), "probeRawAlloc", {});
-    try cls.mixin_names.put(arena.allocator(), "ProbeOptions", {});
-    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "probeRaw"));
-    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "probeRawAlloc"));
-    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "ProbeOptions"));
-    try checkClassDeclarationName(&cls, "unrelated");
-}
-
 fn firstOptionalParameter(function: *const Context.Function) usize {
     for (function.parameters.values(), 0..) |param, i| {
         if (param.default != null) return i;
@@ -1389,6 +1404,7 @@ fn writeFunctionHeader(w: *CodeWriter, function: *const Context.Function, class:
     }
     try w.writeLine(" {");
     w.indent += 1;
+    try writeLegacyRangeGuard(w, function, ctx);
     switch (function.type_selected_scalar) {
         .none => {},
         .float => try w.writeLine("if (T != f32 and T != f64) @compileError(\"result type must be f32 or f64\");"),
@@ -2240,6 +2256,157 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
         },
         inline else => |s| try w.writeAll(s),
     }
+}
+
+test "class bind primary then compatibility order, including Alloc and no metadata" {
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w: CodeWriter = .init(&out.writer);
+    var function: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Object", .hash = 123 };
+    try function.hash_compatibility.appendSlice(std.testing.allocator, &.{ 456, 789 });
+    defer function.hash_compatibility.deinit(std.testing.allocator);
+    for ([_][]const u8{ "", "Alloc" }) |suffix| {
+        out.clearRetainingCapacity();
+        try writeClassMethodBind(&w, &function, suffix);
+        const text = out.written();
+        const primary = std.mem.indexOf(u8, text, ", 123);").?;
+        const fallback = std.mem.indexOf(u8, text, "inline for ([_]i64{ 456, 789 }").?;
+        try std.testing.expect(primary < fallback);
+        try std.testing.expectEqual(@as(usize, 0), w.indent);
+        const guard = try std.fmt.allocPrint(std.testing.allocator, "if (probe{s}_ptr == null)", .{suffix});
+        defer std.testing.allocator.free(guard);
+        try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, guard));
+    }
+    function.hash_compatibility.clearRetainingCapacity();
+    out.clearRetainingCapacity();
+    try writeClassMethodBind(&w, &function, "");
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "inline for") == null);
+    try std.testing.expectEqualStrings(
+        "if (probe_ptr == null) {\n    probe_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"Object\")), @ptrCast(&StringName.fromComptimeLatin1(\"probe\")), 123);\n}\n",
+        out.written(),
+    );
+}
+
+test "named options use original API names and preserve runtime defaults" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123 };
+    try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
+    try function.parameters.put(arena.allocator(), "label", .{ .name = "label", .type = .string, .default = .{ .string = "default" } });
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w: CodeWriter = .init(&out.writer);
+    try writeFunctionHeader(&w, &function, null, &ctx);
+    const text = out.written();
+    try std.testing.expect(std.mem.indexOf(u8, text, "pub const ProbeOptions = struct") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "opt: ProbeOptions") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "count: i64 = 7") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "label: ?String = null") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "actual_label = opt.label orelse") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "defer if (opt.label == null) actual_label.deinit();") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "ProbeRawOptions") == null);
+}
+
+test "private fixed and Alloc delegates share API options and singleton shape" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const cls: Context.Class = .{ .name = "Probe" };
+    var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123, .is_public = false, .self = .singleton };
+    try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w: CodeWriter = .init(&out.writer);
+    try writeClassFunction(&w, &cls, &function, &ctx);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "fn probeRaw(opt: ProbeOptions)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "pub fn probeRaw") == null);
+    out.clearRetainingCapacity();
+    function.is_vararg = true;
+    try writeClassFunctionVarargWrapper(&w, &cls, &function, &ctx);
+    try writeFunctionAlloc(&w, &function, &cls, &ctx);
+    const text = out.written();
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "pub const ProbeOptions"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, "opt: ProbeOptions"));
+    try std.testing.expect(std.mem.indexOf(u8, text, "probeRawAlloc(@\"...\", opt)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "pub fn probeRaw") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "self:") == null);
+    out.clearRetainingCapacity();
+    try writeModuleFunctionVarargWrapper(&w, &function, &ctx);
+    try writeFunctionAlloc(&w, &function, null, &ctx);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, out.written(), "pub const ProbeOptions"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, out.written(), "opt: ProbeOptions"));
+    try function.parameters.put(arena.allocator(), "value", .{ .name = "value", .type = .variant, .default = .null });
+    out.clearRetainingCapacity();
+    try writeFunctionAlloc(&w, &function, null, &ctx);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "actual_value: Variant = opt.value orelse .nil") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "@constCast(&actual_value)") != null);
+}
+
+test "generated declaration names reject API and private mixin collisions" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var cls: Context.Class = .{};
+    try cls.functions.put(arena.allocator(), "other", .{ .name = "probeRaw" });
+    try cls.mixin_names.put(arena.allocator(), "probeRawAlloc", {});
+    try cls.mixin_names.put(arena.allocator(), "ProbeOptions", {});
+    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "probeRaw"));
+    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "probeRawAlloc"));
+    try std.testing.expectError(error.GeneratedDeclarationCollision, checkClassDeclarationName(&cls, "ProbeOptions"));
+    try checkClassDeclarationName(&cls, "unrelated");
+}
+
+test "legacy writer guards runtime ranges and omits declarations above a minimum" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const class: Context.Class = .{ .name = "Probe" };
+    const function: Context.Function = .{
+        .name = "probe_4_6_legacy",
+        .name_api = "probe",
+        .base = "Probe",
+        .hash = 111,
+        .legacy_range = .{
+            .lower = common.Version.parse("4.6.0"),
+            .upper = common.Version.parse("4.7.0"),
+            .old_hash = 111,
+            .layout = .return_added,
+            .adapter = "probe_4_6",
+            .available = false,
+            .signature = fixtureSignature("void -> bool"),
+        },
+    };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var writer: CodeWriter = .init(&out.writer);
+    try writeClassFunction(&writer, &class, &function, &ctx);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.version.range") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "probe_4_6_legacy_ptr") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), ", 111);") != null);
+    out.clearRetainingCapacity();
+    ctx.compatibility_minimum = common.Version.parse("4.6.0");
+    try writeClassFunction(&writer, &class, &function, &ctx);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.version") == null);
+    out.clearRetainingCapacity();
+    ctx.compatibility_minimum = common.Version.parse("4.7.0");
+    try writeClassFunction(&writer, &class, &function, &ctx);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
+}
+
+fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
+    return .fromRecord(.{
+        .kind = .class,
+        .owner = "Probe",
+        .method = "probe",
+        .hash = 111,
+        .compatibility = &.{},
+        .virtual = false,
+        .is_const = false,
+        .is_static = false,
+        .is_vararg = false,
+        .arguments = &.{},
+        .@"return" = null,
+    }, difference);
 }
 
 const std = @import("std");

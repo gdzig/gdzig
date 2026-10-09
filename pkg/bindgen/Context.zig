@@ -10,6 +10,8 @@ pub const Symbol = struct {
 arena: *ArenaAllocator,
 api: GodotApi,
 config: Config,
+/// Optional compile-time floor supplied by higher-level minimum plumbing.
+compatibility_minimum: ?common.Version = null,
 
 all_engine_classes: ArrayList([]const u8) = .empty,
 depends: ArrayList([]const u8) = .empty,
@@ -68,6 +70,7 @@ pub fn build(arena: *ArenaAllocator, api: GodotApi, config: Config) !Context {
     try self.castEnums();
     try self.castFlags();
     try self.castModules();
+    try self.collectLegacyBindings();
 
     try self.collectImports();
 
@@ -80,6 +83,38 @@ pub fn allocator(self: *const Context) Allocator {
 
 pub fn rawAllocator(self: *const Context) Allocator {
     return self.arena.child_allocator;
+}
+
+fn collectLegacyBindings(self: *Context) !void {
+    const arena_allocator = self.allocator();
+    for (self.classes.values()) |*class| {
+        // Appending declarations must not invalidate the original function slice.
+        const functions = try arena_allocator.dupe(Function, class.functions.values());
+        for (functions) |function| {
+            if (function.mode != .final or function.hash == null) continue;
+            const owner = function.base orelse continue;
+            const ranges = try version_dispatch.collect(
+                arena_allocator,
+                compatibility.manifest,
+                owner,
+                function.name_api,
+                function.name,
+                &.{},
+            );
+            // Range names share the Context arena lifetime with these declarations.
+            for (ranges.items) |group| {
+                const legacy = try legacy_binding.build(arena_allocator, function, group, self);
+                if (class.functions.contains(legacy.name) or class.mixin_names.contains(legacy.name)) {
+                    return error.GeneratedDeclarationCollision;
+                }
+                const storage = try std.fmt.allocPrint(arena_allocator, "{s}_ptr", .{legacy.name});
+                if (class.functions.contains(storage) or class.mixin_names.contains(storage)) {
+                    return error.GeneratedDeclarationCollision;
+                }
+                try class.functions.put(arena_allocator, legacy.name, legacy);
+            }
+        }
+    }
 }
 
 fn collectImports(self: *Context) !void {
@@ -676,6 +711,9 @@ const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
 const Config = @import("Config.zig");
+const compatibility = @import("compatibility.zig");
+const legacy_binding = @import("legacy_binding.zig");
+const version_dispatch = @import("version_dispatch.zig");
 pub const Builtin = @import("Context/Builtin.zig");
 pub const Class = @import("Context/Class.zig");
 pub const Constant = @import("Context/Constant.zig");
