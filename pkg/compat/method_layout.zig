@@ -22,21 +22,11 @@ fn mismatch(allocator: Allocator, comptime format: []const u8, args: anytype) !R
 }
 
 fn enumTable(tables: []const records.Enum, type_name: []const u8) ?records.Enum {
-    const prefix: usize = if (std.mem.startsWith(u8, type_name, "enum::"))
-        6
-    else if (std.mem.startsWith(u8, type_name, "bitfield::"))
-        10
-    else
-        return null;
+    const name = common.enumName(type_name) orelse return null;
     for (tables) |table| {
-        if (std.mem.eql(u8, table.name, type_name[prefix..])) return table;
+        if (std.mem.eql(u8, table.name, name)) return table;
     }
     return null;
-}
-
-fn isEnum(type_name: []const u8) bool {
-    return std.mem.startsWith(u8, type_name, "enum::") or
-        std.mem.startsWith(u8, type_name, "bitfield::");
 }
 
 fn sameEnum(before: records.Enum, after: records.Enum) bool {
@@ -61,7 +51,7 @@ fn compatibleType(
     old_enums: []const records.Enum,
     new_enums: []const records.Enum,
 ) bool {
-    if (isEnum(before) or isEnum(after)) {
+    if (common.enumName(before) != null or common.enumName(after) != null) {
         const old = enumTable(old_enums, before) orelse return false;
         const new = enumTable(new_enums, after) orelse return false;
         if (std.mem.eql(u8, before, after)) return true;
@@ -247,3 +237,4 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const records = @import("records.zig");
+const common = @import("common");

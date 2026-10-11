@@ -68,6 +68,7 @@ test {
     std.testing.log_level = .err;
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(@import("Mixin.zig"));
+    std.testing.refAllDecls(@import("legacy_binding.zig"));
     std.testing.refAllDecls(@import("compatibility.zig"));
     std.testing.refAllDecls(@import("version_dispatch.zig"));
 }

@@ -9,6 +9,12 @@ pub const Group = struct {
     adapter: []const u8,
     available: bool,
     signature: manifest.Legacy,
+
+    /// Whether any runtime satisfying `minimum` can fall inside this range.
+    pub fn reachableFrom(group: Group, minimum: ?Version) bool {
+        const version = minimum orelse return true;
+        return version.lt(group.upper);
+    }
 };
 
 /// Owned range names; layout text borrows the manifest.
@@ -215,6 +221,11 @@ test "measured Object layout forms one range with a naming-only adapter" {
     try std.testing.expectEqual(@as(u64, 3927539163), group.old_hash);
     try std.testing.expectEqualStrings("isClass_4_6", group.adapter);
     try std.testing.expect(group.available);
+    try std.testing.expect(group.reachableFrom(null));
+    try std.testing.expect(group.reachableFrom(.{ .major = 4, .minor = 5, .patch = 0 }));
+    try std.testing.expect(group.reachableFrom(group.lower));
+    try std.testing.expect(!group.reachableFrom(group.upper));
+    try std.testing.expect(!group.reachableFrom(.{ .major = 4, .minor = 8, .patch = 0 }));
 }
 
 test "plain measured layouts do not introduce adapter dispatch" {

@@ -49,6 +49,17 @@ and immediately before the final imports and aliases. Do not interleave tests
 with production declarations or nest them in types. This rule applies to actual
 handwritten tests, not Zig source text emitted by code generators.
 
+## Test-only helpers
+
+Put declarations that exist only for tests or test fixture tools in a
+`const testing = struct { ... }` namespace in the file that owns the code they
+exercise, mirroring `std.testing`.
+
+Place the `testing` namespace directly above the first `test` block, after all
+production declarations. Mark it `pub` only when code outside the file uses it,
+such as a fixture tool. Callers then read `codegen.testing.writeLegacyFixture(...)`,
+which makes the test-only purpose clear at every call site.
+
 ## Initialization
 
 When a variable has a named type, put the type on the left-hand side and use an
