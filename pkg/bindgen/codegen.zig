@@ -2393,7 +2393,10 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
 pub const testing = struct {
     fn inheritedContext(arena: *std.heap.ArenaAllocator, function: Context.Function) !Context {
         const allocator = arena.allocator();
-        var ctx: Context = .{ .arena = arena, .api = undefined, .config = undefined };
+        var ctx: Context = if (@hasField(Context, "metadata"))
+            .{ .arena = arena, .api = undefined, .config = undefined, .metadata = @import("compatibility.zig").manifest }
+        else
+            .{ .arena = arena, .api = undefined, .config = undefined };
         var root: Context.Class = .{ .name = "Root", .name_api = "Root" };
         try root.functions.put(allocator, function.name_api, function);
         try ctx.classes.put(allocator, "Root", root);
