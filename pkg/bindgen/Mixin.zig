@@ -159,6 +159,7 @@ test "class inheritance retains skipped API metadata" {
     var api_classes = [_]GodotApi.Class{.{ .name = "Parent", .is_refcounted = false, .is_instantiable = true, .api_type = null }};
     var ctx: Context = .{
         .arena = &arena,
+        .metadata = compatibility.manifest,
         .api = .{ .header = undefined, .builtin_class_sizes = &.{}, .builtin_class_member_offsets = &.{}, .global_constants = &.{}, .global_enums = &.{}, .utility_functions = &.{}, .builtin_classes = &.{}, .classes = &api_classes, .singletons = &.{}, .native_structures = &.{} },
         .config = .{ .arch = .@"64", .precision = .float, .extension_api = undefined, .gdextension_interface = undefined, .input = tmp.dir, .output = tmp.dir, .verbosity = .quiet, .io = std.testing.io },
     };
@@ -197,5 +198,6 @@ const Allocator = std.mem.Allocator;
 const Ast = std.zig.Ast;
 
 const Context = @import("Context.zig");
+const compatibility = @import("compatibility.zig");
 const GodotApi = @import("common").GodotApi;
 const util = @import("util.zig");

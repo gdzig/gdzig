@@ -35,6 +35,7 @@ pub fn main(init: std.process.Init) !void {
     var config = try Config.load(init.io, arguments);
     defer config.deinit();
 
+    config.metadata = try config.loadCompatibility(arena.allocator());
     verbose = config.verbosity == .verbose;
 
     var buf: [4096]u8 = undefined;
@@ -50,7 +51,7 @@ pub fn main(init: std.process.Init) !void {
         var digest: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
         const checksum = std.fmt.bytesToHex(digest, .lower);
-        compatibility.validateSnapshot(parsed.value.header, &checksum) catch |err| {
+        compatibility.validateSnapshot(config.metadata.?, parsed.value.header, &checksum) catch |err| {
             std.log.err("current API snapshot changed; regenerate compatibility metadata before selecting a minimum", .{});
             return err;
         };

@@ -2303,6 +2303,7 @@ pub const testing = struct {
             .arena = &arena,
             .api = undefined,
             .config = undefined,
+            .metadata = compatibility.manifest,
             .compatibility_minimum = minimum,
         };
         const class: Context.Class = .{ .name = "Probe", .name_api = "Probe" };
@@ -2432,7 +2433,12 @@ test "class bind primary then compatibility order, including Alloc and no metada
 test "named options use original API names and preserve runtime defaults" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .metadata = compatibility.manifest,
+    };
     var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123 };
     try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
     try function.parameters.put(arena.allocator(), "label", .{ .name = "label", .type = .string, .default = .{ .string = "default" } });
@@ -2453,7 +2459,12 @@ test "named options use original API names and preserve runtime defaults" {
 test "private fixed and Alloc delegates share API options and singleton shape" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .metadata = compatibility.manifest,
+    };
     const cls: Context.Class = .{ .name = "Probe" };
     var function: Context.Function = .{ .name = "probeRaw", .name_api = "probe", .base = "Object", .hash = 123, .is_public = false, .self = .singleton };
     try function.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
@@ -2501,7 +2512,12 @@ test "generated declaration names reject API and private mixin collisions" {
 test "legacy writer guards runtime ranges and omits declarations above a minimum" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    var ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    var ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+        .metadata = compatibility.manifest,
+    };
     const class: Context.Class = .{ .name = "Probe" };
     const function: Context.Function = .{
         .name = "probe_4_6_legacy",
@@ -2542,6 +2558,7 @@ test "dispatch preserves range order patch adapters and above-range omission" {
         .arena = &arena,
         .api = undefined,
         .config = undefined,
+        .metadata = compatibility.manifest,
     };
     const group: version_dispatch.Group = .{
         .lower = .@"4.6",
@@ -2658,5 +2675,6 @@ const common = @import("common");
 
 const CodeWriter = @import("CodeWriter.zig");
 const Context = @import("Context.zig");
+const compatibility = @import("compatibility.zig");
 const util = @import("util.zig");
 const version_dispatch = @import("version_dispatch.zig");

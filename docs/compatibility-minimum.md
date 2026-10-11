@@ -16,14 +16,24 @@ Downstream builds pass `.godot_compatibility_minimum = "4.6"` in the options to
 `b.dependency("gdzig", ...)`.
 
 The grammar is `major.minor[.patch]`. A missing patch means zero, not the latest
-patch release. Supported values are the measured targets in
-`pkg/bindgen/generated/compatibility.zon`. There is no separate handwritten
-allowlist. Malformed or unmeasured values fail before bindings are generated.
-This seam does not download or generate metadata for an unmeasured minimum.
+patch release. Measured targets in `pkg/bindgen/generated/compatibility.zon` are
+used directly without downloading historical engines or running metadata tools.
+There is no separate handwritten allowlist.
+
+An uncached minimum downloads that exact stable Godot release through the
+`godot-versions` catalog, extracts its API, and appends its measured records to a
+build-cache manifest. The vendored manifest is not changed. This path requires
+network access. The release must exist in the catalog and cannot be newer than
+the current vendored snapshot. Prerelease and malformed values are rejected.
+Measuring an older release does not provide missing layout adapters: an
+unshimmed method can still fail when it is called.
 
 The build passes the normalized floor to bindgen as
-`--godot-compatibility-minimum=4.6.0`. Direct bindgen callers use that long option
-with `=`, alongside its other required named options.
+`--godot-compatibility-minimum=4.6.0` and the selected manifest as
+`--compatibility=/path/to/compatibility.zon`. Direct bindgen callers can supply
+an external manifest with that option. Without it, bindgen uses the vendored
+manifest configured when its executable was built. Long options use `=`,
+alongside the other required named options.
 
 ## Version and binding behavior
 

@@ -99,6 +99,7 @@ test "legacy signatures retain positional old types flags hash and range" {
         .arena = &arena,
         .api = undefined,
         .config = undefined,
+        .metadata = compatibility.manifest,
     };
     const modern: Context.Function = .{
         .name = "probe",
@@ -150,6 +151,7 @@ test "missing old enums become i64 while existing enum names retain normal mappi
         .arena = &arena,
         .api = undefined,
         .config = undefined,
+        .metadata = compatibility.manifest,
     };
     try ctx.symbol_lookup.put(arena.allocator(), "Probe.Mode", .{
         .path = "Probe.Mode",
@@ -177,6 +179,7 @@ test "missing enum argument and return signatures use i64 regardless of old meta
         .arena = &arena,
         .api = undefined,
         .config = undefined,
+        .metadata = compatibility.manifest,
     };
     const function: Context.Function = .{
         .name = "probe",
@@ -221,4 +224,5 @@ const Version = common.Version;
 const GodotApi = common.GodotApi;
 const Context = @import("Context.zig");
 const manifest = @import("compat").manifest;
+const compatibility = @import("compatibility.zig");
 const version_dispatch = @import("version_dispatch.zig");
