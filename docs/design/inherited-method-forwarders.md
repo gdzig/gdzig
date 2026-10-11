@@ -19,7 +19,7 @@ Actual Engine/Os forwarders retain their own storage, exact API lookup names and
 
 The fresh baseline is `746c4c4b7b56da7b14f26ad2d13099e539fb9e3f`. The measured production source is `41f2d77c2f78769656a2ddf38c0b827fb840a573`, including emitter commit `c522fa83`. Tests use Zig 0.17.0, Godot 4.7.2 (`ed1daf0bf`) and native aarch64 macOS. Runtime coverage uses float precision with 64-bit architecture. Double/64 coverage is generation and compilation only.
 
-Fresh float/64 and double/64 comparisons each cover 1,098 generated Zig files, 1,036 class files and 187,112 named functions. They compare declarations, signatures, nominal options, docs, constants and imports. Private bodies and bind caches are checked separately. Non-class generated files match byte-for-byte. Six mutations of actual generated text confirm that the comparison detects contract changes. These checks establish structural preservation, not engine coverage.
+Fresh float/64 and double/64 comparisons each cover 1,098 generated Zig files, including 1,036 class files with 187,112 named class functions. They compare declarations, signatures, nominal options, docs, constants and imports. Private bodies and bind caches are checked separately. Non-class generated files match byte-for-byte. Six mutations of actual generated text confirm that the comparison detects contract changes. These checks establish structural preservation, not engine coverage.
 
 Four missing-forwarder assertions failed before the implementation. The expanded suite then passed 46 generator tests and 18 real Godot tests. Runtime tests cover Node3d names, enums, typed/default options, varargs, packed payloads, Engine/Os initialization/reuse and warmed physics descendants.
 
@@ -29,12 +29,13 @@ Compile-only controls use the actual generated module. The negative control repo
 | --- | --- |
 | Expanded generator/codegen suite | 48/48 steps, 64/64 tests |
 | Focused integration matrix | 136/136 steps, 54/54 tests |
-| Full project tests | 240/240 steps, 149/149 reported tests |
+| Earlier full project matrix | 240/240 steps, 149/149 reported tests |
+| Latest final-r2 full project repeat | 240/240 steps, 93/93 reported tests |
 | Docs | 35/35 steps |
 | Double/64 compile check | 34/34 steps |
 | Default, 4.6 and 4.7 compatibility floors on Godot 4.7.2 | Each 105/105 steps, 32/32 tests |
 
-Engine suites use the real loaded-extension IPC harness. Cached host entries remain labeled cached. Codegen tests start after engine initialization so physics singletons exist. Warmed-descendant tests do not establish cold-call safety.
+Engine suites use the real loaded-extension IPC harness. The earlier full matrix reported 149 tests, the first final repeat reported 104, and final-r2 reported 93. Cached host entries remain labeled cached, not counted as fresh reruns. Codegen tests start after engine initialization so physics singletons exist. Warmed-descendant tests do not establish cold-call safety.
 
 Eight actual ZLS 0.16 hover responses preserve sampled signatures, prose, warnings and remote Markdown targets. Only local navigation paths/line numbers differ. Definitions still lead to the local wrapper. Secondary unknown types in standalone snapshots are not configured-project type validation.
 
@@ -88,6 +89,7 @@ The older-engine and clickable-navigation criteria require Simon's supply, autho
 Host-local evidence root: `/Users/sh/.jcode/scratch/gdzig-285-production-20261011T0927`.
 
 - `task-records/`, `integration-3.log` and `matrix-results.json`: native exits, commands, source identities and actual test summaries.
+- `final-verification.json`, `final-verification-r2.json`, `final-full-test.log` and `final-r2-full-test.log`: retained earlier 104-test and latest 93-test repeats, with exact commands, hashes and cached entries.
 - `followthrough-results.json`, final float/double inventory reports and `inventory-parser-controls.json`: fresh archive/generation/formatting and contract checks.
 - `packed-array-controls.json`, `hover-comparison.json`, `rendered-navigation-attempt.md` and `cold-witness-manifest.json`: guard, hover, partial navigation and real cold-call evidence.
 - `performance/raw.json`, `aggregate.json`, `summary-metrics.json`, `metadata.json`, source/tool manifests and `acceptance-audit.json`: every measurement, input hash, cache metric and discard.
