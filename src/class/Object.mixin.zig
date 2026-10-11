@@ -69,7 +69,7 @@ pub fn downcast(value: anytype) ?*Self {
         value orelse return null
     else
         value;
-    const source_object = Object.upcast(source);
+    const source_object: *Object = .upcast(source);
     const tag = raw.classdbGetClassTag(@ptrCast(&StringName.fromComptimeLatin1(self_name)));
     const result = raw.objectCastTo(source_object.ptr(), tag) orelse return null;
     if (comptime class.isOpaqueClass(Self)) {
@@ -117,6 +117,7 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
     }.callbacks);
 }
 
+/// Returns the registered instance of extension class T, or null if no binding exists.
 pub fn asInstance(self: *Self, comptime T: type) ?*T {
     comptime std.debug.assert(class.isA(Self, T));
     comptime std.debug.assert(class.isStructClass(T));

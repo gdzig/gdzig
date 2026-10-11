@@ -75,7 +75,7 @@ pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
         value orelse return null
     else
         value;
-    const object = Object.upcast(source);
+    const object: *Object = .upcast(source);
     const name: StringName = .fromType(Target);
     const tag = raw.classdbGetClassTag(@ptrCast(&name));
     const result = raw.objectCastTo(object.ptr(), tag) orelse return null;

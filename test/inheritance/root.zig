@@ -159,13 +159,15 @@ const CastNode = struct {
     base: *Control,
     value: i64 = 7,
 
+    /// Allocates and binds a Control-backed test instance, or returns an allocation error.
     pub fn create() !*CastNode {
-        const self = try allocator.create(CastNode);
-        self.* = .{ .base = Control.init() };
+        const self: *CastNode = try allocator.create(CastNode);
+        self.* = .{ .base = .init() };
         self.base.setInstance(CastNode, self);
         return self;
     }
 
+    /// Releases the test instance when Godot destroys its engine object.
     pub fn destroy(self: *CastNode) void {
         allocator.destroy(self);
     }
@@ -174,33 +176,35 @@ const CastNode = struct {
 const OtherCastNode = struct {
     base: *Control,
 
+    /// Allocates and binds a sibling test instance, or returns an allocation error.
     pub fn create() !*OtherCastNode {
-        const self = try allocator.create(OtherCastNode);
-        self.* = .{ .base = Control.init() };
+        const self: *OtherCastNode = try allocator.create(OtherCastNode);
+        self.* = .{ .base = .init() };
         self.base.setInstance(OtherCastNode, self);
         return self;
     }
 
+    /// Releases the test instance when Godot destroys its engine object.
     pub fn destroy(self: *OtherCastNode) void {
         allocator.destroy(self);
     }
 };
 
 test "downcast: engine match and mismatch" {
-    const control = Control.init();
+    const control: *Control = .init();
     defer control.destroy();
     const node: *Node = .upcast(control);
     try testing.expectEqual(@as(?*Control, control), gdzig.class.downcast(*Control, node));
 
-    const plain = Node.init();
+    const plain: *Node = .init();
     defer plain.destroy();
     try testing.expect(gdzig.class.downcast(*Control, plain) == null);
 }
 
 test "downcast: optional engine source" {
-    const control = Control.init();
+    const control: *Control = .init();
     defer control.destroy();
-    const present: ?*Node = Node.upcast(control);
+    const present: ?*Node = .upcast(control);
     const absent: ?*Node = null;
     try testing.expectEqual(@as(?*Control, control), gdzig.class.downcast(*Control, present));
     try testing.expect(gdzig.class.downcast(*Control, absent) == null);
@@ -208,11 +212,11 @@ test "downcast: optional engine source" {
 
 test "downcast: custom instance identity across engine wrappers" {
     ensureRegistered();
-    const parent = Node.init();
+    const parent: *Node = .init();
     defer parent.destroy();
-    const first = try CastNode.create();
+    const first: *CastNode = try .create();
     defer first.base.destroy();
-    const second = try CastNode.create();
+    const second: *CastNode = try .create();
     defer second.base.destroy();
     first.base.setName(.fromComptimeLatin1("CastChild"));
     parent.addChild(Node.upcast(first), .{});
@@ -221,7 +225,7 @@ test "downcast: custom instance identity across engine wrappers" {
     defer child_name.deinit();
     var child_path: gdzig.builtin.NodePath = .fromString(child_name);
     defer child_path.deinit();
-    const node = parent.getNode(child_path).?;
+    const node: *Node = parent.getNode(child_path).?;
     const object: *Object = .upcast(first);
 
     try testing.expectEqual(@as(?*CastNode, first), first.base.asInstance(CastNode));
@@ -239,27 +243,27 @@ test "downcast: custom instance identity across engine wrappers" {
 
 test "downcast: custom mismatch and plain engine objects" {
     ensureRegistered();
-    const other = try OtherCastNode.create();
+    const other: *OtherCastNode = try .create();
     defer other.base.destroy();
     const other_node: *Node = .upcast(other);
     try testing.expect(gdzig.class.downcast(*CastNode, other_node) == null);
 
-    const plain_control = Control.init();
+    const plain_control: *Control = .init();
     defer plain_control.destroy();
     const plain_node: *Node = .upcast(plain_control);
     try testing.expect(gdzig.class.downcast(*CastNode, plain_node) == null);
     try testing.expect(plain_node.asInstance(CastNode) == null);
 
-    const plain = Node.init();
+    const plain: *Node = .init();
     defer plain.destroy();
     try testing.expect(gdzig.class.downcast(*CastNode, plain) == null);
 }
 
 test "downcast: optional engine source for custom target" {
     ensureRegistered();
-    const instance = try CastNode.create();
+    const instance: *CastNode = try .create();
     defer instance.base.destroy();
-    const present: ?*Node = Node.upcast(instance);
+    const present: ?*Node = .upcast(instance);
     const absent: ?*Node = null;
     try testing.expectEqual(@as(?*CastNode, instance), gdzig.class.downcast(*CastNode, present));
     try testing.expect(gdzig.class.downcast(*CastNode, absent) == null);
@@ -267,9 +271,9 @@ test "downcast: optional engine source for custom target" {
 
 test "downcast: embedded custom source uses engine object" {
     ensureRegistered();
-    const b = try ClassB.create();
+    const b: *ClassB = try .create();
     defer Object.upcast(b).destroy();
-    const a = try ClassA.create();
+    const a: *ClassA = try .create();
     defer Object.upcast(a).destroy();
     const present: ?*ClassA = &b.base;
     const absent: ?*ClassA = null;
@@ -280,7 +284,7 @@ test "downcast: embedded custom source uses engine object" {
 }
 
 test "downcast: generated engine entry points" {
-    const control = Control.init();
+    const control: *Control = .init();
     defer control.destroy();
     const node: *Node = .upcast(control);
     const object: *Object = .upcast(control);
@@ -292,16 +296,16 @@ test "downcast: generated engine entry points" {
     try testing.expectEqual(@as(?*Node, node), Node.downcast(object));
     try testing.expectEqual(@as(?*Object, object), Object.downcast(object));
 
-    const plain = Node.init();
+    const plain: *Node = .init();
     defer plain.destroy();
     try testing.expect(Control.downcast(plain) == null);
 }
 
-const Node = gdzig.class.Node;
-const Control = gdzig.class.Control;
 const std = @import("std");
 const testing = std.testing;
 
 const gdzig = @import("gdzig");
 const allocator = gdzig.testing.allocator;
 const Object = gdzig.class.Object;
+const Node = gdzig.class.Node;
+const Control = gdzig.class.Control;
