@@ -7,7 +7,6 @@
 /// Derived user classes embed their parent (e.g. `base: ClassA` not `base: *ClassA`)
 /// so that `*ClassB` can be safely cast to `*ClassA` — matching how Godot passes a
 /// single extension instance pointer to all method callbacks.
-
 pub fn register(r: *gdzig.extension.Registry) void {
     const class_a = r.createClass(ClassA, {}, .auto);
     class_a.addMethod("get_value_a", .auto);
@@ -153,6 +152,28 @@ const ClassC = struct {
     }
 };
 
+test "downcast: engine match and mismatch" {
+    const control = Control.init();
+    defer control.destroy();
+    const node: *Node = .upcast(control);
+    try testing.expectEqual(@as(?*Control, control), gdzig.class.downcast(*Control, node));
+
+    const plain = Node.init();
+    defer plain.destroy();
+    try testing.expect(gdzig.class.downcast(*Control, plain) == null);
+}
+
+test "downcast: optional engine source" {
+    const control = Control.init();
+    defer control.destroy();
+    const present: ?*Node = Node.upcast(control);
+    const absent: ?*Node = null;
+    try testing.expectEqual(@as(?*Control, control), gdzig.class.downcast(*Control, present));
+    try testing.expect(gdzig.class.downcast(*Control, absent) == null);
+}
+
+const Node = gdzig.class.Node;
+const Control = gdzig.class.Control;
 const std = @import("std");
 const testing = std.testing;
 

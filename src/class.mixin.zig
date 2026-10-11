@@ -59,7 +59,7 @@ pub fn ClassPtrOf(comptime T: type) type {
 pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
     const Target = std.meta.Child(T);
 
-    if (!isClassPtr(T)) {
+    if (comptime !isClassPtr(T)) {
         @compileError("downcast expects a class pointer type as the target type, found '" ++ @typeName(T) ++ "'");
     }
 
