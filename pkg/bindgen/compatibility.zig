@@ -5,9 +5,8 @@ pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.
 /// Find the exact measured release, including aliases normalized by the parser.
 pub fn findExactTarget(minimum: Version) !compat_manifest.Target {
     for (manifest.targets) |target| {
-        const measured = try Version.parseStrict(target.source.version);
-        if (minimum.major == measured.major and minimum.minor == measured.minor and
-            minimum.patch == measured.patch) return target;
+        const measured: Version = try .parseStrict(target.source.version);
+        if (minimum.eql(measured)) return target;
     }
     return error.UnsupportedCompatibilityMinimum;
 }
@@ -21,9 +20,9 @@ fn tableFor(metadata: compat_manifest.Manifest, target: compat_manifest.Target) 
 
 /// Require the measured current API header and raw bytes for minimum selection.
 pub fn validateSnapshot(header: GodotApi.Header, checksum: []const u8) !void {
-    const current = try Version.parseStrict(manifest.current.version);
-    if (header.version_major != current.major or header.version_minor != current.minor or
-        header.version_patch != current.patch or
+    const current: Version = try .parseStrict(manifest.current.version);
+    const version: Version = try .fromHeader(header);
+    if (!version.eql(current) or
         !std.mem.eql(u8, header.version_status, manifest.current.status) or
         !std.mem.eql(u8, header.version_build, manifest.current.build) or
         !std.mem.eql(u8, header.precision orelse "single", manifest.current.precision) or
@@ -191,7 +190,7 @@ test "minimum selection skips shim layouts and preserves absent modern methods" 
 
 test "every measured target resolves exactly without inferring support from table identity" {
     for (manifest.targets) |target| {
-        const minimum = try Version.parseStrict(target.source.version);
+        const minimum: Version = try .parseStrict(target.source.version);
         const selected = try findExactTarget(minimum);
         try std.testing.expectEqualStrings(target.source.version, selected.source.version);
         try std.testing.expectEqualStrings(target.table_id, selected.table_id);

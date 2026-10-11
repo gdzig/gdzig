@@ -54,11 +54,11 @@ pub fn collect(
         groups.deinit(allocator);
     }
     var active: ?usize = null;
-    const current = try Version.parseStrict(metadata.current.version);
+    const current: Version = try .parseStrict(metadata.current.version);
 
     // Plain layouts end a legacy range but need no adapter themselves.
     for (targets) |target| {
-        const version = try Version.parseStrict(target.source.version);
+        const version: Version = try .parseStrict(target.source.version);
         const record = findOverride(metadata, target, owner, method) orelse {
             if (active) |index| {
                 groups.items[index].upper = version;
@@ -117,9 +117,11 @@ pub fn collect(
 }
 
 fn targetLess(_: void, lhs: manifest.Target, rhs: manifest.Target) bool {
-    const left = Version.parseStrict(lhs.source.version) catch
+    const left_result: error{InvalidVersion}!Version = .parseStrict(lhs.source.version);
+    const left = left_result catch
         std.debug.panic("invalid manifest target version {s}", .{lhs.source.version});
-    const right = Version.parseStrict(rhs.source.version) catch
+    const right_result: error{InvalidVersion}!Version = .parseStrict(rhs.source.version);
+    const right = right_result catch
         std.debug.panic("invalid manifest target version {s}", .{rhs.source.version});
     return left.lt(right);
 }

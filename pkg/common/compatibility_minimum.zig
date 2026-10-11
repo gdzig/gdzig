@@ -2,11 +2,10 @@
 
 /// Normalize major.minor[.patch] and require an exact measured manifest target.
 pub fn parse(text: []const u8, comptime targets: anytype) !Version {
-    const minimum = try Version.parseStrict(text);
+    const minimum: Version = try .parseStrict(text);
     inline for (targets) |target| {
-        const measured = try Version.parseStrict(target.source.version);
-        if (minimum.major == measured.major and minimum.minor == measured.minor and
-            minimum.patch == measured.patch) return minimum;
+        const measured: Version = try .parseStrict(target.source.version);
+        if (minimum.eql(measured)) return minimum;
     }
     return error.UnsupportedCompatibilityMinimum;
 }
@@ -17,7 +16,7 @@ pub fn accepts(actual: Version, minimum: ?Version) bool {
 }
 
 test "optional minimum rejects older engines but accepts equal and newer engines" {
-    const minimum = Version.parse("4.7.0");
+    const minimum: Version = .parse("4.7.0");
     try std.testing.expect(!accepts(Version.parse("4.6.3"), minimum));
     try std.testing.expect(accepts(minimum, minimum));
     try std.testing.expect(accepts(Version.parse("4.7.2"), minimum));

@@ -88,7 +88,7 @@ test "strict version parser normalizes missing patch and rejects malformed user 
         .{ .text = "4.6.3", .major = 4, .minor = 6, .patch = 3 },
         .{ .text = "4.7.2", .major = 4, .minor = 7, .patch = 2 },
     }) |case| {
-        const version = try Version.parseStrict(case.text);
+        const version: Version = try .parseStrict(case.text);
         try testing.expectEqual(case.major, version.major);
         try testing.expectEqual(case.minor, version.minor);
         try testing.expectEqual(case.patch, version.patch);

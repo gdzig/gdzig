@@ -157,7 +157,7 @@ fn requestedVersions(b: *Build, request: []const u8) ![]const []const u8 {
         if (std.mem.eql(u8, piece, "all")) {
             inline for (cached.targets) |target| try appendUnique(b, &versions, target.source.version);
         } else {
-            const version = try Version.parseStrict(piece);
+            const version: Version = try .parseStrict(piece);
             const canonical = b.fmt("{d}.{d}.{d}", .{ version.major, version.minor, version.patch });
             if (!std.mem.eql(u8, canonical, piece)) return error.InvalidExactVersion;
             try appendUnique(b, &versions, canonical);

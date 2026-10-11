@@ -21,6 +21,15 @@ pub const Version = extern struct {
         return self.major == other.major and self.minor == other.minor and self.patch == other.patch;
     }
 
+    /// Convert an API header's numeric version, rejecting components outside u32.
+    pub fn fromHeader(header: GodotApi.Header) error{InvalidVersion}!Version {
+        return .{
+            .major = std.math.cast(u32, header.version_major) orelse return error.InvalidVersion,
+            .minor = std.math.cast(u32, header.version_minor) orelse return error.InvalidVersion,
+            .patch = std.math.cast(u32, header.version_patch) orelse return error.InvalidVersion,
+        };
+    }
+
     /// Return whether this numeric version is newer than other.
     /// Inline so compile-time-known versions fold in callers.
     pub inline fn gt(self: Version, other: Version) bool {
@@ -90,8 +99,8 @@ pub const Version = extern struct {
 };
 
 test "legacy version parsing and comparisons" {
-    const v14_2 = Version.parse("14.2.0");
-    const v14_3 = Version.parse("14.3.0");
+    const v14_2: Version = .parse("14.2.0");
+    const v14_3: Version = .parse("14.3.0");
     try std.testing.expectEqual(v14_2.major, 14);
     try std.testing.expectEqual(v14_2.minor, 2);
     try std.testing.expectEqual(v14_2.patch, 0);
@@ -102,4 +111,34 @@ test "legacy version parsing and comparisons" {
     try std.testing.expect(v14_3.range(v14_2, Version.parse("14.4.0")));
 }
 
+test "numeric equality ignores identity strings and compares every component" {
+    const actual: Version = .{ .major = 4, .minor = 7, .patch = 2, .string = "official" };
+    try std.testing.expect(actual.eql(.{ .major = 4, .minor = 7, .patch = 2, .string = "custom" }));
+    try std.testing.expect(!actual.eql(.{ .major = 5, .minor = 7, .patch = 2 }));
+    try std.testing.expect(!actual.eql(.{ .major = 4, .minor = 8, .patch = 2 }));
+    try std.testing.expect(!actual.eql(.{ .major = 4, .minor = 7, .patch = 3 }));
+}
+
+test "header conversion accepts u32 bounds and rejects negative or overflowing components" {
+    const header: GodotApi.Header = .{
+        .version_major = 0,
+        .version_minor = std.math.maxInt(u32),
+        .version_patch = 2,
+        .version_status = "stable",
+        .version_build = "official",
+        .version_full_name = "fixture",
+    };
+    const actual: Version = try .fromHeader(header);
+    try std.testing.expect(actual.eql(.{ .major = 0, .minor = std.math.maxInt(u32), .patch = 2 }));
+    inline for (.{ "version_major", "version_minor", "version_patch" }) |field| {
+        for ([_]i64{ -1, @as(i64, std.math.maxInt(u32)) + 1 }) |invalid| {
+            var changed = header;
+            @field(changed, field) = invalid;
+            try std.testing.expectError(error.InvalidVersion, Version.fromHeader(changed));
+        }
+    }
+}
+
 const std = @import("std");
+
+const GodotApi = @import("GodotApi.zig");
