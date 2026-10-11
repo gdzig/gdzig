@@ -57,6 +57,7 @@ pub fn upcast(value: anytype) *Self {
 /// This operation will fail at compile time if Self does not inherit from `@TypeOf(value)`. However,
 /// since there is no guarantee that `value` is this type at runtime, this function has a runtime cost
 /// and may return `null`.
+/// Null optional sources also return null.
 pub fn downcast(value: anytype) ?*Self {
     const T = comptime sw: switch (@typeInfo(@TypeOf(value))) {
         .optional => |info| continue :sw @typeInfo(info.child),
@@ -64,17 +65,18 @@ pub fn downcast(value: anytype) ?*Self {
         else => @compileError("downcasted value should be a pointer, found '" ++ @typeName(@TypeOf(value)) ++ "'"),
     };
     comptime class.assertIsA(T, Self);
+    const source = if (comptime @typeInfo(@TypeOf(value)) == .optional)
+        value orelse return null
+    else
+        value;
+    const source_object = Object.upcast(source);
     const tag = raw.classdbGetClassTag(@ptrCast(&StringName.fromComptimeLatin1(self_name)));
-    const result = raw.objectCastTo(@ptrCast(value), tag);
-    if (result) |p| {
-        if (class.isOpaqueClass(T)) {
-            return @ptrCast(@alignCast(p));
-        } else {
-            const object: *anyopaque = raw.objectGetInstanceBinding(p, raw.library, null) orelse return null;
-            return @ptrCast(@alignCast(object));
-        }
+    const result = raw.objectCastTo(source_object.ptr(), tag) orelse return null;
+    if (comptime class.isOpaqueClass(Self)) {
+        return @ptrCast(@alignCast(result));
     } else {
-        return null;
+        const cast_object: *Object = @ptrCast(@alignCast(result));
+        return cast_object.asInstance(Self);
     }
 }
 
@@ -93,7 +95,7 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
     comptime std.debug.assert(class.isA(Self, T));
     comptime std.debug.assert(class.isStructClass(T));
 
-    const token = comptime typeToken(T);
+    const token = comptime instance_binding.typeToken(T);
 
     raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromType(T)), @ptrCast(instance_));
     raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
@@ -119,20 +121,11 @@ pub fn asInstance(self: *Self, comptime T: type) ?*T {
     comptime std.debug.assert(class.isA(Self, T));
     comptime std.debug.assert(class.isStructClass(T));
 
-    const token = comptime typeToken(T);
+    const token = comptime instance_binding.typeToken(T);
 
     const ptr_ = raw.objectGetInstanceBinding(@ptrCast(self), token, null) orelse return null;
 
     return @ptrCast(@alignCast(ptr_));
-}
-
-fn typeToken(comptime T: type) *anyopaque {
-    return @ptrCast(&struct {
-        var token: void = {};
-        comptime {
-            _ = T;
-        }
-    }.token);
 }
 
 /// Connects a signal to a callable.
@@ -211,6 +204,7 @@ const meta = @import("../meta.zig");
 
 const object_is_class_compat = @import("../compat/method_hashes.zig");
 const object_is_class_singleton = @import("../compat/singleton.zig");
+const instance_binding = @import("instance_binding.zig");
 
 // @mixin stop
 
