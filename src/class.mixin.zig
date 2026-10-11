@@ -56,38 +56,35 @@ pub fn ClassPtrOf(comptime T: type) type {
 /// Downcast a value to a child type in the class hierarchy. Has some compile time checks, but returns null at runtime if the cast fails.
 ///
 /// Expects pointer types, e.g `*Node` or `*MyClass`, not `Node` or `MyClass`.
+/// Null optional sources and runtime type mismatches return null.
+/// Custom targets recover the registered extension instance.
 pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
-    const Target = std.meta.Child(T);
-
-    if (!isClassPtr(T)) {
+    if (comptime !isClassPtr(T)) {
         @compileError("downcast expects a class pointer type as the target type, found '" ++ @typeName(T) ++ "'");
     }
-
+    const Target = std.meta.Child(T);
     const Source = switch (@typeInfo(@TypeOf(value))) {
         .optional => |info| std.meta.Child(info.child),
         .pointer => |info| info.child,
         else => @compileError("downcast expects a pointer type as the source value, found '" ++ @typeName(@TypeOf(value)) ++ "'"),
     };
 
-    assertIsA(Source, Target);
+    comptime assertIsA(Source, Target);
 
-    if (@typeInfo(@TypeOf(value)) == .optional and value == null) {
-        return null;
-    }
-
+    const source = if (comptime @typeInfo(@TypeOf(value)) == .optional)
+        value orelse return null
+    else
+        value;
+    const object: *Object = .upcast(source);
     const name: StringName = .fromType(Target);
     const tag = raw.classdbGetClassTag(@ptrCast(&name));
-    const result = raw.objectCastTo(@ptrCast(value), tag);
+    const result = raw.objectCastTo(object.ptr(), tag) orelse return null;
 
-    if (result) |ptr| {
-        if (isOpaqueClassPtr(T)) {
-            return @ptrCast(@alignCast(ptr));
-        } else {
-            const obj: *anyopaque = raw.objectGetInstanceBinding(ptr, raw.library, null) orelse return null;
-            return @ptrCast(@alignCast(obj));
-        }
+    if (comptime isOpaqueClassPtr(T)) {
+        return @ptrCast(@alignCast(result));
     } else {
-        return null;
+        const cast_object: *Object = @ptrCast(@alignCast(result));
+        return cast_object.asInstance(Target);
     }
 }
 
