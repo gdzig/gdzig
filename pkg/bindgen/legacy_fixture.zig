@@ -9,25 +9,30 @@ fn run(init: std.process.Init) !void {
     const cases = [_]struct {
         name: []const u8,
         minimum: ?Version,
-        call: bool,
-        runtime_minor: u32 = 6,
+        usage: codegen.testing.Usage,
+        runtime_version: Version = .{ .major = 4, .minor = 6, .patch = 2 },
     }{
-        .{ .name = "default-ref.zig", .minimum = null, .call = false },
-        .{ .name = "default-valid.zig", .minimum = null, .call = true },
-        .{ .name = "default-rejected.zig", .minimum = null, .call = true, .runtime_minor = 7 },
-        .{ .name = "minimum-valid.zig", .minimum = .@"4.6", .call = true },
-        .{ .name = "minimum-ref.zig", .minimum = .@"4.7", .call = false },
-        .{ .name = "minimum-missing.zig", .minimum = .@"4.7", .call = true },
+        .{ .name = "default-ref.zig", .minimum = null, .usage = .reference },
+        .{ .name = "default-valid.zig", .minimum = null, .usage = .call },
+        .{
+            .name = "default-rejected.zig",
+            .minimum = null,
+            .usage = .call,
+            .runtime_version = .{ .major = 4, .minor = 7, .patch = 2 },
+        },
+        .{ .name = "minimum-valid.zig", .minimum = .@"4.6", .usage = .call },
+        .{ .name = "minimum-ref.zig", .minimum = .@"4.7", .usage = .reference },
+        .{ .name = "minimum-missing.zig", .minimum = .@"4.7", .usage = .call },
     };
     for (cases) |case| {
         var output: std.Io.Writer.Allocating = .init(init.gpa);
         defer output.deinit();
-        try codegen.writeLegacyFixture(
+        try codegen.testing.writeLegacyFixture(
             &output.writer,
             init.gpa,
             case.minimum,
-            case.call,
-            case.runtime_minor,
+            case.usage,
+            case.runtime_version,
         );
         try directory.writeFile(init.io, .{ .sub_path = case.name, .data = output.written() });
     }

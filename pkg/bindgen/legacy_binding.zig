@@ -24,6 +24,7 @@ pub fn build(
             .meta = if (std.mem.eql(u8, type_name, old.type)) old.meta else "",
         };
     }
+
     const return_value: ?GodotApi.Class.Method.ReturnValue = if (signature.@"return") |old| blk: {
         const type_name = try mapEnum(allocator, old.type, ctx, &notes);
         break :blk .{
@@ -33,7 +34,7 @@ pub fn build(
     } else null;
 
     // Reuse ordinary signature mapping and original owner/singleton identity.
-    var legacy = try Context.Function.fromClass(
+    var legacy: Context.Function = try .fromClass(
         allocator,
         modern.base orelse return error.MissingLegacyOwner,
         modern.self == .singleton,
@@ -49,9 +50,11 @@ pub fn build(
         },
         ctx,
     );
+
     allocator.free(legacy.name);
     legacy.name = try std.fmt.allocPrint(allocator, "{s}_legacy", .{group.adapter});
     legacy.legacy_range = group;
+
     legacy.doc = try std.fmt.allocPrint(
         allocator,
         "Old layout of `{s}.{s}`; use `{s}` for the modern layout.\n" ++
@@ -69,6 +72,7 @@ pub fn build(
             notes.items,
         },
     );
+
     return legacy;
 }
 
@@ -78,15 +82,11 @@ fn mapEnum(
     ctx: *const Context,
     notes: *std.ArrayList(u8),
 ) ![]const u8 {
-    const prefix: usize = if (std.mem.startsWith(u8, name, "enum::"))
-        6
-    else if (std.mem.startsWith(u8, name, "bitfield::"))
-        10
-    else
-        return name;
-    if (ctx.symbol_lookup.contains(name[prefix..])) return name;
+    const enum_name = common.enumName(name) orelse return name;
+    if (ctx.symbol_lookup.contains(enum_name)) return name;
+
     try notes.print(allocator, "Old enum `{s}` is absent from the current API; represented as `i64`.\n", .{
-        name[prefix..],
+        enum_name,
     });
     return "int";
 }
@@ -95,7 +95,11 @@ test "legacy signatures retain positional old types flags hash and range" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+    };
     const modern: Context.Function = .{
         .name = "probe",
         .name_api = "probe",
@@ -142,7 +146,11 @@ test "legacy signatures retain positional old types flags hash and range" {
 test "missing old enums become i64 while existing enum names retain normal mapping" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    var ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    var ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+    };
     try ctx.symbol_lookup.put(arena.allocator(), "Probe.Mode", .{
         .path = "Probe.Mode",
         .label = "Probe.Mode",
@@ -165,7 +173,11 @@ test "missing old enums become i64 while existing enum names retain normal mappi
 test "missing enum argument and return signatures use i64 regardless of old metadata" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const ctx: Context = .{ .arena = &arena, .api = undefined, .config = undefined };
+    const ctx: Context = .{
+        .arena = &arena,
+        .api = undefined,
+        .config = undefined,
+    };
     const function: Context.Function = .{
         .name = "probe",
         .name_api = "probe",
@@ -204,8 +216,9 @@ test "missing enum argument and return signatures use i64 regardless of old meta
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Version = @import("common").Version;
-const GodotApi = @import("common").GodotApi;
+const common = @import("common");
+const Version = common.Version;
+const GodotApi = common.GodotApi;
 const Context = @import("Context.zig");
 const manifest = @import("compat").manifest;
 const version_dispatch = @import("version_dispatch.zig");

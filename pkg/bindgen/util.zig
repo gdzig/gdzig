@@ -40,7 +40,7 @@ pub fn isBuiltinType(type_name: []const u8) bool {
 }
 
 pub fn isEnum(type_name: []const u8) bool {
-    return std.mem.startsWith(u8, type_name, "enum::") or isBitfield(type_name);
+    return common.enumName(type_name) != null;
 }
 
 pub fn isStringType(type_name: []const u8) bool {
@@ -50,11 +50,9 @@ pub fn isStringType(type_name: []const u8) bool {
 pub fn getEnumClass(type_name: []const u8) []const u8 {
     const pos = std.mem.lastIndexOf(u8, type_name, ".");
     if (pos) |p| {
-        if (isBitfield(type_name)) {
-            return type_name[10..p];
-        } else {
-            return type_name[6..p];
-        }
+        const name = common.enumName(type_name) orelse return "GlobalConstants";
+        const prefix = type_name.len - name.len;
+        return type_name[prefix..p];
     } else {
         return "GlobalConstants";
     }
@@ -96,4 +94,5 @@ test "mixinContents handles CRLF markers" {
 
 const std = @import("std");
 
-const GodotApi = @import("common").GodotApi;
+const common = @import("common");
+const GodotApi = common.GodotApi;

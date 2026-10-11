@@ -1,3 +1,13 @@
+/// Return the name of an enum or bitfield type, without its API prefix.
+pub fn enumName(type_name: []const u8) ?[]const u8 {
+    for ([_][]const u8{ "enum::", "bitfield::" }) |prefix| {
+        if (std.mem.startsWith(u8, type_name, prefix)) {
+            return type_name[prefix.len..];
+        }
+    }
+    return null;
+}
+
 pub const godot_case = struct {
     pub const constant: Config = .with(.constant, .{ .dictionary = dictionary });
     pub const func: Config = .with(.snake, .{ .dictionary = dictionary });
@@ -145,6 +155,13 @@ test "signal name conversion" {
         try testing.expectEqualStrings(case[0], comptimeConvert(godot_case.signal, case[1]));
         try testing.expectEqualStrings(case[1], comptimeConvert(gdzig_case.signal, case[0]));
     }
+}
+
+test "enum names share enum and bitfield prefix handling" {
+    try testing.expectEqualStrings("Probe.Mode", enumName("enum::Probe.Mode").?);
+    try testing.expectEqualStrings("Probe.Flags", enumName("bitfield::Probe.Flags").?);
+    try testing.expect(enumName("Probe.Mode") == null);
+    try testing.expect(enumName("enum") == null);
 }
 
 const std = @import("std");

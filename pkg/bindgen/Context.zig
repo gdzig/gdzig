@@ -86,12 +86,18 @@ pub fn rawAllocator(self: *const Context) Allocator {
 }
 
 fn collectLegacyBindings(self: *Context) !void {
+    // Add legacy declarations before inheritance copying, so subclasses inherit
+    // them like ordinary methods, including isClass_4_6_legacy.
     const arena_allocator = self.allocator();
     for (self.classes.values()) |*class| {
         // Appending declarations must not invalidate the original function slice.
         const functions = try arena_allocator.dupe(Function, class.functions.values());
         for (functions) |function| {
+            // Only ptrcall method binds have legacy layouts. Virtual and abstract
+            // methods are user implementations, never calls through a hash.
+            // Hashless functions are synthesized property accessors with no bind.
             if (function.mode != .final or function.hash == null) continue;
+            // Functions without an owning API class have no class method bind.
             const owner = function.base orelse continue;
             const ranges = try version_dispatch.collect(
                 arena_allocator,

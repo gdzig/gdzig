@@ -479,7 +479,9 @@ fn writeClass(w: *CodeWriter, class: *const Context.Class, ctx: *const Context) 
 
     // Functions
     for (class.functions.values()) |*function| {
-        if (!shouldEmitLegacy(function, ctx)) continue;
+        if (function.legacy_range) |group| {
+            if (!group.reachableFrom(ctx.compatibility_minimum)) continue;
+        }
         if (function.mode != .final) continue;
         if (function.skip and !function.mixin_override) continue;
         var emitted: Context.Function = function.*;
@@ -582,89 +584,101 @@ fn writeSignal(w: *CodeWriter, signal: *const Context.Signal, class: *const Cont
     try w.writeLine("};");
 }
 
-/// Write a standalone class using the real legacy method writer for range tests.
-pub fn writeLegacyFixture(
-    output: *std.Io.Writer,
-    allocator: std.mem.Allocator,
-    minimum: ?common.Version,
-    call: bool,
-    runtime_minor: u32,
-) !void {
-    var arena: std.heap.ArenaAllocator = .init(allocator);
-    defer arena.deinit();
-    var ctx: Context = .{
-        .arena = &arena,
-        .api = undefined,
-        .config = undefined,
-        .compatibility_minimum = minimum,
+/// Helpers for tests and fixture tools that exercise production emission.
+pub const testing = struct {
+    /// How the fixture uses its generated legacy declaration.
+    pub const Usage = enum {
+        /// Reference declarations without calling the legacy method.
+        reference,
+        /// Call the legacy method and check its cached bind and ptrcall counts.
+        call,
     };
-    const class: Context.Class = .{ .name = "Probe", .name_api = "Probe" };
-    const function: Context.Function = .{
-        .name = "probe_4_6_legacy",
-        .name_api = "probe",
-        .base = "Probe",
-        .hash = 111,
-        .legacy_range = .{
-            .lower = .{ .major = 4, .minor = 6, .patch = 0 },
-            .upper = .{ .major = 4, .minor = 7, .patch = 0 },
-            .old_hash = 111,
-            .layout = .incompatible,
-            .adapter = "probe_4_6",
-            .available = false,
-            .signature = fixtureSignature("fixture"),
-        },
-    };
-    var w: CodeWriter = .init(output);
-    try w.writeLine(
-        \\const std = @import("std");
-        \\const Version = @import("common").Version;
-        \\const c = struct {
-        \\    const GDExtensionMethodBindPtr = ?*anyopaque;
-        \\    const GDExtensionConstTypePtr = ?*const anyopaque;
-        \\};
-        \\const StringName = struct {
-        \\    fn fromComptimeLatin1(comptime text: []const u8) u8 { _ = text; return 0; }
-        \\};
-        \\var lookups: usize = 0;
-        \\var calls: usize = 0;
-        \\var token: u8 = 0;
-        \\const raw = struct {
-        \\    fn classdbGetMethodBind(_: *const anyopaque, _: *const anyopaque, hash: i64) c.GDExtensionMethodBindPtr {
-        \\        std.debug.assert(hash == 111);
-        \\        lookups += 1;
-        \\        return &token;
-        \\    }
-        \\    fn objectMethodBindPtrcall(_: c.GDExtensionMethodBindPtr, _: ?*anyopaque, _: *const anyopaque, result: ?*anyopaque) void {
-        \\        std.debug.assert(result == null);
-        \\        calls += 1;
-        \\    }
-        \\};
-    );
-    try w.printLine(
-        "const gdzig = struct {{ {s} version: Version = .{{ .major = 4, .minor = {d}, .patch = 2 }}; }};",
-        .{ if (minimum != null) "const" else "var", if (minimum) |value| value.minor else runtime_minor },
-    );
-    try w.writeLine("const Probe = struct {");
-    w.indent += 1;
-    try writeClassFunction(&w, &class, &function, &ctx);
-    try w.writeLine("test { std.testing.refAllDecls(@This()); }");
-    w.indent -= 1;
-    try w.writeLine("};");
-    try w.writeLine("test { std.testing.refAllDecls(Probe); }");
-    try w.writeLine("pub fn main() void {");
-    if (call) {
-        try w.writeLine("    Probe.probe_4_6_legacy();");
-        try w.writeLine("    Probe.probe_4_6_legacy();");
-        try w.writeLine("    std.debug.assert(lookups == 1 and calls == 2);");
-    }
-    try w.writeLine("}");
-}
 
-fn shouldEmitLegacy(function: *const Context.Function, ctx: *const Context) bool {
-    const group = function.legacy_range orelse return true;
-    const minimum = ctx.compatibility_minimum orelse return true;
-    return minimum.lt(group.upper);
-}
+    /// Write a standalone class using the real legacy method writer for range tests.
+    /// Default builds report `runtime_version`; minimum builds report the minimum.
+    pub fn writeLegacyFixture(
+        output: *std.Io.Writer,
+        allocator: std.mem.Allocator,
+        minimum: ?common.Version,
+        usage: Usage,
+        runtime_version: common.Version,
+    ) !void {
+        var arena: std.heap.ArenaAllocator = .init(allocator);
+        defer arena.deinit();
+        var ctx: Context = .{
+            .arena = &arena,
+            .api = undefined,
+            .config = undefined,
+            .compatibility_minimum = minimum,
+        };
+        const class: Context.Class = .{ .name = "Probe", .name_api = "Probe" };
+        const function: Context.Function = .{
+            .name = "probe_4_6_legacy",
+            .name_api = "probe",
+            .base = "Probe",
+            .hash = 111,
+            .legacy_range = .{
+                .lower = .{ .major = 4, .minor = 6, .patch = 0 },
+                .upper = .{ .major = 4, .minor = 7, .patch = 0 },
+                .old_hash = 111,
+                .layout = .incompatible,
+                .adapter = "probe_4_6",
+                .available = false,
+                .signature = fixtureSignature("fixture"),
+            },
+        };
+        var w: CodeWriter = .init(output);
+        try w.writeLine(
+            \\const std = @import("std");
+            \\const Version = @import("common").Version;
+            \\const c = struct {
+            \\    const GDExtensionMethodBindPtr = ?*anyopaque;
+            \\    const GDExtensionConstTypePtr = ?*const anyopaque;
+            \\};
+            \\const StringName = struct {
+            \\    fn fromComptimeLatin1(comptime text: []const u8) u8 { _ = text; return 0; }
+            \\};
+            \\var lookups: usize = 0;
+            \\var calls: usize = 0;
+            \\var token: u8 = 0;
+            \\const raw = struct {
+            \\    fn classdbGetMethodBind(_: *const anyopaque, _: *const anyopaque, hash: i64) c.GDExtensionMethodBindPtr {
+            \\        std.debug.assert(hash == 111);
+            \\        lookups += 1;
+            \\        return &token;
+            \\    }
+            \\    fn objectMethodBindPtrcall(_: c.GDExtensionMethodBindPtr, _: ?*anyopaque, _: *const anyopaque, result: ?*anyopaque) void {
+            \\        std.debug.assert(result == null);
+            \\        calls += 1;
+            \\    }
+            \\};
+        );
+        const reported_version = minimum orelse runtime_version;
+        try w.printLine(
+            "const gdzig = struct {{ {s} version: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }};",
+            .{
+                if (minimum != null) "const" else "var",
+                reported_version.major,
+                reported_version.minor,
+                reported_version.patch,
+            },
+        );
+        try w.writeLine("const Probe = struct {");
+        w.indent += 1;
+        try writeClassFunction(&w, &class, &function, &ctx);
+        try w.writeLine("test { std.testing.refAllDecls(@This()); }");
+        w.indent -= 1;
+        try w.writeLine("};");
+        try w.writeLine("test { std.testing.refAllDecls(Probe); }");
+        try w.writeLine("pub fn main() void {");
+        if (usage == .call) {
+            try w.writeLine("    Probe.probe_4_6_legacy();");
+            try w.writeLine("    Probe.probe_4_6_legacy();");
+            try w.writeLine("    std.debug.assert(lookups == 1 and calls == 2);");
+        }
+        try w.writeLine("}");
+    }
+};
 
 fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx: *const Context) !void {
     const group = function.legacy_range orelse return;
@@ -694,7 +708,9 @@ fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx:
 }
 
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
-    if (!shouldEmitLegacy(function, ctx)) return;
+    if (function.legacy_range) |group| {
+        if (!group.reachableFrom(ctx.compatibility_minimum)) return;
+    }
     // For vararg functions, generate a thin wrapper that does comptime check + delegates to Alloc version
     if (function.is_vararg) {
         try writeClassFunctionVarargWrapper(w, class, function, ctx);
