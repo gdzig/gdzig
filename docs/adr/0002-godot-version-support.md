@@ -27,10 +27,12 @@ private conversion adapters and typed legacy bindings. A method absent from the
 older API retains its current hash. The full API remains visible, so applications
 must not call unavailable methods on older engines.
 
-There is one public version declaration. Without a minimum, `gdzig.version` is
-mutable and records the actual engine identity. With a minimum, it is a constant
-representing the effective compatibility floor. This folds existing version
-gates at compile time without exposing a second public minimum field.
+The public `gdzig.api_version` points to the API layout targeted by the bindings.
+Without a minimum, its target is mutable and set to the running engine at startup.
+With a minimum, its target is a constant equal to the compatibility floor, so
+version gates fold at compile time. The pointer itself is always a constant.
+The public `gdzig.engine_version` always records the actual running engine and
+can be newer than `api_version`. There is no `version` alias.
 
 Both extension entrypoints still query the actual engine once before startup.
 An older engine is rejected before registration, callbacks or IPC startup.

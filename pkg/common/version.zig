@@ -15,36 +15,47 @@ pub const Version = extern struct {
 
     var current: Version = undefined;
 
+    /// Compare major, minor and patch only, ignoring the descriptive `string`.
+    /// Inline so compile-time-known versions fold in callers.
+    pub inline fn eql(self: Version, other: Version) bool {
+        return self.major == other.major and self.minor == other.minor and self.patch == other.patch;
+    }
+
     /// Return whether this numeric version is newer than other.
-    pub fn gt(self: Version, other: Version) bool {
+    /// Inline so compile-time-known versions fold in callers.
+    pub inline fn gt(self: Version, other: Version) bool {
         if (self.major != other.major) return self.major > other.major;
         if (self.minor != other.minor) return self.minor > other.minor;
         return self.patch > other.patch;
     }
 
     /// Return whether this numeric version is newer than or equal to other.
-    pub fn gte(self: Version, other: Version) bool {
+    /// Inline so compile-time-known versions fold in callers.
+    pub inline fn gte(self: Version, other: Version) bool {
         if (self.major != other.major) return self.major > other.major;
         if (self.minor != other.minor) return self.minor > other.minor;
         return self.patch >= other.patch;
     }
 
     /// Return whether this numeric version is older than other.
-    pub fn lt(self: Version, other: Version) bool {
+    /// Inline so compile-time-known versions fold in callers.
+    pub inline fn lt(self: Version, other: Version) bool {
         if (self.major != other.major) return self.major < other.major;
         if (self.minor != other.minor) return self.minor < other.minor;
         return self.patch < other.patch;
     }
 
     /// Return whether this numeric version is older than or equal to other.
-    pub fn lte(self: Version, other: Version) bool {
+    /// Inline so compile-time-known versions fold in callers.
+    pub inline fn lte(self: Version, other: Version) bool {
         if (self.major != other.major) return self.major < other.major;
         if (self.minor != other.minor) return self.minor < other.minor;
         return self.patch <= other.patch;
     }
 
     /// Returns true if self is in the range [min_ver, max_ver).
-    pub fn range(self: Version, min_ver: Version, max_ver: Version) bool {
+    /// Inline so compile-time-known versions fold in callers.
+    pub inline fn range(self: Version, min_ver: Version, max_ver: Version) bool {
         return self.gte(min_ver) and self.lt(max_ver);
     }
 

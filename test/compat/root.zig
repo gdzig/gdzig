@@ -7,7 +7,7 @@ test "isClass marshals the runtime's class-name layout" {
     // Exercise the cached bind too.
     try testing.expect(node.isClass(.fromComptimeLatin1("Node")));
     if (comptime @hasDecl(gdzig.class.Object, "isClass_4_6_legacy")) {
-        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+        if (gdzig.api_version.range(.@"4.6", .@"4.7")) {
             var old_name: gdzig.builtin.String = .fromLatin1("Node");
             defer old_name.deinit();
             const object = gdzig.class.Object.upcast(node);
@@ -23,7 +23,7 @@ test "isClass preserves singleton convenience signatures" {
     try testing.expect(!gdzig.class.Engine.isClass(.fromComptimeLatin1("Node")));
     try testing.expect(gdzig.class.Os.isClass(.fromComptimeLatin1("OS")));
     if (comptime @hasDecl(gdzig.class.Engine, "isClass_4_6_legacy")) {
-        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+        if (gdzig.api_version.range(.@"4.6", .@"4.7")) {
             var engine_name: gdzig.builtin.String = .fromLatin1("Engine");
             defer engine_name.deinit();
             var os_name: gdzig.builtin.String = .fromLatin1("OS");
@@ -82,7 +82,7 @@ test "RichTextLabel images support pixel and percent units on both runtimes" {
 
     // The public old layout takes positional pixel/percentage flags, not modern units.
     if (comptime @hasDecl(RichTextLabel, "addImage_4_6_legacy")) {
-        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+        if (gdzig.api_version.range(.@"4.6", .@"4.7")) {
             var empty: gdzig.builtin.String = .fromLatin1("");
             defer empty.deinit();
             label.clear();
@@ -132,7 +132,7 @@ test "OptimizedTranslation generate preserves messages and initializes legacy re
     const generated = optimized.generate(translation);
     try testing.expect(generated);
     if (comptime @hasDecl(gdzig.class.OptimizedTranslation, "generate_4_6_legacy")) {
-        if (gdzig.version.range(.@"4.6", .@"4.7")) {
+        if (gdzig.api_version.range(.@"4.6", .@"4.7")) {
             optimized.generate_4_6_legacy(translation);
         }
     }

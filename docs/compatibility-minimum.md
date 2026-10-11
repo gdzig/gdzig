@@ -1,7 +1,7 @@
 # Godot compatibility minimum
 
 Bindings always come from the single current vendored API snapshot. By default,
-`gdzig.version` is populated with the actual engine version at initialization,
+`gdzig.api_version` is populated with the actual engine version at initialization,
 and generated methods try the current hash before compatibility hashes.
 
 ## Select a compile-time floor
@@ -27,19 +27,21 @@ with `=`, alongside its other required named options.
 
 ## Version and binding behavior
 
-With a minimum, `gdzig.version` is a constant equal to that floor. It is the
-**effective compatibility version**, not the identity of the running engine.
-The constant lets version gates fold at compile time. There is no second public
-minimum declaration. Without the option, `gdzig.version` remains the actual
-runtime version.
+`gdzig.api_version` points to the API layout targeted by the bindings. With a
+minimum, its target is a constant equal to that floor, so version gates fold at
+compile time. Without the option, its target is populated with the running engine
+version at startup. Member access works through the pointer, such as
+`gdzig.api_version.major` or `gdzig.api_version.range(...)`. Use
+`gdzig.api_version.*` when copying the version value.
 
-In a minimum build, `gdzig.version` is the compile-time floor, not the running
-engine version. After initialization, callers who need the actual engine version
-call `gdzig.raw.getGodotVersion` directly:
+`gdzig.engine_version` is always populated with the actual running engine version
+at initialization. In a minimum build, `api_version` can be older than
+`engine_version`. Use the API version for binding layout and feature gates, and
+the engine version when reporting the runtime's identity. There is no deprecated
+`gdzig.version` alias.
 
 ```zig
-var actual: gdzig.Version = undefined;
-gdzig.raw.getGodotVersion(@ptrCast(&actual));
+const actual = gdzig.engine_version;
 std.debug.print("Godot {d}.{d}.{d}\n", .{ actual.major, actual.minor, actual.patch });
 ```
 

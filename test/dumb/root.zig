@@ -15,5 +15,5 @@ test "3 + 3 = 6" {
 }
 
 test "godot version is 4.x" {
-    try testing.expectEqual(4, gdzig.version.major);
+    try testing.expectEqual(4, gdzig.api_version.major);
 }

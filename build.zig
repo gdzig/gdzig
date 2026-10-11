@@ -152,6 +152,10 @@ pub fn build(b: *Build) !void {
     const gdzig_options = b.addOptions();
     gdzig_options.addOption([]const u8, "architecture", architecture);
     gdzig_options.addOption([]const u8, "precision", precision);
+    gdzig_options.addOption(?[3]u32, "godot_compatibility_minimum", if (minimum) |floor|
+        .{ floor.major, floor.minor, floor.patch }
+    else
+        null);
 
     const gdzig_mod = b.addModule("gdzig", .{
         .root_source_file = gdzig_combined.path(b, "gdzig.zig"),

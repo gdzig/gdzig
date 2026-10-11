@@ -14,28 +14,7 @@ fn writeRoot(ctx: *const Context) !void {
     var buf: [1024]u8 = undefined;
     var file_writer = file.writerStreaming(ctx.config.io, &buf);
     var writer: CodeWriter = .init(&file_writer.interface);
-    // Keep the source module documentation before generated declarations.
-    const mixin_file = try ctx.config.input.openFile(ctx.config.io, "gdzig.mixin.zig", .{});
-    defer mixin_file.close(ctx.config.io);
-    var mixin_reader = mixin_file.readerStreaming(ctx.config.io, &buf);
-    const mixin = try mixin_reader.interface.allocRemaining(ctx.allocator(), .unlimited);
-    const marker = std.mem.indexOf(u8, mixin, "// @mixin start") orelse 0;
-    try writer.writeAll(mixin[0..marker]);
-    if (ctx.config.godot_compatibility_minimum) |minimum| {
-        try writer.printLine(
-            \\const godot_compatibility_minimum: ?Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }};
-            \\/// Effective compile-time compatibility floor, not the actual engine identity.
-            \\pub const version: Version = godot_compatibility_minimum.?;
-        , .{ minimum.major, minimum.minor, minimum.patch });
-    } else {
-        try writer.writeLine(
-            \\const godot_compatibility_minimum: ?Version = null;
-            \\/// Actual engine version, populated during extension initialization.
-            \\pub var version: Version = undefined;
-        );
-    }
-    try writer.writeLine("");
-    try writer.writeAll(util.mixinContents(mixin));
+    try writeMixin(&writer, "gdzig.mixin.zig", .{}, ctx);
     try file_writer.interface.flush();
 }
 
@@ -612,7 +591,7 @@ fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx:
     }
 
     try w.printLine(
-        "if (!gdzig.version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, .{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
+        "if (!gdzig.api_version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, .{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
         .{ group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
     );
     w.indent += 1;
@@ -624,7 +603,7 @@ fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx:
     defer ctx.rawAllocator().free(message);
     try w.printLine("var legacy_message: [{d}]u8 = undefined;", .{message.len + 30});
     try w.printLine(
-        "const message = std.fmt.bufPrint(&legacy_message, \"{f}\", .{{ gdzig.version.major, gdzig.version.minor, gdzig.version.patch }}) catch std.debug.panic(\"legacy range message overflow\", .{{}});",
+        "const message = std.fmt.bufPrint(&legacy_message, \"{f}\", .{{ gdzig.engine_version.major, gdzig.engine_version.minor, gdzig.engine_version.patch }}) catch std.debug.panic(\"legacy range message overflow\", .{{}});",
         .{std.zig.fmtString(message)},
     );
     try w.writeLine("@panic(message);");
@@ -642,7 +621,7 @@ fn writeVersionDispatch(
             if (!minimum.lt(group.upper)) continue;
         }
         try w.printLine(
-            "if (gdzig.version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, " ++
+            "if (gdzig.api_version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, " ++
                 ".{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
             .{ group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
         );
@@ -2380,12 +2359,15 @@ pub const testing = struct {
         );
         const reported_version = minimum orelse runtime_version;
         try w.printLine(
-            "const gdzig = struct {{ {s} version: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }};",
+            "const ApiVersion = struct {{ {s} value: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }}; const gdzig = struct {{ const api_version = &ApiVersion.value; var engine_version: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }};",
             .{
                 if (minimum != null) "const" else "var",
                 reported_version.major,
                 reported_version.minor,
                 reported_version.patch,
+                runtime_version.major,
+                runtime_version.minor,
+                runtime_version.patch,
             },
         );
         try w.writeLine("const Probe = struct {");
@@ -2540,13 +2522,13 @@ test "legacy writer guards runtime ranges and omits declarations above a minimum
     defer out.deinit();
     var writer: CodeWriter = .init(&out.writer);
     try writeClassFunction(&writer, &class, &function, &ctx);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.version.range") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.api_version.range") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "probe_4_6_legacy_ptr") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), ", 111);") != null);
     out.clearRetainingCapacity();
     ctx.compatibility_minimum = common.Version.parse("4.6.0");
     try writeClassFunction(&writer, &class, &function, &ctx);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.version") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.api_version") == null);
     out.clearRetainingCapacity();
     ctx.compatibility_minimum = common.Version.parse("4.7.0");
     try writeClassFunction(&writer, &class, &function, &ctx);

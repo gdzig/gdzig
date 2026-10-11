@@ -39,7 +39,7 @@ zig build -Dgodot_compatibility_minimum=4.6
 
 This is a floor, not an exact engine lock. Matching and newer engines are
 accepted, and older engines are rejected during initialization. Bindings still
-come from the current vendored API. With the option, `gdzig.version` is the
+come from the current vendored API. With the option, `gdzig.api_version` points to the
 constant effective floor rather than the actual runtime version. See the
 [compatibility minimum guide](docs/compatibility-minimum.md) for supported
 manifest targets, downstream build usage and limitations.
