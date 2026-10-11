@@ -673,9 +673,148 @@ fn missingShimMessage(
     );
 }
 
+const InheritedTarget = struct {
+    class: *const Context.Class,
+    function: *const Context.Function,
+};
+
+// Compatibility adapters and singleton descendants depend on local Self/storage.
+// A public declaring API method is the only legal forwarding destination.
+fn inheritedTarget(class: *const Context.Class, function: *const Context.Function, ctx: *const Context) ?InheritedTarget {
+    if (!function.is_public or function.skip or function.mixin_override or function.mode != .final or
+        function.legacy_range != null or function.dispatch_ranges.len != 0 or function.self == .value)
+        return null;
+    if (!class.is_singleton and class.getNearestSingleton(ctx) != null) return null;
+    const base = function.base orelse return null;
+    if (std.mem.eql(u8, base, class.name_api)) return null;
+    const owner = ctx.classes.getPtr(base) orelse return null;
+    const target = owner.functions.getPtr(function.name_api) orelse return null;
+    if (!target.is_public or target.skip or target.mixin_override or target.mode != .final or
+        target.legacy_range != null or target.dispatch_ranges.len != 0 or target.self == .value)
+        return null;
+    if (!std.mem.eql(u8, function.name, target.name)) return null;
+    if (target.self == .singleton and !std.mem.eql(u8, owner.name_api, class.name_api)) return null;
+    return .{ .class = owner, .function = target };
+}
+
+const InheritedEntry = enum { ordinary, alloc };
+
+fn writeInheritedFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, target: InheritedTarget, entry: InheritedEntry, ctx: *const Context) !void {
+    if (entry == .ordinary) try writeFunctionOptions(w, function, class, ctx);
+    if (function.is_vararg) {
+        if (entry == .alloc) {
+            try w.writeLine(
+                \\/// Will allocate when calling across the FFI with packed arrays.
+                \\///
+            );
+        } else {
+            try w.writeLine(
+                \\/// Guarantees no allocations when calling across the FFI. Passing packed arrays is a compile error; use the Alloc variant.
+                \\///
+            );
+        }
+    }
+    try writeDocBlock(w, function.doc);
+    const suffix = if (entry == .alloc) "Alloc" else "";
+    try w.writeAll("pub fn ");
+    try writeInheritedName(w, function.name, suffix);
+    try w.writeAll("(");
+    var first = true;
+    switch (function.self) {
+        .static, .singleton => {},
+        .constant, .mutable => {
+            // Ordinary varargs historically accept mutable receivers, even if Alloc is const.
+            const constant = function.self == .constant and (!function.is_vararg or entry == .alloc);
+            try w.print("self: *{s}{s}", .{ if (constant) "const " else "", class.name });
+            first = false;
+        },
+        .value => unreachable,
+    }
+    const opt = firstOptionalParameter(function);
+    for (function.parameters.values()[0..opt]) |param| {
+        if (!first) try w.writeAll(", ");
+        try w.print("{s}: ", .{param.name});
+        try writeTypeAtParameter(w, &param.type, class, ctx);
+        first = false;
+    }
+    if (function.is_vararg) {
+        if (!first) try w.writeAll(", ");
+        try w.writeAll("@\"...\": anytype");
+        first = false;
+    }
+    if (opt < function.parameters.count()) {
+        if (!first) try w.writeAll(", ");
+        try w.writeAll("opt: ");
+        try writeOptionsName(w, function, ctx);
+    }
+    try w.writeAll(") ");
+    try writeTypeAtReturn(w, &function.return_type, class, ctx);
+    try w.writeLine(" {");
+    w.indent += 1;
+    if (class.is_singleton) {
+        try w.writeLine(
+            \\if (instance == null) {
+            \\    instance = @ptrCast(raw.globalGetSingleton(@ptrCast(&StringName.fromComptimeLatin1(self_name))).?);
+            \\}
+        );
+    }
+    if (function.return_type != .void) try w.writeAll("return ");
+    try w.print("gdzig.class.{s}.", .{target.class.name});
+    try writeInheritedName(w, target.function.name, suffix);
+    try w.writeAll("(");
+    first = true;
+    switch (target.function.self) {
+        .static, .singleton => {},
+        .constant, .mutable => {
+            try w.writeAll(if (class.is_singleton) "@ptrCast(instance.?)" else "@ptrCast(self)");
+            first = false;
+        },
+        .value => unreachable,
+    }
+    for (function.parameters.values()[0..opt]) |param| {
+        if (!first) try w.writeAll(", ");
+        try w.writeAll(param.name);
+        first = false;
+    }
+    if (function.is_vararg) {
+        if (!first) try w.writeAll(", ");
+        try w.writeAll("@\"...\"");
+        first = false;
+    }
+    if (opt < function.parameters.count()) {
+        if (!first) try w.writeAll(", ");
+        // Options are nominal per-class types. Let the target parameter type the literal.
+        try w.writeLine(".{");
+        w.indent += 1;
+        for (function.parameters.values()[opt..]) |param| {
+            try w.printLine(".{0s} = opt.{0s},", .{param.name});
+        }
+        w.indent -= 1;
+        try w.writeAll("}");
+    }
+    try w.writeLine(");");
+    w.indent -= 1;
+    try w.writeLine("}");
+}
+
+fn writeInheritedName(w: *CodeWriter, name: []const u8, suffix: []const u8) !void {
+    if (std.zig.Token.keywords.has(name)) {
+        try w.print("@\"{s}{s}\"", .{ name, suffix });
+    } else {
+        try w.print("{s}{s}", .{ name, suffix });
+    }
+}
+
 fn writeClassFunction(w: *CodeWriter, class: *const Context.Class, function: *const Context.Function, ctx: *const Context) !void {
     if (function.legacy_range) |group| {
         if (!group.reachableFrom(ctx.compatibility_minimum)) return;
+    }
+    if (inheritedTarget(class, function, ctx)) |owner| {
+        // Singleton ordinary varargs must reject allocation before initialization.
+        if (!function.is_vararg or !class.is_singleton) {
+            try writeInheritedFunction(w, class, function, owner, .ordinary, ctx);
+            return;
+        }
     }
     // For vararg functions, generate a thin wrapper that does comptime check + delegates to Alloc version
     if (function.is_vararg) {
@@ -828,6 +967,12 @@ fn writeClassFunctionVarargWrapper(w: *CodeWriter, class: *const Context.Class, 
 
 /// Writes the allocating version of a vararg function that does the actual FFI call.
 fn writeFunctionAlloc(w: *CodeWriter, function: *const Context.Function, class: ?*const Context.Class, ctx: *const Context) !void {
+    if (class) |cls| {
+        if (inheritedTarget(cls, function, ctx)) |owner| {
+            try writeInheritedFunction(w, cls, function, owner, .alloc, ctx);
+            return;
+        }
+    }
     try w.writeLine(
         \\/// Will allocate when calling across the FFI with packed arrays.
         \\///
@@ -2246,6 +2391,36 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
 
 /// Helpers for tests and fixture tools that exercise production emission.
 pub const testing = struct {
+    fn inheritedContext(arena: *std.heap.ArenaAllocator, function: Context.Function) !Context {
+        const allocator = arena.allocator();
+        var ctx: Context = .{ .arena = arena, .api = undefined, .config = undefined };
+        var root: Context.Class = .{ .name = "Root", .name_api = "Root" };
+        try root.functions.put(allocator, function.name_api, function);
+        try ctx.classes.put(allocator, "Root", root);
+        try ctx.classes.put(allocator, "Parent", .{ .name = "Parent", .name_api = "Parent", .base = "Root", .base_api = "Root" });
+        try ctx.classes.put(allocator, "Child", .{ .name = "Child", .name_api = "Child", .base = "Parent", .base_api = "Parent" });
+        return ctx;
+    }
+
+    fn emitInherited(out: *std.Io.Writer.Allocating, ctx: *const Context, class: *const Context.Class, function: *const Context.Function) !void {
+        out.clearRetainingCapacity();
+        var w: CodeWriter = .init(&out.writer);
+        try writeClassFunction(&w, class, function, ctx);
+        if (function.is_vararg) try writeFunctionAlloc(&w, function, class, ctx);
+        try std.testing.expectEqual(@as(usize, 0), w.indent);
+    }
+
+    fn contains(text: []const u8, expected: []const u8) !void {
+        if (std.mem.indexOf(u8, text, expected) == null) {
+            std.debug.print("Missing generated fragment: {s}\nOutput:\n{s}\n", .{ expected, text });
+            return error.TestExpectedEqual;
+        }
+    }
+
+    fn excludes(text: []const u8, unexpected: []const u8) !void {
+        try std.testing.expect(std.mem.indexOf(u8, text, unexpected) == null);
+    }
+
     /// How the fixture uses its generated legacy declaration.
     pub const Usage = enum {
         /// Reference declarations without calling the legacy method.
@@ -2399,6 +2574,285 @@ pub const testing = struct {
         }
     }
 };
+
+test "inherited fixed methods forward immediate and grandparent owners with full docs" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const owner: Context.Function = .{
+        .name = "probe",
+        .name_api = "probe",
+        .base = "Root",
+        .hash = 123,
+        .self = .{ .constant = "Root" },
+        .return_type = .{ .int = "i64" },
+        .doc = "Full inherited behavior.\n\nSee [Root.probe](https://example.invalid/probe).",
+    };
+    var ctx = try testing.inheritedContext(&arena, owner);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    for ([_][]const u8{ "Parent", "Child" }) |name| {
+        const class = ctx.classes.getPtr(name).?;
+        var inherited = owner;
+        inherited.self = .{ .constant = name };
+        try testing.emitInherited(&out, &ctx, class, &inherited);
+        try testing.contains(out.written(), "return gdzig.class.Root.probe(@ptrCast(self));");
+        try testing.contains(out.written(), "/// Full inherited behavior.");
+        try testing.contains(out.written(), "/// See [Root.probe](https://example.invalid/probe).");
+        try testing.excludes(out.written(), "probe_ptr");
+        try testing.excludes(out.written(), "var args");
+    }
+    try testing.contains(out.written(), "pub fn probe(self: *const Child) i64");
+    var inherited = owner;
+    inherited.self = .{ .mutable = "Child" };
+    ctx.classes.getPtr("Root").?.functions.getPtr("probe").?.self = .{ .mutable = "Root" };
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    try testing.contains(out.written(), "pub fn probe(self: *Child) i64");
+    inherited.self = .static;
+    inherited.return_type = .void;
+    ctx.classes.getPtr("Root").?.functions.getPtr("probe").?.self = .static;
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    try testing.contains(out.written(), "pub fn probe() void");
+    try testing.contains(out.written(), "    gdzig.class.Root.probe();");
+    try testing.excludes(out.written(), "return ");
+    try testing.excludes(out.written(), "/// Inherited from");
+}
+
+test "inherited options retain nominal defaults and forward fields without materializing" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var owner: Context.Function = .{ .name = "resume", .name_api = "resume", .base = "Root", .hash = 123, .self = .{ .mutable = "Root" } };
+    try owner.parameters.put(arena.allocator(), "@\"error\"", .{ .name = "@\"error\"", .type = .{ .int = "i64" } });
+    try owner.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
+    try owner.parameters.put(arena.allocator(), "label", .{ .name = "label", .type = .string, .default = .{ .string = "default" } });
+    try owner.parameters.put(arena.allocator(), "value", .{ .name = "value", .type = .variant, .default = .null });
+    var ctx = try testing.inheritedContext(&arena, owner);
+    var inherited = owner;
+    inherited.self = .{ .mutable = "Child" };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    const text = out.written();
+    try testing.contains(text, "pub const ResumeOptions = struct");
+    try testing.contains(text, "pub fn @\"resume\"(self: *Child, @\"error\": i64, opt: ResumeOptions) void");
+    try testing.contains(text, "gdzig.class.Root.@\"resume\"(@ptrCast(self), @\"error\", .{");
+    try testing.contains(text, ".count = opt.count,");
+    try testing.contains(text, ".label = opt.label,");
+    try testing.contains(text, ".value = opt.value,");
+    try testing.contains(text, "count: i64 = 7,");
+    try testing.contains(text, "label: ?String = null,");
+    try testing.contains(text, "value: ?Variant = null,");
+    try testing.excludes(text, "actual_label");
+    try testing.excludes(text, "actual_value");
+    try testing.excludes(text, "///");
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "pub const ResumeOptions"));
+}
+
+test "inherited varargs retain ordinary guard target, const asymmetry and allocation warnings" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var owner: Context.Function = .{ .name = "emitRaw", .name_api = "emit_signal", .base = "Root", .hash = 123, .self = .{ .constant = "Root" }, .return_type = .variant, .is_vararg = true, .doc = "Full vararg behavior." };
+    try owner.parameters.put(arena.allocator(), "signal", .{ .name = "signal", .type = .string_name });
+    var ctx = try testing.inheritedContext(&arena, owner);
+    var inherited = owner;
+    inherited.self = .{ .constant = "Child" };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    const text = out.written();
+    try testing.contains(text, "pub fn emitRaw(self: *Child, signal: StringName, @\"...\": anytype) Variant");
+    try testing.contains(text, "pub fn emitRawAlloc(self: *const Child, signal: StringName, @\"...\": anytype) Variant");
+    try testing.contains(text, "return gdzig.class.Root.emitRaw(@ptrCast(self), signal, @\"...\");");
+    try testing.contains(text, "return gdzig.class.Root.emitRawAlloc(@ptrCast(self), signal, @\"...\");");
+    try testing.contains(text, "/// Guarantees no allocations when calling across the FFI. Passing packed arrays is a compile error; use the Alloc variant.");
+    try testing.contains(text, "/// Will allocate when calling across the FFI with packed arrays.");
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, "/// Full vararg behavior."));
+    try testing.excludes(text, "emitRawAlloc_ptr");
+}
+
+test "actual singleton forwarders preserve owner storage and guard-first ordinary varargs" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const owner: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Root", .hash = 123, .self = .{ .constant = "Root" }, .return_type = .{ .int = "i64" } };
+    var ctx = try testing.inheritedContext(&arena, owner);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    for ([_]struct { name: []const u8, api: []const u8 }{ .{ .name = "Engine", .api = "Engine" }, .{ .name = "Os", .api = "OS" } }) |row| {
+        const class: Context.Class = .{ .name = row.name, .name_api = row.api, .base = "Root", .base_api = "Root", .is_singleton = true, .has_singleton = true };
+        ctx.classes.getPtr("Root").?.functions.getPtr("probe").?.is_vararg = false;
+        var inherited = owner;
+        inherited.self = .singleton;
+        try testing.emitInherited(&out, &ctx, &class, &inherited);
+        try testing.contains(out.written(), "pub fn probe() i64");
+        try testing.contains(out.written(), "if (instance == null)");
+        try testing.contains(out.written(), "StringName.fromComptimeLatin1(self_name)");
+        try testing.contains(out.written(), "return gdzig.class.Root.probe(@ptrCast(instance.?));");
+        try testing.excludes(out.written(), "probe_ptr");
+        inherited.is_vararg = true;
+        inherited.return_type = .variant;
+        ctx.classes.getPtr("Root").?.functions.getPtr("probe").?.is_vararg = true;
+        try testing.emitInherited(&out, &ctx, &class, &inherited);
+        try testing.contains(out.written(), "requires allocation; use probeAlloc() or pass a Variant instead.");
+        try testing.contains(out.written(), "return probeAlloc(@\"...\");");
+        try testing.contains(out.written(), "return gdzig.class.Root.probeAlloc(@ptrCast(instance.?), @\"...\");");
+        const guard = std.mem.indexOf(u8, out.written(), "@compileError").?;
+        const init = std.mem.indexOf(u8, out.written(), "globalGetSingleton").?;
+        try std.testing.expect(guard < init);
+    }
+}
+
+test "singleton descendants and private inherited delegates retain local nullable transport" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const owner: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Root", .hash = 123, .self = .{ .constant = "Root" } };
+    var ctx = try testing.inheritedContext(&arena, owner);
+    try ctx.classes.put(arena.allocator(), "PhysicsServer2D", .{ .name = "PhysicsServer2d", .name_api = "PhysicsServer2D", .is_singleton = true, .has_singleton = true });
+    try ctx.classes.put(arena.allocator(), "PhysicsServer3D", .{ .name = "PhysicsServer3d", .name_api = "PhysicsServer3D", .is_singleton = true, .has_singleton = true });
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    for ([_][]const u8{ "PhysicsServer2D", "PhysicsServer3D" }) |api| {
+        const class: Context.Class = .{ .name = "Extension", .name_api = "Extension", .base_api = api, .has_singleton = true };
+        ctx.classes.getPtr("Root").?.functions.getPtr("probe").?.is_vararg = false;
+        var inherited = owner;
+        inherited.self = .singleton;
+        try testing.emitInherited(&out, &ctx, &class, &inherited);
+        try testing.contains(out.written(), "raw.objectMethodBindPtrcall(probe_ptr,");
+        try testing.contains(out.written(), ".instance)");
+        try testing.excludes(out.written(), "globalGetSingleton");
+        try testing.excludes(out.written(), "instance.?");
+        inherited.is_vararg = true;
+        inherited.return_type = .variant;
+        try testing.emitInherited(&out, &ctx, &class, &inherited);
+        try testing.contains(out.written(), "raw.objectMethodBindCall(probeAlloc_ptr,");
+        try testing.excludes(out.written(), "globalGetSingleton");
+        inherited.self = .static;
+        try testing.emitInherited(&out, &ctx, &class, &inherited);
+        try testing.contains(out.written(), "raw.objectMethodBindCall(probeAlloc_ptr, null,");
+    }
+    var inherited = owner;
+    inherited.self = .{ .constant = "Child" };
+    inherited.is_public = false;
+    inherited.mixin_override = true;
+    inherited.name = "probeRaw";
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    try testing.contains(out.written(), "fn probeRaw(self: *const Child)");
+    try testing.contains(out.written(), "var probeRaw_ptr");
+    try testing.excludes(out.written(), "gdzig.class.Root");
+}
+
+test "full class emission retains own and mixin bodies, omits skip and virtual methods" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const owner: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Root", .hash = 123, .self = .{ .mutable = "Root" } };
+    var ctx = try testing.inheritedContext(&arena, owner);
+    ctx.config = .{ .arch = .@"64", .precision = .float, .verbosity = .quiet, .input = dir.dir, .output = dir.dir, .io = std.testing.io, .extension_api = undefined, .gdextension_interface = undefined };
+    const class = ctx.classes.getPtr("Child").?;
+    var inherited = owner;
+    inherited.self = .{ .mutable = "Child" };
+    try class.functions.put(arena.allocator(), "probe", inherited);
+    var local = inherited;
+    local.name = "own";
+    local.name_api = "own";
+    local.base = "Child";
+    try class.functions.put(arena.allocator(), "own", local);
+    local.name = "skipped";
+    local.name_api = "skipped";
+    local.skip = true;
+    try class.functions.put(arena.allocator(), "skipped", local);
+    local.name = "virtual";
+    local.name_api = "virtual";
+    local.skip = false;
+    local.mode = .virtual;
+    try class.functions.put(arena.allocator(), "virtual", local);
+    local = inherited;
+    local.name = "adapt";
+    local.name_api = "adapt";
+    local.skip = true;
+    local.mixin_override = true;
+    local.is_vararg = true;
+    local.return_type = .variant;
+    try class.functions.put(arena.allocator(), "adapt", local);
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    var w: CodeWriter = .init(&out.writer);
+    try writeClass(&w, class, &ctx);
+    const text = out.written();
+    try testing.contains(text, "gdzig.class.Root.probe(@ptrCast(self))");
+    try testing.contains(text, "pub fn own(self: *Child)");
+    try testing.contains(text, "var own_ptr");
+    try testing.excludes(text, "fn skipped(");
+    try testing.excludes(text, "fn virtual(");
+    try testing.contains(text, "fn adaptRaw(self: *Child");
+    try testing.contains(text, "fn adaptRawAlloc(self: *Child");
+    try testing.contains(text, "var adaptRawAlloc_ptr");
+    try testing.excludes(text, "pub fn adaptRaw");
+}
+
+test "inherited legacy and dispatch bodies keep per-Self adapters local at every minimum" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const owner: Context.Function = .{ .name = "probe", .name_api = "probe", .base = "Root", .hash = 123, .self = .{ .mutable = "Root" } };
+    var ctx = try testing.inheritedContext(&arena, owner);
+    const group: version_dispatch.Group = .{ .lower = .@"4.6", .upper = .@"4.7", .old_hash = 111, .layout = .incompatible, .adapter = "probe_4_6", .available = true, .signature = fixtureSignature("argument type") };
+    var inherited = owner;
+    inherited.self = .{ .mutable = "Child" };
+    inherited.dispatch_ranges = &.{group};
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    for ([_]?common.Version{ null, .@"4.6", .@"4.7" }) |minimum| {
+        ctx.compatibility_minimum = minimum;
+        try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+        try testing.contains(out.written(), "var probe_ptr");
+        try testing.excludes(out.written(), "gdzig.class.Root.probe");
+        if (minimum == null or minimum.?.lt(.@"4.7")) try testing.contains(out.written(), "return probe_4_6(self);");
+    }
+    inherited.dispatch_ranges = &.{};
+    inherited.legacy_range = group;
+    inherited.name = "probe_4_6_legacy";
+    inherited.hash = 111;
+    ctx.compatibility_minimum = null;
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    try testing.contains(out.written(), "gdzig.api_version.range");
+    try testing.contains(out.written(), "var probe_4_6_legacy_ptr");
+    ctx.compatibility_minimum = .@"4.7";
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    try std.testing.expectEqual(@as(usize, 0), out.written().len);
+}
+
+test "inherited calls qualify colliding owners and preserve public Raw signal names" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var owner: Context.Function = .{ .name = "connectRaw", .name_api = "connect", .base = "Root", .hash = 123, .self = .{ .constant = "Root" }, .return_type = .{ .class = "Root" } };
+    try owner.parameters.put(arena.allocator(), "other", .{ .name = "other", .type = .{ .class = "Root" } });
+    var ctx = try testing.inheritedContext(&arena, owner);
+    const class = ctx.classes.getPtr("Child").?;
+    try class.enums.put(arena.allocator(), "Root", .{ .name = "Root" });
+    var inherited = owner;
+    inherited.self = .{ .constant = "Child" };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try testing.emitInherited(&out, &ctx, class, &inherited);
+    try testing.contains(out.written(), "other: *gdzig.class.Root) ?*gdzig.class.Root");
+    try testing.contains(out.written(), "return gdzig.class.Root.connectRaw(@ptrCast(self), other);");
+    for ([_]struct { name: []const u8, api: []const u8 }{ .{ .name = "disconnectRaw", .api = "disconnect" }, .{ .name = "emitRaw", .api = "emit_signal" } }) |row| {
+        owner.name = row.name;
+        owner.name_api = row.api;
+        try ctx.classes.getPtr("Root").?.functions.put(arena.allocator(), row.api, owner);
+        inherited = owner;
+        inherited.self = .{ .constant = "Child" };
+        try testing.emitInherited(&out, &ctx, class, &inherited);
+        try testing.excludes(out.written(), "classdbGetMethodBind");
+        try testing.contains(out.written(), row.name);
+    }
+    ctx.classes.getPtr("Root").?.functions.getPtr("emit_signal").?.skip = true;
+    try testing.emitInherited(&out, &ctx, class, &inherited);
+    try testing.contains(out.written(), "classdbGetMethodBind");
+    ctx.classes.getPtr("Root").?.functions.getPtr("emit_signal").?.skip = false;
+    ctx.classes.getPtr("Root").?.functions.getPtr("emit_signal").?.self = .singleton;
+    try testing.emitInherited(&out, &ctx, class, &inherited);
+    try testing.contains(out.written(), "classdbGetMethodBind");
+}
 
 test "class bind primary then compatibility order, including Alloc and no metadata" {
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
