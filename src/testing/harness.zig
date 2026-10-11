@@ -30,7 +30,7 @@ fn entrypoint(
     r_initialization: *gdzig.c.GDExtensionInitialization,
 ) callconv(.c) gdzig.c.GDExtensionBool {
     gdzig.raw = .init(get_proc_address.?, library.?);
-    gdzig.raw.getGodotVersion(@ptrCast(&gdzig.version));
+    if (!gdzig.initializeVersion()) return 0;
 
     r_initialization.* = .{
         .minimum_initialization_level = @backingInt(options.minimum_initialization_level),

@@ -41,7 +41,21 @@ pub fn main(init: std.process.Init) !void {
     var reader = config.extension_api.readerStreaming(init.io, &buf);
 
     // Parse the extension_api.json
-    const godot_api = try GodotApi.parseFromReader(&arena, &reader.interface);
+    const godot_api = if (config.godot_compatibility_minimum != null) blk: {
+        // Minimum selection is valid only for the exact audited current snapshot.
+        const bytes = try reader.interface.allocRemaining(arena.allocator(), .unlimited);
+        var snapshot_reader: std.Io.Reader = .fixed(bytes);
+        const parsed = try GodotApi.parseFromReader(&arena, &snapshot_reader);
+        errdefer parsed.deinit();
+        var digest: [32]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
+        const checksum = std.fmt.bytesToHex(digest, .lower);
+        compatibility.validateSnapshot(parsed.value.header, &checksum) catch |err| {
+            std.log.err("current API snapshot changed; regenerate compatibility metadata before selecting a minimum", .{});
+            return err;
+        };
+        break :blk parsed;
+    } else try GodotApi.parseFromReader(&arena, &reader.interface);
     defer godot_api.deinit();
 
     // Build the codegen context
@@ -83,5 +97,6 @@ const Args = @import("common").Args;
 const codegen = @import("codegen.zig");
 const Config = @import("Config.zig");
 const dispatch_report = @import("dispatch_report.zig");
+const compatibility = @import("compatibility.zig");
 const Context = @import("Context.zig");
 const GodotApi = @import("common").GodotApi;
