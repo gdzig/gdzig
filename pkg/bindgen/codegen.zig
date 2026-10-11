@@ -2854,6 +2854,76 @@ test "inherited calls qualify colliding owners and preserve public Raw signal na
     try testing.contains(out.written(), "classdbGetMethodBind");
 }
 
+test "inherited ordinary and Alloc varargs forward nominal optional fields once" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var owner: Context.Function = .{
+        .name = "probe",
+        .name_api = "probe",
+        .base = "Root",
+        .hash = 123,
+        .self = .{ .constant = "Root" },
+        .is_vararg = true,
+        .return_type = .variant,
+    };
+    try owner.parameters.put(arena.allocator(), "required", .{ .name = "required", .type = .{ .int = "i64" } });
+    try owner.parameters.put(arena.allocator(), "count", .{ .name = "count", .type = .{ .int = "i64" }, .default = .{ .primitive = "7" } });
+    try owner.parameters.put(arena.allocator(), "value", .{ .name = "value", .type = .variant, .default = .null });
+    var ctx = try testing.inheritedContext(&arena, owner);
+    var inherited = owner;
+    inherited.self = .{ .constant = "Child" };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Child").?, &inherited);
+    const text = out.written();
+    try testing.contains(text, "pub fn probe(self: *Child, required: i64, @\"...\": anytype, opt: ProbeOptions) Variant");
+    try testing.contains(text, "pub fn probeAlloc(self: *const Child, required: i64, @\"...\": anytype, opt: ProbeOptions) Variant");
+    try testing.contains(text, "return gdzig.class.Root.probe(@ptrCast(self), required, @\"...\", .{");
+    try testing.contains(text, "return gdzig.class.Root.probeAlloc(@ptrCast(self), required, @\"...\", .{");
+    try testing.contains(text, "count: i64 = 7,");
+    try testing.contains(text, "value: ?Variant = null,");
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "pub const ProbeOptions"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, ".count = opt.count,"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, text, ".value = opt.value,"));
+    try testing.excludes(text, "actual_value");
+    try testing.excludes(text, "probeAlloc_ptr");
+}
+
+test "singleton inherited static methods initialize storage and reuse selected owner bind" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var owner: Context.Function = .{
+        .name = "probe",
+        .name_api = "probe",
+        .base = "Root",
+        .hash = 123,
+        .selected_hash = 456,
+        .self = .static,
+    };
+    try owner.hash_compatibility.append(arena.allocator(), 789);
+    var ctx = try testing.inheritedContext(&arena, owner);
+    const class: Context.Class = .{
+        .name = "Os",
+        .name_api = "OS",
+        .base = "Root",
+        .base_api = "Root",
+        .is_singleton = true,
+        .has_singleton = true,
+    };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try testing.emitInherited(&out, &ctx, &class, &owner);
+    try testing.contains(out.written(), "pub fn probe() void");
+    try testing.contains(out.written(), "if (instance == null)");
+    try testing.contains(out.written(), "StringName.fromComptimeLatin1(self_name)");
+    try testing.contains(out.written(), "gdzig.class.Root.probe();");
+    try testing.excludes(out.written(), "probe_ptr");
+    try testing.emitInherited(&out, &ctx, ctx.classes.getPtr("Root").?, &owner);
+    try testing.contains(out.written(), ", 456);");
+    try testing.excludes(out.written(), ", 123);");
+    try testing.excludes(out.written(), "inline for");
+}
+
 test "class bind primary then compatibility order, including Alloc and no metadata" {
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();

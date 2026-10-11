@@ -217,7 +217,8 @@ pub fn build(b: *Build) !void {
 
             const run_test = api.addTestImpl(b, .{ .b = b, .dep = null }, .{
                 .name = b.dupe(entry.name),
-                .startup = if (std.mem.eql(u8, entry.name, "compat")) .deferred else .initialization,
+                .startup = if (std.mem.eql(u8, entry.name, "compat") or
+                    std.mem.eql(u8, entry.name, "codegen")) .deferred else .initialization,
                 .root_module = test_mod,
                 .target = target,
                 .optimize = optimize,
@@ -225,6 +226,29 @@ pub fn build(b: *Build) !void {
             test_step.dependOn(&run_test.step);
             b.step(b.fmt("test-{s}", .{entry.name}), b.fmt("Run {s} integration tests", .{entry.name})).dependOn(&run_test.step);
         }
+
+        // Compile-only controls use the actual generated module. Never run their
+        // undefined fixture pointers, including in the full test target.
+        const rejected = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("test/codegen/packed_array_rejected.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "gdzig", .module = gdzig_mod }},
+        }) });
+        rejected.expect_errors = .{
+            .contains = "requires allocation; use callAlloc() or pass a Variant instead.",
+        };
+        const accepted = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("test/codegen/packed_array_accepted.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "gdzig", .module = gdzig_mod }},
+        }) });
+        const codegen_step = &b.top_level_steps.get("test-codegen").?.step;
+        test_step.dependOn(&rejected.step);
+        codegen_step.dependOn(&rejected.step);
+        test_step.dependOn(&accepted.step);
+        codegen_step.dependOn(&accepted.step);
     }
 
     //

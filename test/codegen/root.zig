@@ -31,7 +31,7 @@ test "enums with duplicate values alias the first declared member" {
     // enumerators (e.g. SHADER_STAGE_VERTEX_BIT == SHADER_STAGE_FRAGMENT == 1); only
     // the first-declared name for each value may become an enum tag, later members
     // with the same value must be alias constants equal to it.
-    try std.testing.expectEqual(@as(i32, 4), @intFromEnum(RenderingDevice.ShaderStage.shader_stage_compute));
+    try std.testing.expectEqual(@as(i32, 4), @backingInt(RenderingDevice.ShaderStage.shader_stage_compute));
     try std.testing.expectEqual(RenderingDevice.ShaderStage.shader_stage_fragment, RenderingDevice.ShaderStage.shader_stage_vertex_bit);
     try std.testing.expectEqual(RenderingDevice.ShaderStage.shader_stage_tesselation_control, RenderingDevice.ShaderStage.shader_stage_fragment_bit);
 
@@ -165,6 +165,95 @@ test "integer math helpers return the selected width" {
     try testing.expectEqual(@as(i32, 1), floored_i32);
 }
 
+test "inherited Node3d names enums and nominal child options round-trip" {
+    const parent = Node3d.init();
+    defer parent.destroy();
+    var name: StringName = .fromLatin1("InheritedForwarder", false);
+    defer name.deinit();
+    parent.setName(name);
+    var actual = parent.getName();
+    defer actual.deinit();
+    try testing.expect(name.eql(actual));
+    parent.setProcessMode(.process_mode_disabled);
+    try testing.expectEqual(Node.ProcessMode.process_mode_disabled, parent.getProcessMode());
+
+    const first = Node3d.init();
+    parent.addChild(@ptrCast(first), .{});
+    const second = Node3d.init();
+    const options: Node3d.AddChildOptions = .{ .force_readable_name = true };
+    parent.addChild(@ptrCast(second), options);
+    try testing.expectEqual(@as(i32, 2), parent.getChildCount(.{}));
+    try testing.expect(first.getParent() == @as(*Node, @ptrCast(parent)));
+    try testing.expect(second.getParent() == @as(*Node, @ptrCast(parent)));
+}
+
+test "inherited Node3d ordinary and Alloc varargs preserve IDs and packed metadata" {
+    const node = Node3d.init();
+    defer node.destroy();
+    var ordinary = node.call(.fromComptimeLatin1("get_instance_id"), .{});
+    defer ordinary.deinit();
+    var allocated = node.callAlloc(.fromComptimeLatin1("get_instance_id"), .{});
+    defer allocated.deinit();
+    const id = ordinary.as(i64).?;
+    try testing.expect(id != 0);
+    try testing.expectEqual(id, allocated.as(i64).?);
+    try testing.expectEqual(@as(u64, @intCast(id)), node.getInstanceId());
+
+    var bytes: gdzig.builtin.PackedByteArray = .init();
+    defer bytes.deinit();
+    _ = bytes.append(42);
+    const key: StringName = .fromComptimeLatin1("forwarder_bytes");
+    var set = node.callAlloc(.fromComptimeLatin1("set_meta"), .{ key, bytes });
+    defer set.deinit();
+    var get = node.call(.fromComptimeLatin1("get_meta"), .{key});
+    defer get.deinit();
+    try testing.expectEqual(gdzig.builtin.Variant.Tag.packed_byte_array, get.tag);
+    var recovered = get.as(gdzig.builtin.PackedByteArray).?;
+    defer recovered.deinit();
+    try testing.expectEqual(@as(i64, 1), recovered.size());
+    try testing.expectEqual(@as(i64, 42), recovered.get(0));
+}
+
+test "inherited Engine and OS instance IDs initialize and reuse exact owner storage" {
+    inline for (.{ gdzig.class.Engine, gdzig.class.Os }) |Singleton| {
+        const saved = Singleton.instance;
+        defer Singleton.instance = saved;
+        Singleton.instance = null;
+        const first = Singleton.getInstanceId();
+        try testing.expect(first != 0);
+        const initialized = Singleton.instance;
+        try testing.expect(initialized != null);
+        try testing.expectEqual(first, Singleton.getInstanceId());
+        try testing.expectEqual(initialized, Singleton.instance);
+    }
+}
+
+test "real physics singleton descendants retain initialized owner storage" {
+    inline for (.{
+        .{ gdzig.class.PhysicsServer2d, gdzig.class.PhysicsServer2dExtension },
+        .{ gdzig.class.PhysicsServer3d, gdzig.class.PhysicsServer3dExtension },
+    }) |types| {
+        const Owner = types[0];
+        const Descendant = types[1];
+        const saved = Owner.instance;
+        defer Owner.instance = saved;
+        const id = Owner.getInstanceId();
+        const initialized = Owner.instance;
+        try testing.expect(id != 0 and initialized != null);
+        try testing.expectEqual(id, Descendant.getInstanceId());
+        try testing.expectEqual(initialized, Owner.instance);
+    }
+}
+
+test "inherited public signatures and options retain nominal types" {
+    try testing.expect(@TypeOf(&Node3d.getInstanceId) == *const fn (*const Node3d) u64);
+    try testing.expect(@TypeOf(&Node3d.setName) == *const fn (*Node3d, StringName) void);
+    try testing.expect(@TypeOf(&Node3d.addChild) == *const fn (*Node3d, *Node, Node3d.AddChildOptions) void);
+    try testing.expect(@TypeOf(&gdzig.class.Engine.getInstanceId) == *const fn () u64);
+    try testing.expect(@TypeOf(&gdzig.class.Os.getInstanceId) == *const fn () u64);
+    try testing.expect(Node3d.AddChildOptions != Node.AddChildOptions);
+}
+
 const std = @import("std");
 const testing = std.testing;
 
@@ -177,3 +266,4 @@ const AudioStreamPlaybackPolyphonic = gdzig.class.AudioStreamPlaybackPolyphonic;
 const ArrayMesh = gdzig.class.ArrayMesh;
 const RenderingDevice = gdzig.class.RenderingDevice;
 const Node = gdzig.class.Node;
+const Node3d = gdzig.class.Node3d;
