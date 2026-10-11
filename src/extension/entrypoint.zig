@@ -22,11 +22,11 @@ fn entrypoint(
     r_initialization: *gdzig.c.GDExtensionInitialization,
 ) callconv(.c) gdzig.c.GDExtensionBool {
     gdzig.raw = .init(get_proc_address.?, library.?);
-    gdzig.raw.getGodotVersion(@ptrCast(&gdzig.version));
+    if (!gdzig.initializeVersion()) return 0;
     extension.register(&registry);
 
     r_initialization.* = .{
-        .minimum_initialization_level = @intFromEnum(options.minimum_initialization_level),
+        .minimum_initialization_level = @backingInt(options.minimum_initialization_level),
         .initialize = &enter,
         .deinitialize = &exit,
         .userdata = null,
@@ -35,14 +35,14 @@ fn entrypoint(
 }
 
 fn enter(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(.c) void {
-    registry.enter(@enumFromInt(level));
+    registry.enter(@fromBackingInt(@intCast(level)));
 }
 
 fn exit(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(.c) void {
-    if (level < @intFromEnum(options.minimum_initialization_level)) return;
+    if (level < @backingInt(options.minimum_initialization_level)) return;
 
-    registry.exit(@enumFromInt(level));
-    if (level == @intFromEnum(options.minimum_initialization_level)) {
+    registry.exit(@fromBackingInt(@intCast(level)));
+    if (level == @backingInt(options.minimum_initialization_level)) {
         if (@hasDecl(extension, "unregister")) extension.unregister(&registry);
         gdzig.extension.PropertyListInstanceBinding.cleanup();
         gdzig.extension.DestroyInstanceBinding.cleanup();

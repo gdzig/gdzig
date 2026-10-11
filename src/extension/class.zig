@@ -4,7 +4,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
     const callbacks = comptime makeClassCallbacks(T);
     const Userdata = ClassUserdataOf(T);
 
-    if (gdzig.version.gte(.@"4.7")) {
+    if (gdzig.api_version.gte(.@"4.7")) {
         classdb.registerClass6(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -19,7 +19,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
             .is_runtime = info.is_runtime,
             .icon_path = info.icon_path,
         }, callbacks.v6);
-    } else if (gdzig.version.gte(.@"4.4")) {
+    } else if (gdzig.api_version.gte(.@"4.4")) {
         classdb.registerClass4(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -34,7 +34,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
             .is_runtime = info.is_runtime,
             .icon_path = info.icon_path,
         }, callbacks.v4);
-    } else if (gdzig.version.gte(.@"4.3")) {
+    } else if (gdzig.api_version.gte(.@"4.3")) {
         classdb.registerClass3(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -47,7 +47,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
             .is_exposed = info.is_exposed,
             .is_runtime = info.is_runtime,
         }, callbacks.v3);
-    } else if (gdzig.version.gte(.@"4.2")) {
+    } else if (gdzig.api_version.gte(.@"4.2")) {
         classdb.registerClass2(T, Userdata, void, &class_name, &base_name, if (Userdata != void) .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,
@@ -58,7 +58,7 @@ pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) voi
             .is_abstract = info.is_abstract,
             .is_exposed = info.is_exposed,
         }, callbacks.v2);
-    } else if (gdzig.version.gte(.@"4.1")) {
+    } else if (gdzig.api_version.gte(.@"4.1")) {
         classdb.registerClass1(T, Userdata, &class_name, &base_name, if (Userdata != void) .{
             .userdata = info.userdata,
             .is_virtual = info.is_virtual,

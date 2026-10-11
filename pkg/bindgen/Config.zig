@@ -8,6 +8,7 @@ output: Dir,
 precision: Precision,
 verbosity: Verbosity,
 io: Io,
+godot_compatibility_minimum: ?Version = null,
 
 pub const Precision = enum {
     float,
@@ -32,13 +33,20 @@ pub const Arguments = struct {
     arch: Arch,
     precision: Precision,
     verbosity: Verbosity,
+    godot_compatibility_minimum: ?Version = null,
 };
 
-pub const usage = "Usage: gdzig-bindgen --gdextension-interface=<header> --extension-api=<json> --input=<mixins> --output=<bindings> --precision=<float|double> --architecture=<32|64> [--verbosity=<quiet|verbose>]\n";
+pub const usage = "Usage: gdzig-bindgen --gdextension-interface=<header> --extension-api=<json> --input=<mixins> --output=<bindings> --precision=<float|double> --architecture=<32|64> [--verbosity=<quiet|verbose>] [--godot-compatibility-minimum=<major.minor[.patch]>]\n";
 
 /// Validate named values without opening files. Returned paths borrow from args.
 pub fn fromArgs(args: *Args) !Arguments {
     if (try args.optional(bool, "help") orelse false) return error.HelpRequested;
+    const minimum_text = args.optional([]const u8, "godot-compatibility-minimum") catch
+        return error.InvalidCompatibilityMinimum;
+    const minimum: ?Version = if (minimum_text) |text|
+        try compatibility_minimum.parse(text, compatibility.manifest.targets)
+    else
+        null;
     const result: Arguments = .{
         .gdextension_interface = args.required([]const u8, "gdextension-interface") catch return error.MissingGdextensionInterface,
         .extension_api = args.required([]const u8, "extension-api") catch return error.MissingExtensionApi,
@@ -53,6 +61,7 @@ pub fn fromArgs(args: *Args) !Arguments {
             else => error.MissingArchitecture,
         },
         .verbosity = (args.optional(Verbosity, "verbosity") catch return error.InvalidVerbosity) orelse .quiet,
+        .godot_compatibility_minimum = minimum,
     };
     try args.reject(.strict);
     return result;
@@ -77,6 +86,7 @@ pub fn load(io: Io, arguments: Arguments) !Config {
         .precision = arguments.precision,
         .verbosity = arguments.verbosity,
         .io = io,
+        .godot_compatibility_minimum = arguments.godot_compatibility_minimum,
     };
 }
 
@@ -250,10 +260,33 @@ test "required options distinguish missing values from invalid empty enums" {
     }
 }
 
+test "named compatibility minimum is accepted before input files are opened" {
+    var args: Args = try .initSlice(std.testing.allocator, &.{
+        "bindgen",
+        "--gdextension-interface=h",
+        "--extension-api=a",
+        "--input=i",
+        "--output=o",
+        "--precision=float",
+        "--architecture=64",
+        "--godot-compatibility-minimum=4.6",
+    });
+    defer args.deinit(std.testing.allocator);
+    const arguments = try fromArgs(&args);
+    const minimum = arguments.godot_compatibility_minimum.?;
+    try std.testing.expectEqual(@as(u32, 4), minimum.major);
+    try std.testing.expectEqual(@as(u32, 6), minimum.minor);
+    try std.testing.expectEqual(@as(u32, 0), minimum.patch);
+}
+
 const std = @import("std");
 const Io = std.Io;
 const Dir = Io.Dir;
 const File = Io.File;
+
+const Version = @import("common").Version;
+const compatibility_minimum = @import("common").compatibility_minimum;
+const compatibility = @import("compatibility.zig");
 
 const build_options = @import("build_options");
 const Args = @import("common").Args;

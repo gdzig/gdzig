@@ -74,6 +74,7 @@ pub fn fmt(comptime config: Config, str: []const u8) std.fmt.Alt([]const u8, Fmt
 test {
     testing.refAllDecls(Version);
     testing.refAllDecls(Args);
+    testing.refAllDecls(compatibility_minimum);
 }
 
 test "strict version parser normalizes missing patch and rejects malformed user input" {
@@ -87,7 +88,7 @@ test "strict version parser normalizes missing patch and rejects malformed user 
         .{ .text = "4.6.3", .major = 4, .minor = 6, .patch = 3 },
         .{ .text = "4.7.2", .major = 4, .minor = 7, .patch = 2 },
     }) |case| {
-        const version = try Version.parseStrict(case.text);
+        const version: Version = try .parseStrict(case.text);
         try testing.expectEqual(case.major, version.major);
         try testing.expectEqual(case.minor, version.minor);
         try testing.expectEqual(case.patch, version.patch);
@@ -175,3 +176,4 @@ const comptimeConvert = casez.comptimeConvert;
 pub const GodotApi = @import("GodotApi.zig");
 pub const Args = @import("Args.zig");
 pub const Version = @import("version.zig").Version;
+pub const compatibility_minimum = @import("compatibility_minimum.zig");

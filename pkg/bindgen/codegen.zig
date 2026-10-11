@@ -236,7 +236,7 @@ fn writeBuiltinDestructor(w: *CodeWriter, builtin: *const Context.Builtin) !void
 fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const Context.Function, ctx: *const Context) !void {
     try writeFunctionHeader(w, method, null, ctx);
 
-    if (method.hash_compatibility.items.len == 0) {
+    if (method.selected_hash != null or method.hash_compatibility.items.len == 0) {
         try w.printLine(
             \\if ({0s}_ptr == null) {{
             \\    {0s}_ptr = raw.variantGetPtrBuiltinMethod(@intFromEnum(Variant.Tag.forType({3s})), @ptrCast(&StringName.fromComptimeLatin1("{1s}")), {2d}).?;
@@ -245,7 +245,7 @@ fn writeBuiltinMethod(w: *CodeWriter, builtin_name: []const u8, method: *const C
         , .{
             method.name,
             method.name_api,
-            method.hash.?,
+            method.selected_hash orelse method.hash.?,
             builtin_name,
             switch (method.self) {
                 .static => "null",
@@ -591,7 +591,7 @@ fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx:
     }
 
     try w.printLine(
-        "if (!gdzig.version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, .{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
+        "if (!gdzig.api_version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, .{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
         .{ group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
     );
     w.indent += 1;
@@ -603,7 +603,7 @@ fn writeLegacyRangeGuard(w: *CodeWriter, function: *const Context.Function, ctx:
     defer ctx.rawAllocator().free(message);
     try w.printLine("var legacy_message: [{d}]u8 = undefined;", .{message.len + 30});
     try w.printLine(
-        "const message = std.fmt.bufPrint(&legacy_message, \"{f}\", .{{ gdzig.version.major, gdzig.version.minor, gdzig.version.patch }}) catch std.debug.panic(\"legacy range message overflow\", .{{}});",
+        "const message = std.fmt.bufPrint(&legacy_message, \"{f}\", .{{ gdzig.engine_version.major, gdzig.engine_version.minor, gdzig.engine_version.patch }}) catch std.debug.panic(\"legacy range message overflow\", .{{}});",
         .{std.zig.fmtString(message)},
     );
     try w.writeLine("@panic(message);");
@@ -621,7 +621,7 @@ fn writeVersionDispatch(
             if (!minimum.lt(group.upper)) continue;
         }
         try w.printLine(
-            "if (gdzig.version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, " ++
+            "if (gdzig.api_version.range(.{{ .major = {d}, .minor = {d}, .patch = {d} }}, " ++
                 ".{{ .major = {d}, .minor = {d}, .patch = {d} }})) {{",
             .{ group.lower.major, group.lower.minor, group.lower.patch, group.upper.major, group.upper.minor, group.upper.patch },
         );
@@ -717,9 +717,12 @@ fn writeClassMethodBind(w: *CodeWriter, function: *const Context.Function, suffi
     try w.printLine("if ({s}{s}_ptr == null) {{", .{ function.name, suffix });
     w.indent += 1;
     try w.printLine("{s}{s}_ptr = raw.classdbGetMethodBind(@ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), @ptrCast(&StringName.fromComptimeLatin1(\"{s}\")), {d});", .{
-        function.name, suffix, function.base.?, function.name_api, function.hash.?,
+        function.name,                                 suffix, function.base.?, function.name_api,
+        function.selected_hash orelse function.hash.?,
     });
-    if (function.hash_compatibility.items.len > 0 and function.dispatch_ranges.len == 0) {
+    if (function.selected_hash == null and function.dispatch_ranges.len == 0 and
+        function.hash_compatibility.items.len > 0)
+    {
         try w.writeAll("inline for ([_]i64{ ");
         for (function.hash_compatibility.items, 0..) |hash, i| {
             if (i > 0) try w.writeAll(", ");
@@ -2356,12 +2359,15 @@ pub const testing = struct {
         );
         const reported_version = minimum orelse runtime_version;
         try w.printLine(
-            "const gdzig = struct {{ {s} version: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }};",
+            "const ApiVersion = struct {{ {s} value: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }}; const gdzig = struct {{ const api_version = &ApiVersion.value; var engine_version: Version = .{{ .major = {d}, .minor = {d}, .patch = {d} }}; }};",
             .{
                 if (minimum != null) "const" else "var",
                 reported_version.major,
                 reported_version.minor,
                 reported_version.patch,
+                runtime_version.major,
+                runtime_version.minor,
+                runtime_version.patch,
             },
         );
         try w.writeLine("const Probe = struct {");
@@ -2516,13 +2522,13 @@ test "legacy writer guards runtime ranges and omits declarations above a minimum
     defer out.deinit();
     var writer: CodeWriter = .init(&out.writer);
     try writeClassFunction(&writer, &class, &function, &ctx);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.version.range") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.api_version.range") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "probe_4_6_legacy_ptr") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), ", 111);") != null);
     out.clearRetainingCapacity();
     ctx.compatibility_minimum = common.Version.parse("4.6.0");
     try writeClassFunction(&writer, &class, &function, &ctx);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.version") == null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "gdzig.api_version") == null);
     out.clearRetainingCapacity();
     ctx.compatibility_minimum = common.Version.parse("4.7.0");
     try writeClassFunction(&writer, &class, &function, &ctx);
@@ -2604,6 +2610,28 @@ test "unshimmed dispatch emits runtime panic or inside-minimum compile error" {
         try std.testing.expect(std.mem.indexOf(u8, output.written(), case.excluded) == null);
         try std.testing.expect(std.mem.indexOf(u8, output.written(), "add probe_4_6") != null);
         try std.testing.expect(std.mem.indexOf(u8, output.written(), "refAllDecls(@This())") != null);
+    }
+}
+
+test "selected minimum emits one fixed and Alloc class bind" {
+    var function: Context.Function = .{
+        .name = "probe",
+        .name_api = "probe",
+        .base = "Node",
+        .hash = 123,
+        .selected_hash = 456,
+    };
+    try function.hash_compatibility.append(std.testing.allocator, 789);
+    defer function.hash_compatibility.deinit(std.testing.allocator);
+    for ([_][]const u8{ "", "Alloc" }) |suffix| {
+        var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer output.deinit();
+        var writer: CodeWriter = .init(&output.writer);
+        try writeClassMethodBind(&writer, &function, suffix);
+        const text = output.written();
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "classdbGetMethodBind"));
+        try std.testing.expect(std.mem.indexOf(u8, text, ", 456);") != null);
+        try std.testing.expect(std.mem.indexOf(u8, text, "inline for") == null);
     }
 }
 

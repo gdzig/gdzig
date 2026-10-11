@@ -26,7 +26,7 @@ pub fn register(r: *gdzig.extension.Registry) void {
     combat.addProperty("damage", .auto);
 
     // Indexed properties - shared getter/setter with index parameter (requires Godot 4.2+)
-    if (gdzig.version.gte(.@"4.2")) {
+    if (gdzig.api_version.gte(.@"4.2")) {
         const get_slot = class.createMethod("get_inventory_slot", .auto);
         const set_slot = class.createMethod("set_inventory_slot", .auto);
         class.addProperty("slot_0", .{ .getter = .{ .method = get_slot }, .setter = .{ .method = set_slot }, .index = 0 });
@@ -123,7 +123,7 @@ test "indexed properties" {
     ensureRegistered();
 
     // Indexed properties require Godot 4.2+
-    if (!gdzig.version.gte(.@"4.2")) return error.SkipZigTest;
+    if (!gdzig.api_version.gte(.@"4.2")) return error.SkipZigTest;
 
     const node = try PropertyNode.create();
     defer node.destroy();

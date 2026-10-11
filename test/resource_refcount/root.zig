@@ -13,7 +13,7 @@ fn ensureRegistered() void {
 }
 
 test "engine-instantiated Resource subclass starts with one reference and releases array refs" {
-    if (!gdzig.version.gte(.@"4.7")) return error.SkipZigTest;
+    if (!gdzig.api_version.gte(.@"4.7")) return error.SkipZigTest;
 
     ensureRegistered();
 
@@ -32,7 +32,7 @@ test "engine-instantiated Resource subclass starts with one reference and releas
 }
 
 test "loaded Resource subclass starts with one reference and releases array refs" {
-    if (!gdzig.version.gte(.@"4.7")) return error.SkipZigTest;
+    if (!gdzig.api_version.gte(.@"4.7")) return error.SkipZigTest;
 
     ensureRegistered();
 
