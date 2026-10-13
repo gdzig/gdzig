@@ -53,11 +53,10 @@ pub const api_version = &ApiVersion.value;
 /// This can be newer than `api_version` when a compatibility minimum is selected.
 pub var engine_version: Version = undefined;
 
-/// Query and publish the actual engine once, then reject an unmet floor before startup.
+/// Publish the discovered engine version, then reject an unmet floor before startup.
 /// Default builds also set the API version. Minimum builds retain their constant floor.
 pub fn initializeVersion() bool {
-    var actual: Version = undefined;
-    raw.getGodotVersion(@ptrCast(&actual));
+    const actual = raw.version;
     engine_version = actual;
     if (!compatibility_minimum.accepts(actual, godot_compatibility_minimum)) {
         const minimum = godot_compatibility_minimum.?;
@@ -101,6 +100,77 @@ pub const PropertyError = error{
 };
 
 pub const Version = @import("common").Version;
+
+// Keep test helpers private without shadowing the public testing module.
+const dispatch_testing = struct {
+    const FakeEngine = struct {
+        var running_version: c.GDExtensionGodotVersion = undefined;
+        var requested_version = false;
+        var requested_variant_get_type_by_name = false;
+        var requested_classdb_construct_object3 = false;
+        var requested_classdb_register_extension_class6 = false;
+
+        fn reset(new_version: c.GDExtensionGodotVersion) void {
+            running_version = new_version;
+            requested_version = false;
+            requested_variant_get_type_by_name = false;
+            requested_classdb_construct_object3 = false;
+            requested_classdb_register_extension_class6 = false;
+        }
+
+        fn getProcAddress(name_ptr: [*c]const u8) callconv(.c) c.GDExtensionInterfaceFunctionPtr {
+            const name = std.mem.span(@as([*:0]const u8, @ptrCast(name_ptr)));
+            if (std.mem.eql(u8, name, "get_godot_version")) {
+                requested_version = true;
+                return @ptrCast(&getGodotVersion);
+            }
+            if (std.mem.eql(u8, name, "variant_get_type_by_name")) {
+                requested_variant_get_type_by_name = true;
+            }
+            if (std.mem.eql(u8, name, "classdb_construct_object3")) {
+                requested_classdb_construct_object3 = true;
+            }
+            if (std.mem.eql(u8, name, "classdb_register_extension_class6")) {
+                requested_classdb_register_extension_class6 = true;
+            }
+            return @ptrCast(&stub);
+        }
+
+        fn getGodotVersion(godot_version: *c.GDExtensionGodotVersion) callconv(.c) void {
+            godot_version.* = running_version;
+        }
+
+        fn stub() callconv(.c) void {}
+    };
+};
+
+test "dispatch table skips 4.7 interfaces for a 4.6 engine" {
+    dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 6, .patch = 0, .string = "4.6" });
+
+    const table = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, @ptrFromInt(1));
+
+    try std.testing.expect(dispatch_testing.FakeEngine.requested_version);
+    try std.testing.expect(!dispatch_testing.FakeEngine.requested_variant_get_type_by_name);
+    try std.testing.expect(!dispatch_testing.FakeEngine.requested_classdb_construct_object3);
+    try std.testing.expect(!dispatch_testing.FakeEngine.requested_classdb_register_extension_class6);
+    try std.testing.expectEqual(null, table.variantGetTypeByName);
+    try std.testing.expectEqual(null, table.classdbConstructObject3);
+    try std.testing.expectEqual(null, table.classdbRegisterExtensionClass6);
+}
+
+test "dispatch table loads 4.7 interfaces for a 4.7.2 engine" {
+    dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 7, .patch = 2, .string = "4.7.2" });
+
+    const table = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, @ptrFromInt(1));
+
+    try std.testing.expect(dispatch_testing.FakeEngine.requested_version);
+    try std.testing.expect(dispatch_testing.FakeEngine.requested_variant_get_type_by_name);
+    try std.testing.expect(dispatch_testing.FakeEngine.requested_classdb_construct_object3);
+    try std.testing.expect(dispatch_testing.FakeEngine.requested_classdb_register_extension_class6);
+    try std.testing.expect(table.variantGetTypeByName != null);
+    try std.testing.expect(table.classdbConstructObject3 != null);
+    try std.testing.expect(table.classdbRegisterExtensionClass6 != null);
+}
 
 test {
     std.testing.refAllDecls(@This());
