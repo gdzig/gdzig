@@ -11,6 +11,7 @@ pub fn register(r: *gdzig.extension.Registry) void {
     class.addMethod("get_state", .auto);
     class.addMethod("get_state_negative", .auto);
     class.addMethod("echo_state", .auto);
+    class.addMethod("answer", .auto);
 }
 
 fn ensureRegistered() void {
@@ -39,6 +40,40 @@ test "create custom class and call methods" {
 
     result = Object.call(.upcast(node), .fromComptimeLatin1("get_counter"), .{});
     try testing.expectEqual(@as(i64, 11), result.as(i64).?);
+}
+
+test "static method config marks static and calls with every declared argument" {
+    const config = gdzig.extension.testing.MethodConfig(TestNode).fromName("add", "add", .{});
+    try testing.expect(config.flags.method_flag_static);
+
+    const left: Variant = .init(i64, 20);
+    defer left.deinit();
+    const right: Variant = .init(i64, 22);
+    defer right.deinit();
+
+    const result = try config.call.?(null, &.{ &left, &right });
+    defer result.deinit();
+    try testing.expectEqual(@as(i64, 42), result.as(i64).?);
+}
+
+test "static method ptrcall uses every declared argument without a receiver" {
+    const config = gdzig.extension.testing.MethodConfig(TestNode).fromName("add", "add", .{});
+    const left: i64 = 20;
+    const right: i64 = 22;
+    const args = [_]?*const anyopaque{ @ptrCast(&left), @ptrCast(&right) };
+    var result: i64 = 0;
+
+    // Engine static dispatch passes no receiver.
+    config.ptr_call.?(null, @ptrCast(&args), @ptrCast(&result));
+    try testing.expectEqual(@as(i64, 42), result);
+}
+
+test "zero-argument static method ptrcall accepts no receiver or argument storage" {
+    const config = gdzig.extension.testing.MethodConfig(TestNode).fromName("answer", "answer", .{});
+    var result: i64 = 0;
+
+    config.ptr_call.?(null, null, @ptrCast(&result));
+    try testing.expectEqual(@as(i64, 42), result);
 }
 
 test "custom class properties" {
@@ -158,6 +193,14 @@ const TestNode = struct {
         return self.counter;
     }
 
+    pub fn add(left: i64, right: i64) i64 {
+        return left + right;
+    }
+
+    pub fn answer() i64 {
+        return 42;
+    }
+
     pub fn getMyProperty(self: *TestNode) i64 {
         return self.my_property;
     }
@@ -195,10 +238,37 @@ const TestNode = struct {
     }
 };
 
+test "registered zero-argument static method accepts null instance and args through Godot" {
+    ensureRegistered();
+
+    // DirAccess.get_drive_count has the same non-const, zero-argument int
+    // signature and hash in extension_api.json.
+    const method_bind = gdzig.raw.classdbGetMethodBind(
+        @ptrCast(&StringName.fromComptimeLatin1("TestNode")),
+        @ptrCast(&StringName.fromComptimeLatin1("answer")),
+        2455072627,
+    );
+    try testing.expect(method_bind != null);
+
+    var result: Variant = undefined;
+    var call_error: c.GDExtensionCallError = undefined;
+    gdzig.raw.objectMethodBindCall(method_bind, null, null, 0, @ptrCast(&result), &call_error);
+    defer result.deinit();
+    try testing.expectEqual(@as(c.GDExtensionCallErrorType, c.GDEXTENSION_CALL_OK), call_error.@"error");
+    try testing.expectEqual(@as(i64, 42), result.as(i64).?);
+
+    var slot: i64 = 0;
+    gdzig.raw.objectMethodBindPtrcall(method_bind, null, null, @ptrCast(&slot));
+    try testing.expectEqual(@as(i64, 42), slot);
+}
+
 const std = @import("std");
 const testing = std.testing;
 
 const gdzig = @import("gdzig");
+const c = gdzig.c;
 const allocator = gdzig.testing.allocator;
 const Node = gdzig.class.Node;
 const Object = gdzig.class.Object;
+const Variant = gdzig.builtin.Variant;
+const StringName = gdzig.builtin.StringName;
