@@ -11,10 +11,13 @@ pub const Function = struct {
     name: []const u8,
     api_name: []const u8,
     ptr_type: []const u8,
-    since: []const u8,
+    /// First measured release that provides this interface.
+    gate: Version,
+    /// True for interfaces present in every measured target and tagged 4.1.
+    required: bool,
 
     pub fn isRequired(self: Function) bool {
-        return std.mem.eql(u8, self.since, "4.1");
+        return self.required;
     }
 };
 
@@ -23,4 +26,5 @@ const ArrayList = std.ArrayListUnmanaged;
 
 const Context = @import("../Context.zig");
 const Imports = Context.Imports;
+const Version = @import("common").Version;
 const StringHashMap = std.StringHashMapUnmanaged;

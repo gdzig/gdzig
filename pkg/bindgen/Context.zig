@@ -294,7 +294,17 @@ fn parseSingletons(self: *Context) !void {
     }
 }
 
+/// One header entry before its measured availability is resolved.
+const ParsedInterface = struct {
+    docs: ?[]const u8,
+    name: []const u8,
+    api_name: []const u8,
+    ptr_type: []const u8,
+    since_tag: []const u8,
+};
+
 fn parseGdExtensionHeaders(self: *Context) !void {
+    var parsed: ArrayList(ParsedInterface) = .empty;
     var buf: [1024]u8 = undefined;
     var gdextension_reader = self.config.gdextension_interface.readerStreaming(self.config.io, &buf);
     var reader = &gdextension_reader.interface;
@@ -383,16 +393,12 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 break :blk null;
             };
 
-            const since = parseSinceVersion(docs) orelse "4.1";
-
-            try self.func_docs.put(self.allocator(), fp_type.?, docs.?);
-            try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
-            try self.dispatch_table.functions.append(self.allocator(), .{
+            try parsed.append(self.allocator(), .{
                 .docs = docs,
                 .name = try casez.allocConvert(self.allocator(), gdzig_case.func, fn_name.?),
                 .api_name = fn_name.?,
                 .ptr_type = fp_type.?,
-                .since = since,
+                .since_tag = parseSinceTagText(docs) orelse "",
             });
 
             fn_name = null;
@@ -400,6 +406,72 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             doc_start = null;
             doc_end = null;
         };
+    }
+
+    // Validate the vendored header against the measured manifest before trusting gates.
+    var header_names: ArrayList([]const u8) = .empty;
+    for (parsed.items) |entry| try header_names.append(self.allocator(), entry.api_name);
+    self.metadata.validateInterfaces(self.allocator(), header_names.items) catch |err| {
+        if (err == error.StaleCompatibilityInterfaces) {
+            logger.err(
+                "compatibility metadata does not match the vendored GDExtension header: run zig build update-compat-metadata -Dold=all",
+                .{},
+            );
+        }
+        return err;
+    };
+
+    // Every interface gate comes from measured evidence, never from the doc tag.
+    for (parsed.items) |entry| {
+        const gate = self.metadata.resolveInterface(entry.api_name, entry.since_tag) catch |err| {
+            if (err == error.InterfaceAvailabilityDisagreement) {
+                const availability: ?manifest.InterfaceAvailability =
+                    self.metadata.interfaceAvailability(entry.api_name) catch null;
+                if (availability) |value| {
+                    if (value.last_absent) |absent| {
+                        logger.err(
+                            "interface {s}: header @since '{s}' contradicts measured availability (gate {d}.{d}.{d}, last measured absence {d}.{d}.{d})",
+                            .{
+                                entry.api_name,
+                                entry.since_tag,
+                                value.gate.major,
+                                value.gate.minor,
+                                value.gate.patch,
+                                absent.major,
+                                absent.minor,
+                                absent.patch,
+                            },
+                        );
+                    } else {
+                        logger.err(
+                            "interface {s}: header @since '{s}' contradicts measured availability (gate {d}.{d}.{d}, present in the oldest measured target)",
+                            .{ entry.api_name, entry.since_tag, value.gate.major, value.gate.minor, value.gate.patch },
+                        );
+                    }
+                } else {
+                    logger.err(
+                        "interface {s}: header @since '{s}' contradicts measured availability",
+                        .{ entry.api_name, entry.since_tag },
+                    );
+                }
+            } else if (err == error.InvalidInterfaceSinceTag) {
+                logger.err(
+                    "interface {s}: header @since tag '{s}' is missing or malformed",
+                    .{ entry.api_name, entry.since_tag },
+                );
+            }
+            return err;
+        };
+        try self.func_docs.put(self.allocator(), entry.ptr_type, entry.docs.?);
+        try self.func_pointers.put(self.allocator(), entry.ptr_type, entry.api_name);
+        try self.dispatch_table.functions.append(self.allocator(), .{
+            .docs = entry.docs,
+            .name = entry.name,
+            .api_name = entry.api_name,
+            .ptr_type = entry.ptr_type,
+            .gate = gate.gate,
+            .required = gate.required,
+        });
     }
 }
 
@@ -722,15 +794,15 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
     }
 }
 
-fn parseSinceVersion(docs: ?[]const u8) ?[]const u8 {
+/// Extract the strict `@since` version token from one function's docs.
+/// The manifest resolves the gate, so only the raw token is collected here.
+fn parseSinceTagText(docs: ?[]const u8) ?[]const u8 {
     const doc_str = docs orelse return null;
-    const since_tag = "@since ";
+    const since_tag = "@since";
     const start = std.mem.indexOf(u8, doc_str, since_tag) orelse return null;
-    const version_start = start + since_tag.len;
-    if (version_start + 3 > doc_str.len) return null;
-
-    // Return "X.Y" slice
-    return doc_str[version_start..][0..3];
+    var rest = std.mem.trim(u8, doc_str[start + since_tag.len ..], " \t\r\n");
+    if (std.mem.indexOfAny(u8, rest, " \t\r\n")) |end| rest = rest[0..end];
+    return rest;
 }
 
 fn trimLineEnding(line: []const u8) []const u8 {
