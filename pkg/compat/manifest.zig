@@ -106,9 +106,16 @@ pub const Mode = enum {
     append,
 };
 
+/// The interface names a release's own header lacks, measured as a delta.
+pub const InterfaceTable = struct {
+    id: []const u8,
+    not_in_snapshot: []const []const u8,
+};
+
 const Row = struct {
     source: Provenance,
     overrides: []const Override,
+    not_in_snapshot: []const []const u8,
     version: std.SemanticVersion,
 };
 
@@ -215,11 +222,14 @@ fn validateRecords(items: []const records.Record) !void {
     }
 }
 
-/// Canonical schema-three compatibility cache consumed by bindgen.
+/// Canonical schema-four compatibility cache consumed by bindgen.
 pub const Manifest = struct {
-    schema_version: u32 = 3,
+    schema_version: u32 = 4,
     current: Provenance,
+    /// Digest of the current header's sorted interface names.
+    current_interfaces_sha256: []const u8 = "",
     targets: []const Target,
+    interfaces: []const InterfaceTable = &.{},
     tables: []const Table,
 
     /// Overwrite with one target or append/replace a target, canonicalizing all tables.
@@ -236,24 +246,39 @@ pub const Manifest = struct {
         const current_version = try records.exactVersion(current.version);
         const old_version = try records.exactVersion(old.version);
         if (old_version.order(current_version) == .gt) return error.TargetNewerThanCurrent;
-
-        // Retain every previous target except the release being replaced.
-        var rows: std.ArrayList(Row) = .empty;
         if (input) |previous| {
-            if (previous.schema_version != 3) return error.UnsupportedSchema;
+            if (previous.schema_version != 4) return error.UnsupportedSchema;
             const matches = std.mem.eql(u8, previous.current.version, current.version) and
                 std.mem.eql(u8, previous.current.sha256, current.raw_sha256) and
                 previous.current.checksum_kind == .raw_sha256;
             if (!matches) return error.CurrentSnapshotMismatch;
+        }
+
+        // Measure the interface evidence before touching previous targets.
+        const current_interfaces = try requireInterfaces(allocator, current.interfaces);
+        const old_interfaces = try requireInterfaces(allocator, old.interfaces);
+        const current_digest = try interface_names.digest(allocator, current_interfaces);
+        if (input) |previous| {
+            if (!std.mem.eql(u8, previous.current_interfaces_sha256, current_digest)) {
+                return error.InterfaceSnapshotMismatch;
+            }
+        }
+
+        // Retain every previous target except the release being replaced.
+        var rows: std.ArrayList(Row) = .empty;
+        if (input) |previous| {
             for (previous.targets) |target| {
                 if (std.mem.eql(u8, target.source.version, old.version)) continue;
                 var overrides: ?[]const Override = null;
                 for (previous.tables) |table| {
                     if (std.mem.eql(u8, target.table_id, table.id)) overrides = table.overrides;
                 }
+                const delta = previous.tableDelta(target.table_id) orelse
+                    return error.InvalidInterfaceEvidence;
                 try rows.append(allocator, .{
                     .source = target.source,
                     .overrides = overrides orelse return error.InvalidManifest,
+                    .not_in_snapshot = delta,
                     .version = try records.exactVersion(target.source.version),
                 });
             }
@@ -265,35 +290,155 @@ pub const Manifest = struct {
         try rows.append(allocator, .{
             .source = .fromSnapshot(old, !std.mem.eql(u8, old.version, current.version)),
             .overrides = comparison.overrides,
+            .not_in_snapshot = try interface_names.delta(allocator, current_interfaces, old_interfaces),
             .version = old_version,
         });
         std.mem.sort(Row, rows.items, {}, lessRow);
 
-        // Share identical override tables using their first canonical release as the ID.
+        // Share a table only when both its overrides and its interface delta match.
         var targets: std.ArrayList(Target) = .empty;
         var tables: std.ArrayList(Table) = .empty;
+        var interfaces: std.ArrayList(InterfaceTable) = .empty;
         for (rows.items, 0..) |row, i| {
             if (i > 0 and rows.items[i - 1].version.order(row.version) == .eq) {
                 return error.DuplicateTarget;
             }
-            var table_id: ?[]const u8 = null;
-            for (tables.items) |table| {
-                if (sameOverrides(table.overrides, row.overrides)) {
-                    table_id = table.id;
+            var shared: ?usize = null;
+            for (tables.items, interfaces.items, 0..) |table, evidence, index| {
+                if (sameOverrides(table.overrides, row.overrides) and
+                    interface_names.same(evidence.not_in_snapshot, row.not_in_snapshot))
+                {
+                    shared = index;
                     break;
                 }
             }
-            if (table_id == null) {
-                table_id = row.source.version;
-                try tables.append(allocator, .{ .id = table_id.?, .overrides = row.overrides });
+            if (shared == null) {
+                shared = tables.items.len;
+                try tables.append(allocator, .{ .id = row.source.version, .overrides = row.overrides });
+                try interfaces.append(allocator, .{
+                    .id = row.source.version,
+                    .not_in_snapshot = row.not_in_snapshot,
+                });
             }
-            try targets.append(allocator, .{ .source = row.source, .table_id = table_id.? });
+            try targets.append(allocator, .{
+                .source = row.source,
+                .table_id = tables.items[shared.?].id,
+            });
         }
-        return .{
+        const result: Manifest = .{
             .current = .fromSnapshot(current, false),
+            .current_interfaces_sha256 = current_digest,
             .targets = try targets.toOwnedSlice(allocator),
+            .interfaces = try interfaces.toOwnedSlice(allocator),
             .tables = try tables.toOwnedSlice(allocator),
         };
+        try result.validateInterfaceShape();
+        return result;
+    }
+
+    /// Resolve one interface against the measured target window.
+    pub fn interfaceAvailability(self: Manifest, name: []const u8) !InterfaceAvailability {
+        const current = try Version.parseStrict(self.current.version);
+        var last_absent: ?Version = null;
+        var gate: ?Version = null;
+        for (self.targets) |target| {
+            const version = try Version.parseStrict(target.source.version);
+            const delta = self.tableDelta(target.table_id) orelse
+                return error.InvalidInterfaceEvidence;
+            if (interface_names.contains(delta, name)) {
+                last_absent = version;
+            } else if (gate == null) {
+                gate = version;
+            }
+        }
+        return .{
+            // No measured release provides it, so never imply support.
+            .gate = gate orelse current,
+            .last_absent = last_absent,
+            .present_in_oldest = last_absent == null,
+        };
+    }
+
+    /// Cross-check one header `@since` tag against the measured interval.
+    pub fn resolveInterface(
+        self: Manifest,
+        name: []const u8,
+        since_text: []const u8,
+    ) !InterfaceGate {
+        const tag = try parseSinceTag(since_text);
+        const availability = try self.interfaceAvailability(name);
+        if (availability.last_absent) |absent| {
+            if (tag.has_patch) {
+                if (!tag.version.gt(absent)) return error.InterfaceAvailabilityDisagreement;
+            } else if (minorOrder(tag.version, absent) == .lt) {
+                return error.InterfaceAvailabilityDisagreement;
+            }
+        }
+        if (tag.has_patch) {
+            if (tag.version.gt(availability.gate)) return error.InterfaceAvailabilityDisagreement;
+        } else if (minorOrder(tag.version, availability.gate) == .gt) {
+            return error.InterfaceAvailabilityDisagreement;
+        }
+        return .{
+            .gate = availability.gate,
+            .required = availability.present_in_oldest and tag.version.eql(required_interface_version),
+        };
+    }
+
+    /// Reject malformed schema-four evidence, dangling tables and non-monotonic deltas.
+    pub fn validateInterfaceShape(self: Manifest) !void {
+        if (self.schema_version != 4) return error.UnsupportedSchema;
+        try validateDigest(self.current_interfaces_sha256);
+        if (self.interfaces.len != self.tables.len) return error.InvalidInterfaceEvidence;
+        for (self.interfaces, self.tables, 0..) |evidence, table, index| {
+            if (!std.mem.eql(u8, evidence.id, table.id)) return error.InvalidInterfaceEvidence;
+            for (self.tables[0..index]) |previous| {
+                if (std.mem.eql(u8, table.id, previous.id)) return error.InvalidInterfaceEvidence;
+            }
+            try validateDelta(evidence.not_in_snapshot);
+        }
+
+        // Availability only ever grows, so a newer target cannot drop a name.
+        var newer: ?[]const []const u8 = null;
+        for (self.targets) |target| {
+            const delta = self.tableDelta(target.table_id) orelse
+                return error.InvalidInterfaceEvidence;
+            if (newer) |older| {
+                for (delta) |name| {
+                    if (!interface_names.contains(older, name)) {
+                        return error.NonMonotonicInterfaceEvidence;
+                    }
+                }
+            }
+            newer = delta;
+        }
+    }
+
+    /// Check one parsed header against the measured manifest evidence.
+    pub fn validateInterfaces(
+        self: Manifest,
+        allocator: Allocator,
+        names: []const []const u8,
+    ) !void {
+        const parsed = try interface_names.canonicalize(allocator, names);
+        const digest = try interface_names.digest(allocator, parsed);
+        if (!std.mem.eql(u8, digest, self.current_interfaces_sha256)) {
+            return error.StaleCompatibilityInterfaces;
+        }
+        for (self.interfaces) |evidence| {
+            for (evidence.not_in_snapshot) |name| {
+                if (!interface_names.contains(parsed, name)) return error.InvalidInterfaceEvidence;
+            }
+        }
+        for (parsed) |name| _ = try self.interfaceAvailability(name);
+    }
+
+    /// Return the interface delta stored for one table id.
+    pub fn tableDelta(self: Manifest, table_id: []const u8) ?[]const []const u8 {
+        for (self.interfaces) |evidence| {
+            if (std.mem.eql(u8, evidence.id, table_id)) return evidence.not_in_snapshot;
+        }
+        return null;
     }
 
     /// Write generated ZON with its reproducible maintenance command.
@@ -308,6 +453,78 @@ pub const Manifest = struct {
         if (!std.mem.eql(u8, actual, expected)) return error.StaleCompatibilityMetadata;
     }
 };
+
+/// A measured optional gate and its classification.
+pub const InterfaceGate = struct {
+    gate: Version,
+    required: bool,
+};
+
+/// Where one interface first appears in the measured window.
+pub const InterfaceAvailability = struct {
+    gate: Version,
+    last_absent: ?Version,
+    present_in_oldest: bool,
+};
+
+const required_interface_version: Version = .{ .major = 4, .minor = 1, .patch = 0 };
+
+const SinceTag = struct {
+    version: Version,
+    has_patch: bool,
+};
+
+/// Parse a strict `major.minor` or `major.minor.patch` `@since` tag.
+fn parseSinceTag(text: []const u8) !SinceTag {
+    const trimmed = std.mem.trim(u8, text, " \t\r\n");
+    var parts: [3]u32 = .{ 0, 0, 0 };
+    var count: usize = 0;
+    var iterator = std.mem.splitScalar(u8, trimmed, '.');
+    while (iterator.next()) |part| {
+        if (count == parts.len or part.len == 0) return error.InvalidInterfaceSinceTag;
+        for (part) |byte| {
+            if (!std.ascii.isDigit(byte)) return error.InvalidInterfaceSinceTag;
+        }
+        parts[count] = std.fmt.parseInt(u32, part, 10) catch return error.InvalidInterfaceSinceTag;
+        count += 1;
+    }
+    if (count < 2) return error.InvalidInterfaceSinceTag;
+    return .{
+        .version = .{ .major = parts[0], .minor = parts[1], .patch = parts[2] },
+        .has_patch = count == 3,
+    };
+}
+
+/// Require non-empty measured interface names and canonicalize them.
+fn requireInterfaces(allocator: Allocator, names: []const []const u8) ![]const []const u8 {
+    if (names.len == 0) return error.UnresolvedInterfaceEvidence;
+    return interface_names.canonicalize(allocator, names);
+}
+
+fn validateDigest(text: []const u8) !void {
+    if (text.len != 64) return error.InvalidInterfaceEvidence;
+    for (text) |byte| {
+        if (!(std.ascii.isDigit(byte) or (byte >= 'a' and byte <= 'f'))) {
+            return error.InvalidInterfaceEvidence;
+        }
+    }
+}
+
+fn validateDelta(names: []const []const u8) !void {
+    for (names, 0..) |name, i| {
+        if (!interface_names.isValidName(name)) return error.InvalidInterfaceEvidence;
+        if (i > 0 and !std.mem.lessThan(u8, names[i - 1], name)) {
+            return error.InvalidInterfaceEvidence;
+        }
+    }
+}
+
+/// Compare only the major and minor components of two versions.
+fn minorOrder(a: Version, b: Version) std.math.Order {
+    if (a.major != b.major) return if (a.major < b.major) .lt else .gt;
+    if (a.minor != b.minor) return if (a.minor < b.minor) .lt else .gt;
+    return .eq;
+}
 
 fn lessRow(_: void, a: Row, b: Row) bool {
     return a.version.order(b.version) == .lt;
@@ -366,6 +583,14 @@ fn sameSignature(left: Legacy, right: Legacy) bool {
 }
 
 fn fixtureSnapshot(version: []const u8, items: []const records.Record) records.Snapshot {
+    return fixtureSnapshotWith(version, items, &fixture_interfaces);
+}
+
+fn fixtureSnapshotWith(
+    version: []const u8,
+    items: []const records.Record,
+    interfaces: []const []const u8,
+) records.Snapshot {
     return .{
         .version = version,
         .status = "stable",
@@ -375,8 +600,11 @@ fn fixtureSnapshot(version: []const u8, items: []const records.Record) records.S
         .classes_sha256 = "classes",
         .records = items,
         .enums = &.{},
+        .interfaces = interfaces,
     };
 }
+
+const fixture_interfaces = [_][]const u8{ "alpha", "bravo", "charlie" };
 
 fn fixtureRecord(hash: u64, compatibility: []const u64) records.Record {
     return .{
@@ -541,8 +769,183 @@ test "every active layout compares payload contents rather than slice addresses"
     try std.testing.expect(!sameSignature(legacy, changed));
 }
 
+test "merge records interface deltas and shares tables only on matching evidence" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const records_current = [_]records.Record{fixtureRecord(101, &.{})};
+    const current = fixtureSnapshotWith("4.7.2", &records_current, &.{ "alpha", "bravo", "charlie" });
+    const first_release = fixtureSnapshotWith("4.6.0", &records_current, &.{ "alpha", "bravo" });
+    const patch = fixtureSnapshotWith("4.6.1", &records_current, &.{ "alpha", "bravo" });
+
+    const one = try Manifest.merge(a, current, first_release, .overwrite, null);
+    try std.testing.expectEqual(@as(usize, 1), one.interfaces.len);
+    try std.testing.expectEqualStrings("4.6.0", one.interfaces[0].id);
+    try std.testing.expectEqual(@as(usize, 1), one.interfaces[0].not_in_snapshot.len);
+    try std.testing.expectEqualStrings("charlie", one.interfaces[0].not_in_snapshot[0]);
+    try std.testing.expectEqual(@as(usize, 64), one.current_interfaces_sha256.len);
+
+    const two = try Manifest.merge(a, current, patch, .append, one);
+    try std.testing.expectEqual(@as(usize, 2), two.targets.len);
+    try std.testing.expectEqual(@as(usize, 1), two.tables.len);
+    try std.testing.expectEqual(@as(usize, 1), two.interfaces.len);
+    for (two.targets) |target| try std.testing.expectEqualStrings("4.6.0", target.table_id);
+}
+
+test "divergent patch interface deltas split tables rather than merge false evidence" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const records_current = [_]records.Record{fixtureRecord(101, &.{})};
+    const current = fixtureSnapshotWith("4.7.2", &records_current, &.{ "alpha", "bravo", "charlie" });
+    const older = fixtureSnapshotWith("4.6.0", &records_current, &.{"alpha"});
+    const patch = fixtureSnapshotWith("4.6.1", &records_current, &.{ "alpha", "bravo" });
+
+    const one = try Manifest.merge(a, current, older, .overwrite, null);
+    try std.testing.expectEqual(@as(usize, 2), one.interfaces[0].not_in_snapshot.len);
+    const two = try Manifest.merge(a, current, patch, .append, one);
+    try std.testing.expectEqual(@as(usize, 2), two.tables.len);
+    try std.testing.expectEqual(@as(usize, 2), two.interfaces.len);
+    try std.testing.expectEqualStrings("4.6.0", two.interfaces[0].id);
+    try std.testing.expectEqualStrings("4.6.1", two.interfaces[1].id);
+    try std.testing.expectEqual(@as(usize, 1), two.interfaces[1].not_in_snapshot.len);
+    try std.testing.expectEqualStrings("charlie", two.interfaces[1].not_in_snapshot[0]);
+}
+
+test "merge rejects missing and dropped interface evidence with named errors" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const items = [_]records.Record{fixtureRecord(101, &.{})};
+    const good_current = fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo" });
+    try std.testing.expectError(
+        error.UnresolvedInterfaceEvidence,
+        Manifest.merge(a, fixtureSnapshotWith("4.7.2", &items, &.{}), fixtureSnapshotWith("4.6.0", &items, &.{"alpha"}), .overwrite, null),
+    );
+    try std.testing.expectError(
+        error.UnresolvedInterfaceEvidence,
+        Manifest.merge(a, good_current, fixtureSnapshotWith("4.6.0", &items, &.{}), .overwrite, null),
+    );
+    try std.testing.expectError(
+        error.NonMonotonicInterfaceEvidence,
+        Manifest.merge(a, good_current, fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "zulu" }), .overwrite, null),
+    );
+}
+
+test "interface digest mismatch and dangling delta names are named errors" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const items = [_]records.Record{fixtureRecord(101, &.{})};
+    const names = try interface_names.canonicalize(a, &.{ "alpha", "bravo", "charlie" });
+    const current = fixtureSnapshotWith("4.7.2", &items, names);
+    const old = fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo", "charlie" });
+    const manifest = try Manifest.merge(a, current, old, .overwrite, null);
+
+    try manifest.validateInterfaces(a, try interface_names.canonicalize(a, &.{ "charlie", "bravo", "alpha" }));
+    try std.testing.expectError(
+        error.StaleCompatibilityInterfaces,
+        manifest.validateInterfaces(a, try interface_names.canonicalize(a, &.{ "alpha", "bravo" })),
+    );
+
+    var dangling = manifest;
+    dangling.interfaces = &.{.{ .id = "4.6.0", .not_in_snapshot = &.{"zulu"} }};
+    try std.testing.expectError(error.InvalidInterfaceEvidence, dangling.validateInterfaces(a, names));
+}
+
+test "interface gates come from measured availability rather than the doc tag" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const items = [_]records.Record{fixtureRecord(101, &.{})};
+    const current = fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo", "zulu" });
+    const one = try Manifest.merge(
+        a,
+        current,
+        fixtureSnapshotWith("4.6.0", &items, &.{"alpha"}),
+        .overwrite,
+        null,
+    );
+    const two = try Manifest.merge(
+        a,
+        current,
+        fixtureSnapshotWith("4.7.0", &items, &.{ "alpha", "bravo" }),
+        .append,
+        one,
+    );
+
+    const required = try two.interfaceAvailability("alpha");
+    try std.testing.expect(required.present_in_oldest);
+    try std.testing.expect(required.last_absent == null);
+    try std.testing.expect(required.gate.eql(try Version.parseStrict("4.6.0")));
+
+    const added = try two.interfaceAvailability("bravo");
+    try std.testing.expect(!added.present_in_oldest);
+    try std.testing.expect(added.last_absent.?.eql(try Version.parseStrict("4.6.0")));
+    try std.testing.expect(added.gate.eql(try Version.parseStrict("4.7.0")));
+
+    const unmeasured = try two.interfaceAvailability("zulu");
+    try std.testing.expect(!unmeasured.present_in_oldest);
+    try std.testing.expect(unmeasured.last_absent.?.eql(try Version.parseStrict("4.7.0")));
+    try std.testing.expect(unmeasured.gate.eql(try Version.parseStrict("4.7.2")));
+}
+
+test "since tags are cross-checked against the measured interval" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const items = [_]records.Record{fixtureRecord(101, &.{})};
+    const current = fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo" });
+    const one = try Manifest.merge(
+        a,
+        current,
+        fixtureSnapshotWith("4.2.0", &items, &.{"alpha"}),
+        .overwrite,
+        null,
+    );
+    const two = try Manifest.merge(
+        a,
+        current,
+        fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo" }),
+        .append,
+        one,
+    );
+
+    // Present in the oldest measured target: required only at exactly 4.1.
+    const required = try two.resolveInterface("alpha", "4.1");
+    try std.testing.expect(required.required);
+    try std.testing.expect(required.gate.eql(try Version.parseStrict("4.2.0")));
+    try std.testing.expect(!(try two.resolveInterface("alpha", "4.2")).required);
+
+    // Absent from 4.2.0 and provided by 4.6.0: a 4.3 tag is inside the interval.
+    const measured = try two.resolveInterface("bravo", "4.3");
+    try std.testing.expect(!measured.required);
+    try std.testing.expect(measured.gate.eql(try Version.parseStrict("4.6.0")));
+
+    try std.testing.expectError(
+        error.InterfaceAvailabilityDisagreement,
+        two.resolveInterface("bravo", "4.1"),
+    );
+    try std.testing.expectError(
+        error.InterfaceAvailabilityDisagreement,
+        two.resolveInterface("bravo", "4.7"),
+    );
+    // A patch tag must be strictly newer than the last measured absence.
+    try std.testing.expectError(
+        error.InterfaceAvailabilityDisagreement,
+        two.resolveInterface("bravo", "4.2.0"),
+    );
+    try std.testing.expect(!(try two.resolveInterface("bravo", "4.2.5")).required);
+
+    for ([_][]const u8{ "", "4", "4.x", "4.6.", "4.6.1.2" }) |tag| {
+        try std.testing.expectError(error.InvalidInterfaceSinceTag, two.resolveInterface("bravo", tag));
+    }
+}
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const Version = @import("common").Version;
+const interface_names = @import("interfaces.zig");
 const records = @import("records.zig");
 const method_layout = @import("method_layout.zig");

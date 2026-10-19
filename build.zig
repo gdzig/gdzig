@@ -1,5 +1,4 @@
 pub fn build(b: *Build) !void {
-    compat_metadata.add(b, @This());
     //
     // Options
     //
@@ -10,8 +9,6 @@ pub fn build(b: *Build) !void {
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
     const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
     const minimum_text = b.option([]const u8, "godot_compatibility_minimum", "Stable minimum Godot version: major.minor[.patch]; uncached releases download on demand");
-    const selection = compat_metadata.select(b, @This(), minimum_text) orelse return;
-    const minimum = selection.minimum;
     const regenerate_interface = b.option(bool, "regenerate-interface", "Regenerate the vendored GDExtension interface header (requires Python)") orelse false;
 
     //
@@ -53,6 +50,11 @@ pub fn build(b: *Build) !void {
         break :blk generated_header;
     } else b.path("vendor/gdextension_interface.h");
     const extension_api = b.path("vendor/extension_api.json");
+
+    // Metadata select and attribute registration both consume the resolved header.
+    compat_metadata.add(b, @This(), interface_header);
+    const selection = compat_metadata.select(b, @This(), minimum_text, interface_header) orelse return;
+    const minimum = selection.minimum;
 
     const headers_write = b.addWriteFiles();
     _ = headers_write.addCopyFile(interface_header, "gdextension_interface.h");
