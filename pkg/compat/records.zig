@@ -63,10 +63,17 @@ pub const Snapshot = struct {
     classes_sha256: []const u8,
     records: []const Record,
     enums: []const Enum,
+    /// Canonical `@name` entries from this release's gdextension_interface.h.
+    interfaces: []const []const u8 = &.{},
 
     /// Extract validated provenance and sorted original method and enum identities.
     /// Returned allocations are owned by the caller's allocator; callers use an arena.
-    pub fn extract(allocator: Allocator, bytes: []const u8, version_text: []const u8) !Snapshot {
+    pub fn extract(
+        allocator: Allocator,
+        bytes: []const u8,
+        header_bytes: []const u8,
+        version_text: []const u8,
+    ) !Snapshot {
         // Validate the exact release and the raw dump's stable official header.
         const version = try exactVersion(version_text);
         const parsed = try std.json.parseFromSlice(
@@ -133,6 +140,7 @@ pub const Snapshot = struct {
             .classes_sha256 = try digest(allocator, try normalizeHistorical(allocator, bytes)),
             .records = try records.toOwnedSlice(allocator),
             .enums = try enums.toOwnedSlice(allocator),
+            .interfaces = try interface_names.parse(allocator, header_bytes),
         };
     }
 };
@@ -256,11 +264,18 @@ const fixture =
     \\"methods":[{"name":"method","is_const":true,"is_static":false,"is_vararg":false,"is_virtual":false,"hash":101,"arguments":[{"name":"arg","type":"enum::Owner.Mode","meta":"int32","default_value":"0"}],"return_value":{"type":"bool","meta":""}}]}],"singletons":[],"native_structures":[]}
 ;
 
+const header_fixture =
+    \\ * @name mem_alloc
+    \\ * @since 4.1
+    \\ * @name get_godot_version
+    \\ * @since 4.1
+;
+
 test "extract validates header and retains signatures and sorted qualified enums" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const snapshot = try Snapshot.extract(a, fixture, "4.6.3");
+    const snapshot = try Snapshot.extract(a, fixture, header_fixture, "4.6.3");
     try std.testing.expectEqualStrings("Error", snapshot.enums[0].name);
     try std.testing.expectEqualStrings("Owner.Mode", snapshot.enums[1].name);
     try std.testing.expectEqualStrings("A", snapshot.enums[0].values[0].name);
@@ -271,7 +286,28 @@ test "extract validates header and retains signatures and sorted qualified enums
     try std.testing.expect(snapshot.records[0].is_const);
     try std.testing.expectEqual(@as(usize, 64), snapshot.raw_sha256.len);
     try std.testing.expectEqual(@as(usize, 64), snapshot.classes_sha256.len);
-    try std.testing.expectError(error.VersionHeaderMismatch, Snapshot.extract(a, fixture, "4.6.2"));
+    try std.testing.expectEqualStrings("get_godot_version", snapshot.interfaces[0]);
+    try std.testing.expectEqualStrings("mem_alloc", snapshot.interfaces[1]);
+    try std.testing.expectError(error.VersionHeaderMismatch, Snapshot.extract(a, fixture, header_fixture, "4.6.2"));
+}
+
+test "extract rejects duplicate, malformed and unresolved interface evidence" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectError(
+        error.InvalidInterfaceEvidence,
+        Snapshot.extract(a, fixture, " * @name mem_alloc\n * @name mem_alloc\n", "4.6.3"),
+    );
+    try std.testing.expectError(
+        error.InvalidInterfaceEvidence,
+        Snapshot.extract(a, fixture, " * @name 1bad\n", "4.6.3"),
+    );
+    // A header that supplied no names leaves no evidence to merge.
+    try std.testing.expectError(
+        error.InvalidInterfaceEvidence,
+        Snapshot.extract(a, fixture, "header without tags\n", "4.6.3"),
+    );
 }
 
 test "extract rejects unstable builds and duplicate method and enum identities" {
@@ -282,17 +318,17 @@ test "extract rejects unstable builds and duplicate method and enum identities" 
     const header = parsed.value.object.getPtr("header").?;
     header.object.getPtr("version_status").?.* = .{ .string = "beta" };
     const unstable = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.UnauditedBuild, Snapshot.extract(a, unstable, "4.6.3"));
+    try std.testing.expectError(error.UnauditedBuild, Snapshot.extract(a, unstable, header_fixture, "4.6.3"));
     header.object.getPtr("version_status").?.* = .{ .string = "stable" };
     const enums = parsed.value.object.getPtr("global_enums").?;
     try enums.array.append(enums.array.items[0]);
     const duplicate = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.DuplicateEnum, Snapshot.extract(a, duplicate, "4.6.3"));
+    try std.testing.expectError(error.DuplicateEnum, Snapshot.extract(a, duplicate, header_fixture, "4.6.3"));
     _ = enums.array.pop();
     const methods = parsed.value.object.getPtr("classes").?.array.items[0].object.getPtr("methods").?;
     try methods.array.append(methods.array.items[0]);
     const duplicate_method = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.DuplicateIdentity, Snapshot.extract(a, duplicate_method, "4.6.3"));
+    try std.testing.expectError(error.DuplicateIdentity, Snapshot.extract(a, duplicate_method, header_fixture, "4.6.3"));
 }
 
 test "extract sorts owners and methods without changing signatures" {
@@ -312,7 +348,7 @@ test "extract sorts owners and methods without changing signatures" {
     another.object.getPtr("name").?.* = .{ .string = "a" };
     try methods.array.append(another);
     try classes.array.append(alpha);
-    const result = try Snapshot.extract(a, try std.json.Stringify.valueAlloc(a, first.value, .{}), "4.6.3");
+    const result = try Snapshot.extract(a, try std.json.Stringify.valueAlloc(a, first.value, .{}), header_fixture, "4.6.3");
     try std.testing.expectEqual(@as(usize, 3), result.records.len);
     try std.testing.expectEqualStrings("A", result.records[0].owner);
     try std.testing.expectEqualStrings("a", result.records[1].method);
@@ -352,3 +388,4 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const GodotApi = @import("common").GodotApi;
+const interface_names = @import("interfaces.zig");
