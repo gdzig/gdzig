@@ -109,3 +109,81 @@ test {
 const std = @import("std");
 
 const compatibility_minimum = @import("common").compatibility_minimum;
+
+// `testing` is the public testing module in the generated root, so this
+// test-only fixture uses its own namespace.
+const dispatch_testing = struct {
+    /// Fake engine for the measured interface gate test. Every interface resolves
+    /// to an inert stub, and only the version probe is ever called.
+    const FakeEngine = struct {
+        var version: Version = .{ .major = 4, .minor = 7, .patch = 2 };
+        var requests: std.StringHashMapUnmanaged(void) = .empty;
+        var count: usize = 0;
+
+        fn reset(requested: Version) void {
+            version = requested;
+            count = 0;
+            freeKeys();
+            requests.clearRetainingCapacity();
+        }
+
+        fn deinit() void {
+            freeKeys();
+            requests.deinit(std.testing.allocator);
+        }
+
+        fn freeKeys() void {
+            var iterator = requests.iterator();
+            while (iterator.next()) |entry| std.testing.allocator.free(entry.key_ptr.*);
+        }
+
+        fn getProcAddress(name: [*c]const u8) callconv(.c) c.GDExtensionInterfaceFunctionPtr {
+            const text = std.mem.sliceTo(name, 0);
+            count += 1;
+            const entry = requests.getOrPut(std.testing.allocator, text) catch @panic("OOM");
+            if (!entry.found_existing) {
+                entry.key_ptr.* = std.testing.allocator.dupe(u8, text) catch @panic("OOM");
+            }
+            if (std.mem.eql(u8, text, "get_godot_version")) return @ptrCast(&writeVersion);
+            return &inert;
+        }
+
+        fn writeVersion(out: [*c]c.GDExtensionGodotVersion) callconv(.c) void {
+            out[0].major = version.major;
+            out[0].minor = version.minor;
+            out[0].patch = version.patch;
+            out[0].string = "";
+        }
+
+        // The C interface type is an unspecified-argument function pointer.
+        fn inert(...) callconv(.c) void {}
+    };
+};
+
+test "measured interface gates follow the running engine version" {
+    const Child = std.meta.Child;
+    defer dispatch_testing.FakeEngine.deinit();
+    const library: Child(c.GDExtensionClassLibraryPtr) = @ptrFromInt(0x1000);
+    const late_interfaces = [_][]const u8{
+        "classdb_construct_object3",
+        "classdb_register_extension_class6",
+        "variant_get_type_by_name",
+    };
+
+    dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 6, .patch = 3 });
+    const older = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, library);
+    try std.testing.expect(older.version.eql(.{ .major = 4, .minor = 6, .patch = 3 }));
+    try std.testing.expectEqual(@as(usize, 176), dispatch_testing.FakeEngine.count);
+    for (late_interfaces) |name| try std.testing.expect(!dispatch_testing.FakeEngine.requests.contains(name));
+    try std.testing.expect(older.classdbConstructObject3 == null);
+    try std.testing.expect(older.classdbRegisterExtensionClass6 == null);
+    try std.testing.expect(older.variantGetTypeByName == null);
+
+    dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 7, .patch = 2 });
+    const newer = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, library);
+    try std.testing.expectEqual(@as(usize, 179), dispatch_testing.FakeEngine.count);
+    for (late_interfaces) |name| try std.testing.expect(dispatch_testing.FakeEngine.requests.contains(name));
+    try std.testing.expect(newer.classdbConstructObject3 != null);
+    try std.testing.expect(newer.classdbRegisterExtensionClass6 != null);
+    try std.testing.expect(newer.variantGetTypeByName != null);
+}

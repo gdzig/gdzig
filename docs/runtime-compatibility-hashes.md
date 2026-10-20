@@ -85,3 +85,32 @@ Compatibility arrays do not label candidates with engine versions. Their order
 cannot establish a historical signature or its ABI. A new ABI adapter requires
 measured signature evidence and runtime checks, not an inferred version-to-hash
 mapping.
+
+## Interface availability audit
+
+The generated dispatch table treats the measured manifest, not the header's
+`@since` tag, as the source of optional interface availability. Audit an engine
+header against the vendored header with byte-wise ordering:
+
+```sh
+names=$(mktemp -d)
+grep -o '@name [A-Za-z0-9_]*' vendor/gdextension_interface.h \
+  | sed 's/^@name //' | LC_ALL=C sort > "$names/vendored.txt"
+grep -o '@name [A-Za-z0-9_]*' "$engine/gdextension_interface.h" \
+  | sed 's/^@name //' | LC_ALL=C sort > "$names/engine.txt"
+LC_ALL=C comm -13 "$names/vendored.txt" "$names/engine.txt"  # engine-only names
+LC_ALL=C comm -23 "$names/vendored.txt" "$names/engine.txt"  # vendored-only names
+shasum -a 256 "$names/vendored.txt"                          # current_interfaces_sha256
+```
+
+`LC_ALL=C` is required. The default UTF-8 collation orders names differently and
+produces false set differences and a digest that does not match the manifest. The
+digest is the SHA-256 of the sorted names, one per line, terminated by a newline.
+
+Each manifest table carries a `missing` delta for its release. A name in an
+older table's delta and in no newer table's delta was added within the measured
+window, and the oldest release that provides it is its gate. A header `@since` tag
+that contradicts the measured interval is a named build error
+(`InterfaceAvailabilityDisagreement`, `InvalidInterfaceSinceTag`), as are stale or
+malformed manifests (`StaleCompatibilityInterfaces`, `InvalidInterfaceEvidence`,
+`NonMonotonicInterfaceEvidence`, `UnresolvedInterfaceEvidence`).

@@ -55,6 +55,29 @@ const actual = gdzig.engine_version;
 std.debug.print("Godot {d}.{d}.{d}\n", .{ actual.major, actual.minor, actual.patch });
 ```
 
+Optional GDExtension interfaces are gated by measured availability, not by the
+header's `@since` tag. Each measured target records the interface names its own
+`gdextension_interface.h` lacks, as a per-table delta in the manifest. The
+generated dispatch table probes `get_godot_version` once at load time and requests
+an optional interface only when the running engine is at least the first measured
+release that provides it. The generated comparison is a full version check,
+including the patch component, so a future patch release can add an interface
+without widening an earlier gate.
+
+Because the measured window starts at the oldest cached target, an optional
+interface that exists in the current header and in the oldest target is gated at
+that oldest target. In a default build, optional interfaces introduced in 4.2
+through 4.5 are therefore requested from 4.6.0 onward and not on 4.2 through 4.5
+engines. Selecting an older floor adds that release as a measured target and
+tightens those gates.
+
+Interfaces whose verified `@since` tag is 4.1 are present in every measured target
+and remain unconditional. They are loaded through `getProcAddress(...).?`, so a
+non-nullable field cannot be null on a Godot 4.1 or newer engine for the verified
+header. A tag that contradicts the measured interval fails the build with
+`InterfaceAvailabilityDisagreement`, and a missing or malformed tag fails with
+`InvalidInterfaceSinceTag`.
+
 Generated class and builtin methods use one selected binding, with no compatibility
 probe loop. ABI-compatible legacy hashes come from the measured target's table.
 Methods with no override retain the current API hash, including APIs that did
@@ -82,6 +105,21 @@ Minimum selection requires the current API header and raw checksum to match the
 manifest's current provenance. A changed snapshot fails with
 `StaleCompatibilitySnapshot` and a regeneration diagnostic. Default runtime
 selection keeps its existing streaming parse path.
+
+The manifest also pins the current header's interface evidence.
+`current_interfaces_sha256` is the SHA-256 of the vendored header's sorted `@name`
+entries, one per line, with a trailing newline. The `interfaces` array stores one
+delta per method table, listing the interface names that table's release header
+lacks. Because the digest covers the header itself, a header-only change that does
+not touch `extension_api.json` still invalidates the metadata.
+
+Bindgen compares the parsed header against the manifest on every build, with or
+without a compatibility minimum, and fails with `StaleCompatibilityInterfaces` and
+a regeneration hint when they differ. Interface evidence that is missing,
+duplicated, unsorted, dangling or non-monotonic fails with
+`UnresolvedInterfaceEvidence`, `InvalidInterfaceEvidence` or
+`NonMonotonicInterfaceEvidence`, and an append whose current digest does not match
+the extracted header fails with `InterfaceSnapshotMismatch`.
 
 Use the optional maintenance steps to extract and compare historical APIs:
 

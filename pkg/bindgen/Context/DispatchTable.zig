@@ -6,16 +6,25 @@ functions: ArrayList(Function) = .empty,
 imports: Imports = .empty,
 typedefs: StringHashMap(void) = .empty,
 
-pub const Function = struct {
-    docs: ?[]const u8,
-    name: []const u8,
-    api_name: []const u8,
-    ptr_type: []const u8,
-    since: []const u8,
+/// Measured requirement of one GDExtension interface.
+pub const Availability = enum {
+    required,
+    optional,
+};
 
-    pub fn isRequired(self: Function) bool {
-        return std.mem.eql(u8, self.since, "4.1");
-    }
+pub const Function = struct {
+    /// Header documentation block for this interface.
+    docs: ?[]const u8,
+    /// Zig field name after case conversion.
+    name: []const u8,
+    /// Raw GDExtension interface name.
+    api_name: []const u8,
+    /// C function-pointer typedef for the interface.
+    ptr_type: []const u8,
+    /// First measured release that provides this interface.
+    gate: Version,
+    /// Measured requirement of this interface.
+    availability: Availability,
 };
 
 const std = @import("std");
@@ -23,4 +32,5 @@ const ArrayList = std.ArrayListUnmanaged;
 
 const Context = @import("../Context.zig");
 const Imports = Context.Imports;
+const Version = @import("common").Version;
 const StringHashMap = std.StringHashMapUnmanaged;

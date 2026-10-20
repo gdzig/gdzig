@@ -92,6 +92,14 @@ pub fn rawAllocator(self: *const Context) Allocator {
     return self.arena.child_allocator;
 }
 
+/// Return the required interface used to discover the running version.
+pub fn versionFunction(self: *const Context) !DispatchTable.Function {
+    for (self.dispatch_table.functions.items) |function| {
+        if (std.mem.eql(u8, function.api_name, "get_godot_version")) return function;
+    }
+    return error.MissingVersionInterface;
+}
+
 fn collectLegacyBindings(self: *Context) !void {
     // Add legacy declarations before inheritance copying, so subclasses inherit
     // them like ordinary methods, including isClass_4_6_legacy.
@@ -294,7 +302,22 @@ fn parseSingletons(self: *Context) !void {
     }
 }
 
+/// One header entry before its measured availability is resolved.
+const ParsedInterface = struct {
+    /// Header documentation block for this interface.
+    docs: ?[]const u8,
+    /// Zig field name after case conversion.
+    name: []const u8,
+    /// Raw GDExtension interface name.
+    api_name: []const u8,
+    /// C function-pointer typedef for the interface.
+    ptr_type: []const u8,
+    /// Raw `@since` token from the header, not the measured gate.
+    since_tag: []const u8,
+};
+
 fn parseGdExtensionHeaders(self: *Context) !void {
+    var parsed: ArrayList(ParsedInterface) = .empty;
     var buf: [1024]u8 = undefined;
     var gdextension_reader = self.config.gdextension_interface.readerStreaming(self.config.io, &buf);
     var reader = &gdextension_reader.interface;
@@ -383,16 +406,12 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 break :blk null;
             };
 
-            const since = parseSinceVersion(docs) orelse "4.1";
-
-            try self.func_docs.put(self.allocator(), fp_type.?, docs.?);
-            try self.func_pointers.put(self.allocator(), fp_type.?, fn_name.?);
-            try self.dispatch_table.functions.append(self.allocator(), .{
+            try parsed.append(self.allocator(), .{
                 .docs = docs,
                 .name = try casez.allocConvert(self.allocator(), gdzig_case.func, fn_name.?),
                 .api_name = fn_name.?,
                 .ptr_type = fp_type.?,
-                .since = since,
+                .since_tag = parseSinceTagText(docs) orelse "",
             });
 
             fn_name = null;
@@ -401,6 +420,83 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             doc_end = null;
         };
     }
+
+    // Validate the vendored header against the measured manifest before trusting gates.
+    var header_names: ArrayList([]const u8) = .empty;
+    for (parsed.items) |entry| try header_names.append(self.allocator(), entry.api_name);
+    self.metadata.validateInterfaces(self.allocator(), header_names.items) catch |err| {
+        if (err == error.StaleCompatibilityInterfaces) {
+            logger.err(
+                "compatibility metadata does not match the vendored GDExtension header: run zig build update-compat-metadata -Dold=all",
+                .{},
+            );
+        }
+        return err;
+    };
+
+    // Every interface gate comes from measured evidence, never from the doc tag.
+    for (parsed.items) |entry| {
+        const gate = self.metadata.resolveInterface(entry.api_name, entry.since_tag) catch |err| {
+            switch (err) {
+                error.InterfaceAvailabilityDisagreement => self.logAvailabilityDisagreement(entry),
+                error.InvalidInterfaceSinceTag => logger.err(
+                    "interface {s}: header @since tag '{s}' is missing or malformed",
+                    .{ entry.api_name, entry.since_tag },
+                ),
+                else => {},
+            }
+            return err;
+        };
+        try self.func_docs.put(self.allocator(), entry.ptr_type, entry.docs.?);
+        try self.func_pointers.put(self.allocator(), entry.ptr_type, entry.api_name);
+        try self.dispatch_table.functions.append(self.allocator(), .{
+            .docs = entry.docs,
+            .name = entry.name,
+            .api_name = entry.api_name,
+            .ptr_type = entry.ptr_type,
+            .gate = gate.gate,
+            .availability = if (gate.required) .required else .optional,
+        });
+    }
+}
+
+/// Log the measured interval for one contradictory `@since` tag.
+fn logAvailabilityDisagreement(self: *Context, entry: ParsedInterface) void {
+    const availability = self.metadata.interfaceAvailability(entry.api_name) catch {
+        logger.err(
+            "interface {s}: header @since '{s}' contradicts measured availability",
+            .{ entry.api_name, entry.since_tag },
+        );
+        return;
+    };
+
+    const absent = availability.last_absent orelse {
+        logger.err(
+            "interface {s}: header @since '{s}' contradicts measured availability (gate {d}.{d}.{d}, present in the oldest measured target)",
+            .{
+                entry.api_name,
+                entry.since_tag,
+                availability.gate.major,
+                availability.gate.minor,
+                availability.gate.patch,
+            },
+        );
+        return;
+    };
+
+    logger.err(
+        "interface {s}: header @since '{s}' contradicts measured availability (gate {d}.{d}.{d}, last measured absence {d}.{d}.{d})",
+        .{
+            entry.api_name,
+            entry.since_tag,
+            availability.gate.major,
+            availability.gate.minor,
+            availability.gate.patch,
+            absent.major,
+            absent.minor,
+            absent.patch,
+        },
+    );
 }
 
 fn collectSizes(self: *Context) !void {
@@ -722,19 +818,63 @@ pub fn buildSymbolLookupTable(self: *Context) !void {
     }
 }
 
-fn parseSinceVersion(docs: ?[]const u8) ?[]const u8 {
+/// Extract the strict `@since` version token from one function's docs.
+/// The manifest resolves the gate, so only the raw token is collected here.
+fn parseSinceTagText(docs: ?[]const u8) ?[]const u8 {
     const doc_str = docs orelse return null;
-    const since_tag = "@since ";
+    const since_tag = "@since";
     const start = std.mem.indexOf(u8, doc_str, since_tag) orelse return null;
-    const version_start = start + since_tag.len;
-    if (version_start + 3 > doc_str.len) return null;
-
-    // Return "X.Y" slice
-    return doc_str[version_start..][0..3];
+    var rest = std.mem.trim(u8, doc_str[start + since_tag.len ..], " \t\r\n");
+    if (std.mem.indexOfAny(u8, rest, " \t\r\n")) |end| rest = rest[0..end];
+    return rest;
 }
 
 fn trimLineEnding(line: []const u8) []const u8 {
     return std.mem.trimEnd(u8, line, "\r\n");
+}
+
+pub const testing = struct {
+    /// A context with only the dispatch table initialized for lookup tests.
+    pub fn contextWith(gpa: Allocator, functions: []const DispatchTable.Function) Context {
+        var context: Context = .{
+            .arena = undefined,
+            .api = undefined,
+            .config = undefined,
+            .metadata = undefined,
+        };
+        context.dispatch_table.functions.appendSlice(gpa, functions) catch @panic("OOM");
+        return context;
+    }
+};
+
+test "versionFunction requires the measured version interface" {
+    const gpa = std.testing.allocator;
+    var empty: Context = testing.contextWith(gpa, &.{});
+    defer empty.dispatch_table.functions.deinit(gpa);
+    try std.testing.expectError(error.MissingVersionInterface, empty.versionFunction());
+
+    const functions = [_]DispatchTable.Function{
+        .{
+            .docs = null,
+            .name = "memAlloc",
+            .api_name = "mem_alloc",
+            .ptr_type = "GDExtensionInterfaceMemAlloc",
+            .gate = .{ .major = 4, .minor = 1, .patch = 0 },
+            .availability = .required,
+        },
+        .{
+            .docs = null,
+            .name = "getGodotVersion",
+            .api_name = "get_godot_version",
+            .ptr_type = "GDExtensionInterfaceGetGodotVersion",
+            .gate = .{ .major = 4, .minor = 1, .patch = 0 },
+            .availability = .required,
+        },
+    };
+    var context: Context = testing.contextWith(gpa, &functions);
+    defer context.dispatch_table.functions.deinit(gpa);
+    const found = try context.versionFunction();
+    try std.testing.expectEqualStrings("get_godot_version", found.api_name);
 }
 
 test "trimLineEnding normalizes header line endings" {

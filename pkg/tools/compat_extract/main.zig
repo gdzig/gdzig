@@ -1,16 +1,18 @@
 const Arguments = struct {
     api: []const u8,
+    interface: []const u8,
     version: []const u8,
     output: []const u8,
 };
 
-const usage = "Usage: gdzig-compat-extract --api=<json> --version=<x.y.z> --output=<records.zon>\n";
+const usage = "Usage: gdzig-compat-extract --api=<json> --gdextension-interface=<header> --version=<x.y.z> --output=<records.zon>\n";
 
 fn fromArgs(args: *Args) !Arguments {
     const version = try args.required([]const u8, "version");
     _ = try records.exactVersion(version);
     const result: Arguments = .{
         .api = try args.required([]const u8, "api"),
+        .interface = try args.required([]const u8, "gdextension-interface"),
         .version = version,
         .output = try args.required([]const u8, "output"),
     };
@@ -26,7 +28,13 @@ fn run(init: std.process.Init) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
     const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, arguments.api, allocator, .limited(128 * 1024 * 1024));
-    const snapshot: records.Snapshot = try .extract(allocator, bytes, arguments.version);
+    const header_bytes = try std.Io.Dir.cwd().readFileAlloc(
+        init.io,
+        arguments.interface,
+        allocator,
+        .limited(16 * 1024 * 1024),
+    );
+    const snapshot: records.Snapshot = try .extract(allocator, bytes, header_bytes, arguments.version);
     var output: std.Io.Writer.Allocating = .init(allocator);
     try std.zon.stringify.serialize(snapshot, .{}, &output.writer);
     try output.writer.writeByte('\n');
@@ -40,10 +48,16 @@ pub fn main(init: std.process.Init) void {
 
 test "extract arguments reject unknown positional and abbreviated versions before IO" {
     for ([_][]const []const u8{
-        &.{ "extract", "--version=4.6.0", "--api=api.json", "--output=records.zon", "--unknown=x" },
-        &.{ "extract", "--version=4.6.0", "--api=api.json", "--output=records.zon", "path" },
+        &.{ "extract", "--version=4.6.0", "--api=api.json", "--gdextension-interface=h.h", "--output=records.zon", "--unknown=x" },
+        &.{ "extract", "--version=4.6.0", "--api=api.json", "--gdextension-interface=h.h", "--output=records.zon", "path" },
+        &.{ "extract", "--version=4.6.0", "--api=api.json", "--output=records.zon" },
         &.{ "extract", "--version=4.6" },
-    }, [_]anyerror{ error.UnusedArgument, error.UnusedPositional, error.InvalidExactVersion }) |argv, expected| {
+    }, [_]anyerror{
+        error.UnusedArgument,
+        error.UnusedPositional,
+        error.MissingArgument,
+        error.InvalidExactVersion,
+    }) |argv, expected| {
         var args: Args = try .initSlice(std.testing.allocator, argv);
         defer args.deinit(std.testing.allocator);
         try std.testing.expectError(expected, fromArgs(&args));
