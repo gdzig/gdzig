@@ -11,9 +11,9 @@ pub fn parse(allocator: Allocator, header_bytes: []const u8) ![]const []const u8
     var lines = std.mem.splitScalar(u8, header_bytes, '\n');
     while (lines.next()) |raw_line| {
         const line = std.mem.trimEnd(u8, raw_line, "\r");
-        const tag_index = std.mem.indexOf(u8, line, "@name") orelse continue;
-        const rest = line[tag_index + "@name".len ..];
-        const name = std.mem.trim(u8, rest, " \t\r");
+        const tag = "@name ";
+        const tag_index = std.mem.indexOf(u8, line, tag) orelse continue;
+        const name = std.mem.trim(u8, line[tag_index + tag.len ..], " \t\r");
         if (!isValidName(name)) return error.InvalidInterfaceEvidence;
         try names.append(allocator, name);
     }
@@ -30,7 +30,7 @@ pub fn canonicalize(allocator: Allocator, names: []const []const u8) ![]const []
 }
 
 /// Require a strictly sorted, unique list of valid interface names.
-pub fn validate(sorted: []const []const u8) !void {
+fn validate(sorted: []const []const u8) !void {
     if (sorted.len == 0) return error.InvalidInterfaceEvidence;
     for (sorted, 0..) |name, i| {
         if (!isValidName(name)) return error.InvalidInterfaceEvidence;
@@ -120,25 +120,27 @@ fn lessName(_: void, a: []const u8, b: []const u8) bool {
     return std.mem.lessThan(u8, a, b);
 }
 
-const fixture =
-    \\/**
-    \\ * @name get_godot_version
-    \\ * @since 4.1
-    \\ */
-    \\/**
-    \\ * @name variant_get_type_by_name
-    \\ * @since 4.7
-    \\ */
-    \\/**
-    \\ * @name mem_alloc
-    \\ * @since 4.1
-    \\ */
-;
+const testing = struct {
+    const fixture =
+        \\/**
+        \\ * @name get_godot_version
+        \\ * @since 4.1
+        \\ */
+        \\/**
+        \\ * @name variant_get_type_by_name
+        \\ * @since 4.7
+        \\ */
+        \\/**
+        \\ * @name mem_alloc
+        \\ * @since 4.1
+        \\ */
+    ;
+};
 
 test "parse extracts sorted names from header comments" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const names = try parse(arena.allocator(), fixture);
+    const names = try parse(arena.allocator(), testing.fixture);
     try std.testing.expectEqual(@as(usize, 3), names.len);
     try std.testing.expectEqualStrings("get_godot_version", names[0]);
     try std.testing.expectEqualStrings("mem_alloc", names[1]);
@@ -157,6 +159,10 @@ test "parse rejects duplicate and malformed names and empty headers" {
     try std.testing.expectError(error.InvalidInterfaceEvidence, parse(a, " * @name bad-name\n"));
     try std.testing.expectError(error.InvalidInterfaceEvidence, parse(a, " * @name\n"));
     try std.testing.expectError(error.InvalidInterfaceEvidence, parse(a, "no tags here\n"));
+    // A bare `@name` without a separator is not a tag.
+    const names = try parse(a, " * @name valid_name\n * @namefoo ignored\n");
+    try std.testing.expectEqual(@as(usize, 1), names.len);
+    try std.testing.expectEqualStrings("valid_name", names[0]);
 }
 
 test "canonicalize sorts by bytes and rejects duplicates and invalid names" {

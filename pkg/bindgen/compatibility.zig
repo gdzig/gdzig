@@ -262,14 +262,14 @@ test "manifest validation requires schema four interface evidence" {
     try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
     fixture = manifest;
     fixture.interfaces = &.{
-        .{ .id = "4.6.0", .not_in_snapshot = &.{"not-a-name"} },
-        .{ .id = "4.7.0", .not_in_snapshot = &.{} },
+        .{ .id = "4.6.0", .missing = &.{"not-a-name"} },
+        .{ .id = "4.7.0", .missing = &.{} },
     };
     try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
     fixture = manifest;
     fixture.interfaces = &.{
-        .{ .id = "4.6.0", .not_in_snapshot = &.{ "variant_get_type_by_name", "classdb_construct_object3" } },
-        .{ .id = "4.7.0", .not_in_snapshot = &.{} },
+        .{ .id = "4.6.0", .missing = &.{ "variant_get_type_by_name", "classdb_construct_object3" } },
+        .{ .id = "4.7.0", .missing = &.{} },
     };
     try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
 }

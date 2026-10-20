@@ -68,11 +68,11 @@
             .precision = "single",
         }, .table_id = "4.7.0" },
     },
-    .interfaces = .{ .{ .id = "4.6.0", .not_in_snapshot = .{
+    .interfaces = .{ .{ .id = "4.6.0", .missing = .{
         "classdb_construct_object3",
         "classdb_register_extension_class6",
         "variant_get_type_by_name",
-    } }, .{ .id = "4.7.0", .not_in_snapshot = .{} } },
+    } }, .{ .id = "4.7.0", .missing = .{} } },
     .tables = .{ .{ .id = "4.6.0", .overrides = .{
         .{
             .kind = .class,

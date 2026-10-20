@@ -107,7 +107,7 @@ shasum -a 256 "$names/vendored.txt"                          # current_interface
 produces false set differences and a digest that does not match the manifest. The
 digest is the SHA-256 of the sorted names, one per line, terminated by a newline.
 
-Each manifest table carries a `not_in_snapshot` delta for its release. A name in an
+Each manifest table carries a `missing` delta for its release. A name in an
 older table's delta and in no newer table's delta was added within the measured
 window, and the oldest release that provides it is its gate. A header `@since` tag
 that contradicts the measured interval is a named build error

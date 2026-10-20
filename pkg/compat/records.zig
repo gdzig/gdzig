@@ -257,25 +257,27 @@ pub fn sameIdentity(a: Record, b: Record) bool {
     return a.kind == b.kind and std.mem.eql(u8, a.owner, b.owner) and std.mem.eql(u8, a.method, b.method);
 }
 
-const fixture =
-    \\{"header":{"version_major":4,"version_minor":6,"version_patch":3,"version_status":"stable","version_build":"official","version_full_name":"fixture","precision":"single"},
-    \\"builtin_class_sizes":[],"builtin_class_member_offsets":[],"global_constants":[],"global_enums":[{"name":"Error","is_bitfield":false,"values":[{"name":"Z","value":2},{"name":"A","value":1}]}],
-    \\"utility_functions":[],"builtin_classes":[],"classes":[{"name":"Owner","is_refcounted":false,"is_instantiable":true,"api_type":"core","enums":[{"name":"Mode","is_bitfield":false,"values":[{"name":"ON","value":1}]}],
-    \\"methods":[{"name":"method","is_const":true,"is_static":false,"is_vararg":false,"is_virtual":false,"hash":101,"arguments":[{"name":"arg","type":"enum::Owner.Mode","meta":"int32","default_value":"0"}],"return_value":{"type":"bool","meta":""}}]}],"singletons":[],"native_structures":[]}
-;
+const testing = struct {
+    const fixture =
+        \\{"header":{"version_major":4,"version_minor":6,"version_patch":3,"version_status":"stable","version_build":"official","version_full_name":"fixture","precision":"single"},
+        \\"builtin_class_sizes":[],"builtin_class_member_offsets":[],"global_constants":[],"global_enums":[{"name":"Error","is_bitfield":false,"values":[{"name":"Z","value":2},{"name":"A","value":1}]}],
+        \\"utility_functions":[],"builtin_classes":[],"classes":[{"name":"Owner","is_refcounted":false,"is_instantiable":true,"api_type":"core","enums":[{"name":"Mode","is_bitfield":false,"values":[{"name":"ON","value":1}]}],
+        \\"methods":[{"name":"method","is_const":true,"is_static":false,"is_vararg":false,"is_virtual":false,"hash":101,"arguments":[{"name":"arg","type":"enum::Owner.Mode","meta":"int32","default_value":"0"}],"return_value":{"type":"bool","meta":""}}]}],"singletons":[],"native_structures":[]}
+    ;
 
-const header_fixture =
-    \\ * @name mem_alloc
-    \\ * @since 4.1
-    \\ * @name get_godot_version
-    \\ * @since 4.1
-;
+    const header_fixture =
+        \\ * @name mem_alloc
+        \\ * @since 4.1
+        \\ * @name get_godot_version
+        \\ * @since 4.1
+    ;
+};
 
 test "extract validates header and retains signatures and sorted qualified enums" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const snapshot = try Snapshot.extract(a, fixture, header_fixture, "4.6.3");
+    const snapshot = try Snapshot.extract(a, testing.fixture, testing.header_fixture, "4.6.3");
     try std.testing.expectEqualStrings("Error", snapshot.enums[0].name);
     try std.testing.expectEqualStrings("Owner.Mode", snapshot.enums[1].name);
     try std.testing.expectEqualStrings("A", snapshot.enums[0].values[0].name);
@@ -288,7 +290,7 @@ test "extract validates header and retains signatures and sorted qualified enums
     try std.testing.expectEqual(@as(usize, 64), snapshot.classes_sha256.len);
     try std.testing.expectEqualStrings("get_godot_version", snapshot.interfaces[0]);
     try std.testing.expectEqualStrings("mem_alloc", snapshot.interfaces[1]);
-    try std.testing.expectError(error.VersionHeaderMismatch, Snapshot.extract(a, fixture, header_fixture, "4.6.2"));
+    try std.testing.expectError(error.VersionHeaderMismatch, Snapshot.extract(a, testing.fixture, testing.header_fixture, "4.6.2"));
 }
 
 test "extract rejects duplicate, malformed and unresolved interface evidence" {
@@ -297,16 +299,16 @@ test "extract rejects duplicate, malformed and unresolved interface evidence" {
     const a = arena.allocator();
     try std.testing.expectError(
         error.InvalidInterfaceEvidence,
-        Snapshot.extract(a, fixture, " * @name mem_alloc\n * @name mem_alloc\n", "4.6.3"),
+        Snapshot.extract(a, testing.fixture, " * @name mem_alloc\n * @name mem_alloc\n", "4.6.3"),
     );
     try std.testing.expectError(
         error.InvalidInterfaceEvidence,
-        Snapshot.extract(a, fixture, " * @name 1bad\n", "4.6.3"),
+        Snapshot.extract(a, testing.fixture, " * @name 1bad\n", "4.6.3"),
     );
     // A header that supplied no names leaves no evidence to merge.
     try std.testing.expectError(
         error.InvalidInterfaceEvidence,
-        Snapshot.extract(a, fixture, "header without tags\n", "4.6.3"),
+        Snapshot.extract(a, testing.fixture, "header without tags\n", "4.6.3"),
     );
 }
 
@@ -314,29 +316,29 @@ test "extract rejects unstable builds and duplicate method and enum identities" 
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const parsed = try std.json.parseFromSlice(std.json.Value, a, fixture, .{});
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, testing.fixture, .{});
     const header = parsed.value.object.getPtr("header").?;
     header.object.getPtr("version_status").?.* = .{ .string = "beta" };
     const unstable = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.UnauditedBuild, Snapshot.extract(a, unstable, header_fixture, "4.6.3"));
+    try std.testing.expectError(error.UnauditedBuild, Snapshot.extract(a, unstable, testing.header_fixture, "4.6.3"));
     header.object.getPtr("version_status").?.* = .{ .string = "stable" };
     const enums = parsed.value.object.getPtr("global_enums").?;
     try enums.array.append(enums.array.items[0]);
     const duplicate = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.DuplicateEnum, Snapshot.extract(a, duplicate, header_fixture, "4.6.3"));
+    try std.testing.expectError(error.DuplicateEnum, Snapshot.extract(a, duplicate, testing.header_fixture, "4.6.3"));
     _ = enums.array.pop();
     const methods = parsed.value.object.getPtr("classes").?.array.items[0].object.getPtr("methods").?;
     try methods.array.append(methods.array.items[0]);
     const duplicate_method = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    try std.testing.expectError(error.DuplicateIdentity, Snapshot.extract(a, duplicate_method, header_fixture, "4.6.3"));
+    try std.testing.expectError(error.DuplicateIdentity, Snapshot.extract(a, duplicate_method, testing.header_fixture, "4.6.3"));
 }
 
 test "extract sorts owners and methods without changing signatures" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const first = try std.json.parseFromSlice(std.json.Value, a, fixture, .{});
-    const second = try std.json.parseFromSlice(std.json.Value, a, fixture, .{});
+    const first = try std.json.parseFromSlice(std.json.Value, a, testing.fixture, .{});
+    const second = try std.json.parseFromSlice(std.json.Value, a, testing.fixture, .{});
     const classes = first.value.object.getPtr("classes").?;
     const z = classes.array.items[0];
     const alpha = second.value.object.getPtr("classes").?.array.items[0];
@@ -348,7 +350,7 @@ test "extract sorts owners and methods without changing signatures" {
     another.object.getPtr("name").?.* = .{ .string = "a" };
     try methods.array.append(another);
     try classes.array.append(alpha);
-    const result = try Snapshot.extract(a, try std.json.Stringify.valueAlloc(a, first.value, .{}), header_fixture, "4.6.3");
+    const result = try Snapshot.extract(a, try std.json.Stringify.valueAlloc(a, first.value, .{}), testing.header_fixture, "4.6.3");
     try std.testing.expectEqual(@as(usize, 3), result.records.len);
     try std.testing.expectEqualStrings("A", result.records[0].owner);
     try std.testing.expectEqualStrings("a", result.records[1].method);
