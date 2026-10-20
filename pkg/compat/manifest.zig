@@ -113,13 +113,13 @@ pub const Mode = enum {
 /// The interface names a release's own header lacks, measured as a delta.
 pub const InterfaceTable = struct {
     id: []const u8,
-    not_in_snapshot: []const []const u8,
+    missing: []const []const u8,
 };
 
 const Row = struct {
     source: Provenance,
     overrides: []const Override,
-    not_in_snapshot: []const []const u8,
+    missing: []const []const u8,
     version: std.SemanticVersion,
 };
 
@@ -261,7 +261,7 @@ pub const Manifest = struct {
         // Measure the interface evidence before touching previous targets.
         const current_interfaces = try requireInterfaces(allocator, current.interfaces);
         const old_interfaces = try requireInterfaces(allocator, old.interfaces);
-        const current_digest = try interface_names.digest(allocator, current_interfaces);
+        const current_digest = try interfaces.digest(allocator, current_interfaces);
         if (input) |previous| {
             if (!std.mem.eql(u8, previous.current_interfaces_sha256, current_digest)) {
                 return error.InterfaceSnapshotMismatch;
@@ -282,7 +282,7 @@ pub const Manifest = struct {
                 try rows.append(allocator, .{
                     .source = target.source,
                     .overrides = overrides orelse return error.InvalidManifest,
-                    .not_in_snapshot = delta,
+                    .missing = delta,
                     .version = try records.exactVersion(target.source.version),
                 });
             }
@@ -294,7 +294,7 @@ pub const Manifest = struct {
         try rows.append(allocator, .{
             .source = .fromSnapshot(old, !std.mem.eql(u8, old.version, current.version)),
             .overrides = comparison.overrides,
-            .not_in_snapshot = try interface_names.delta(allocator, current_interfaces, old_interfaces),
+            .missing = try interfaces.delta(allocator, current_interfaces, old_interfaces),
             .version = old_version,
         });
         std.mem.sort(Row, rows.items, {}, lessRow);
@@ -302,15 +302,15 @@ pub const Manifest = struct {
         // Share a table only when both its overrides and its interface delta match.
         var targets: std.ArrayList(Target) = .empty;
         var tables: std.ArrayList(Table) = .empty;
-        var interfaces: std.ArrayList(InterfaceTable) = .empty;
+        var interface_tables: std.ArrayList(InterfaceTable) = .empty;
         for (rows.items, 0..) |row, i| {
             if (i > 0 and rows.items[i - 1].version.order(row.version) == .eq) {
                 return error.DuplicateTarget;
             }
             var shared: ?usize = null;
-            for (tables.items, interfaces.items, 0..) |table, evidence, index| {
+            for (tables.items, interface_tables.items, 0..) |table, evidence, index| {
                 if (sameOverrides(table.overrides, row.overrides) and
-                    interface_names.same(evidence.not_in_snapshot, row.not_in_snapshot))
+                    interfaces.same(evidence.missing, row.missing))
                 {
                     shared = index;
                     break;
@@ -319,9 +319,9 @@ pub const Manifest = struct {
             if (shared == null) {
                 shared = tables.items.len;
                 try tables.append(allocator, .{ .id = row.source.version, .overrides = row.overrides });
-                try interfaces.append(allocator, .{
+                try interface_tables.append(allocator, .{
                     .id = row.source.version,
-                    .not_in_snapshot = row.not_in_snapshot,
+                    .missing = row.missing,
                 });
             }
             try targets.append(allocator, .{
@@ -333,7 +333,7 @@ pub const Manifest = struct {
             .current = .fromSnapshot(current, false),
             .current_interfaces_sha256 = current_digest,
             .targets = try targets.toOwnedSlice(allocator),
-            .interfaces = try interfaces.toOwnedSlice(allocator),
+            .interfaces = try interface_tables.toOwnedSlice(allocator),
             .tables = try tables.toOwnedSlice(allocator),
         };
         try result.validateInterfaceShape();
@@ -349,7 +349,7 @@ pub const Manifest = struct {
             const version = try Version.parseStrict(target.source.version);
             const delta = self.tableDelta(target.table_id) orelse
                 return error.InvalidInterfaceEvidence;
-            if (interface_names.contains(delta, name)) {
+            if (interfaces.contains(delta, name)) {
                 last_absent = version;
             } else if (gate == null) {
                 gate = version;
@@ -399,7 +399,7 @@ pub const Manifest = struct {
             for (self.tables[0..index]) |previous| {
                 if (std.mem.eql(u8, table.id, previous.id)) return error.InvalidInterfaceEvidence;
             }
-            try validateDelta(evidence.not_in_snapshot);
+            try validateDelta(evidence.missing);
         }
 
         // Availability only ever grows, so a newer target cannot drop a name.
@@ -409,7 +409,7 @@ pub const Manifest = struct {
                 return error.InvalidInterfaceEvidence;
             if (newer) |older| {
                 for (delta) |name| {
-                    if (!interface_names.contains(older, name)) {
+                    if (!interfaces.contains(older, name)) {
                         return error.NonMonotonicInterfaceEvidence;
                     }
                 }
@@ -424,14 +424,14 @@ pub const Manifest = struct {
         allocator: Allocator,
         names: []const []const u8,
     ) !void {
-        const parsed = try interface_names.canonicalize(allocator, names);
-        const digest = try interface_names.digest(allocator, parsed);
+        const parsed = try interfaces.canonicalize(allocator, names);
+        const digest = try interfaces.digest(allocator, parsed);
         if (!std.mem.eql(u8, digest, self.current_interfaces_sha256)) {
             return error.StaleCompatibilityInterfaces;
         }
         for (self.interfaces) |evidence| {
-            for (evidence.not_in_snapshot) |name| {
-                if (!interface_names.contains(parsed, name)) return error.InvalidInterfaceEvidence;
+            for (evidence.missing) |name| {
+                if (!interfaces.contains(parsed, name)) return error.InvalidInterfaceEvidence;
             }
         }
         for (parsed) |name| _ = try self.interfaceAvailability(name);
@@ -440,7 +440,7 @@ pub const Manifest = struct {
     /// Return the interface delta stored for one table id.
     pub fn tableDelta(self: Manifest, table_id: []const u8) ?[]const []const u8 {
         for (self.interfaces) |evidence| {
-            if (std.mem.eql(u8, evidence.id, table_id)) return evidence.not_in_snapshot;
+            if (std.mem.eql(u8, evidence.id, table_id)) return evidence.missing;
         }
         return null;
     }
@@ -502,7 +502,7 @@ fn parseSinceTag(text: []const u8) !SinceTag {
 /// Require non-empty measured interface names and canonicalize them.
 fn requireInterfaces(allocator: Allocator, names: []const []const u8) ![]const []const u8 {
     if (names.len == 0) return error.UnresolvedInterfaceEvidence;
-    return interface_names.canonicalize(allocator, names);
+    return interfaces.canonicalize(allocator, names);
 }
 
 fn validateDigest(text: []const u8) !void {
@@ -516,7 +516,7 @@ fn validateDigest(text: []const u8) !void {
 
 fn validateDelta(names: []const []const u8) !void {
     for (names, 0..) |name, i| {
-        if (!interface_names.isValidName(name)) return error.InvalidInterfaceEvidence;
+        if (!interfaces.isValidName(name)) return error.InvalidInterfaceEvidence;
         if (i > 0 and !std.mem.lessThan(u8, names[i - 1], name)) {
             return error.InvalidInterfaceEvidence;
         }
@@ -586,58 +586,60 @@ fn sameSignature(left: Legacy, right: Legacy) bool {
     return true;
 }
 
-fn fixtureSnapshot(version: []const u8, items: []const records.Record) records.Snapshot {
-    return fixtureSnapshotWith(version, items, &fixture_interfaces);
-}
+const testing = struct {
+    fn fixtureSnapshot(version: []const u8, items: []const records.Record) records.Snapshot {
+        return fixtureSnapshotWith(version, items, &fixture_interfaces);
+    }
 
-fn fixtureSnapshotWith(
-    version: []const u8,
-    items: []const records.Record,
-    interfaces: []const []const u8,
-) records.Snapshot {
-    return .{
-        .version = version,
-        .status = "stable",
-        .build = "official",
-        .precision = "single",
-        .raw_sha256 = "raw",
-        .classes_sha256 = "classes",
-        .records = items,
-        .enums = &.{},
-        .interfaces = interfaces,
-    };
-}
+    fn fixtureSnapshotWith(
+        version: []const u8,
+        items: []const records.Record,
+        names: []const []const u8,
+    ) records.Snapshot {
+        return .{
+            .version = version,
+            .status = "stable",
+            .build = "official",
+            .precision = "single",
+            .raw_sha256 = "raw",
+            .classes_sha256 = "classes",
+            .records = items,
+            .enums = &.{},
+            .interfaces = names,
+        };
+    }
 
-const fixture_interfaces = [_][]const u8{ "alpha", "bravo", "charlie" };
+    const fixture_interfaces = [_][]const u8{ "alpha", "bravo", "charlie" };
 
-fn fixtureRecord(hash: u64, compatibility: []const u64) records.Record {
-    return .{
-        .kind = .class,
-        .owner = "Owner",
-        .method = "method",
-        .hash = hash,
-        .compatibility = compatibility,
-        .virtual = false,
-        .is_const = false,
-        .is_static = false,
-        .is_vararg = false,
-        .arguments = &.{},
-        .@"return" = null,
-    };
-}
+    fn fixtureRecord(hash: u64, compatibility: []const u64) records.Record {
+        return .{
+            .kind = .class,
+            .owner = "Owner",
+            .method = "method",
+            .hash = hash,
+            .compatibility = compatibility,
+            .virtual = false,
+            .is_const = false,
+            .is_static = false,
+            .is_vararg = false,
+            .arguments = &.{},
+            .@"return" = null,
+        };
+    }
+};
 
 test "shim-layout overrides serialize their original signature and flags" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    var old = fixtureRecord(101, &.{});
+    var old = testing.fixtureRecord(101, &.{});
     old.arguments = &.{.{ .name = "value", .type = "String" }};
-    var modern = fixtureRecord(202, &.{101});
+    var modern = testing.fixtureRecord(202, &.{101});
     modern.arguments = &.{.{ .name = "value", .type = "StringName" }};
     const manifest = try Manifest.merge(
         allocator,
-        fixtureSnapshot("4.7.2", &.{modern}),
-        fixtureSnapshot("4.6.0", &.{old}),
+        testing.fixtureSnapshot("4.7.2", &.{modern}),
+        testing.fixtureSnapshot("4.6.0", &.{old}),
         .overwrite,
         null,
     );
@@ -652,10 +654,10 @@ test "merge overwrite append replacement table cleanup and order-independent byt
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const current = fixtureSnapshot("4.7.2", &.{fixtureRecord(202, &.{ 101, 303 })});
-    const first = fixtureSnapshot("4.6.0", &.{fixtureRecord(101, &.{})});
-    const second = fixtureSnapshot("4.6.1", &.{fixtureRecord(101, &.{})});
-    const changed = fixtureSnapshot("4.6.0", &.{fixtureRecord(303, &.{})});
+    const current = testing.fixtureSnapshot("4.7.2", &.{testing.fixtureRecord(202, &.{ 101, 303 })});
+    const first = testing.fixtureSnapshot("4.6.0", &.{testing.fixtureRecord(101, &.{})});
+    const second = testing.fixtureSnapshot("4.6.1", &.{testing.fixtureRecord(101, &.{})});
+    const changed = testing.fixtureSnapshot("4.6.0", &.{testing.fixtureRecord(303, &.{})});
     const one = try Manifest.merge(a, current, first, .overwrite, null);
     const two = try Manifest.merge(a, current, second, .append, one);
     const reverse = try Manifest.merge(a, current, first, .append, try Manifest.merge(a, current, second, .overwrite, null));
@@ -681,20 +683,20 @@ test "merge overwrite append replacement table cleanup and order-independent byt
     mismatch = current;
     mismatch.version = "4.7.1";
     try std.testing.expectError(error.CurrentSnapshotMismatch, Manifest.merge(a, mismatch, first, .append, one));
-    try std.testing.expectError(error.TargetNewerThanCurrent, Manifest.merge(a, current, fixtureSnapshot("4.8.0", first.records), .overwrite, null));
+    try std.testing.expectError(error.TargetNewerThanCurrent, Manifest.merge(a, current, testing.fixtureSnapshot("4.8.0", first.records), .overwrite, null));
 }
 
 test "hash comparison preserves primary membership virtual absent multi and duplicate rules" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const current = [_]records.Record{fixtureRecord(202, &.{ 101, 303 })};
-    const old = [_]records.Record{fixtureRecord(101, &.{})};
+    const current = [_]records.Record{testing.fixtureRecord(202, &.{ 101, 303 })};
+    const old = [_]records.Record{testing.fixtureRecord(101, &.{})};
     const result = try Comparison.compare(a, &old, &current, &.{}, &.{});
     try std.testing.expectEqual(@as(u64, 101), result.overrides[0].old_hash);
     try std.testing.expectEqual(@as(usize, 1), result.multi_compat.len);
     try std.testing.expectEqual(@as(usize, 0), (try Comparison.compare(a, &current, &current, &.{}, &.{})).overrides.len);
-    try std.testing.expectError(error.MissingCompatibilityEvidence, Comparison.compare(a, &old, &.{fixtureRecord(202, &.{303})}, &.{}, &.{}));
+    try std.testing.expectError(error.MissingCompatibilityEvidence, Comparison.compare(a, &old, &.{testing.fixtureRecord(202, &.{303})}, &.{}, &.{}));
     try std.testing.expectError(error.DuplicateIdentity, Comparison.compare(a, &.{ old[0], old[0] }, &current, &.{}, &.{}));
     var virtual = current[0];
     virtual.virtual = true;
@@ -711,8 +713,8 @@ test "hash comparison preserves primary membership virtual absent multi and dupl
 test "return-added union classification preserves serialized diff and legacy flags" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const old = fixtureRecord(101, &.{});
-    var current = fixtureRecord(202, &.{101});
+    const old = testing.fixtureRecord(101, &.{});
+    var current = testing.fixtureRecord(202, &.{101});
     current.@"return" = .{ .type = "bool", .meta = "" };
     const result = try Comparison.compare(arena.allocator(), &.{old}, &.{current}, &.{}, &.{});
     const override = result.overrides[0];
@@ -733,7 +735,7 @@ test "every active layout compares payload contents rather than slice addresses"
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    var old = fixtureRecord(101, &.{});
+    var old = testing.fixtureRecord(101, &.{});
     old.arguments = &.{.{ .name = "value", .type = "String" }};
     const legacy: Legacy = .fromRecord(old, "argument changed");
     const layouts = [_]Layout{
@@ -777,16 +779,16 @@ test "merge records interface deltas and shares tables only on matching evidence
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const records_current = [_]records.Record{fixtureRecord(101, &.{})};
-    const current = fixtureSnapshotWith("4.7.2", &records_current, &.{ "alpha", "bravo", "charlie" });
-    const first_release = fixtureSnapshotWith("4.6.0", &records_current, &.{ "alpha", "bravo" });
-    const patch = fixtureSnapshotWith("4.6.1", &records_current, &.{ "alpha", "bravo" });
+    const records_current = [_]records.Record{testing.fixtureRecord(101, &.{})};
+    const current = testing.fixtureSnapshotWith("4.7.2", &records_current, &.{ "alpha", "bravo", "charlie" });
+    const first_release = testing.fixtureSnapshotWith("4.6.0", &records_current, &.{ "alpha", "bravo" });
+    const patch = testing.fixtureSnapshotWith("4.6.1", &records_current, &.{ "alpha", "bravo" });
 
     const one = try Manifest.merge(a, current, first_release, .overwrite, null);
     try std.testing.expectEqual(@as(usize, 1), one.interfaces.len);
     try std.testing.expectEqualStrings("4.6.0", one.interfaces[0].id);
-    try std.testing.expectEqual(@as(usize, 1), one.interfaces[0].not_in_snapshot.len);
-    try std.testing.expectEqualStrings("charlie", one.interfaces[0].not_in_snapshot[0]);
+    try std.testing.expectEqual(@as(usize, 1), one.interfaces[0].missing.len);
+    try std.testing.expectEqualStrings("charlie", one.interfaces[0].missing[0]);
     try std.testing.expectEqual(@as(usize, 64), one.current_interfaces_sha256.len);
 
     const two = try Manifest.merge(a, current, patch, .append, one);
@@ -800,39 +802,39 @@ test "divergent patch interface deltas split tables rather than merge false evid
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const records_current = [_]records.Record{fixtureRecord(101, &.{})};
-    const current = fixtureSnapshotWith("4.7.2", &records_current, &.{ "alpha", "bravo", "charlie" });
-    const older = fixtureSnapshotWith("4.6.0", &records_current, &.{"alpha"});
-    const patch = fixtureSnapshotWith("4.6.1", &records_current, &.{ "alpha", "bravo" });
+    const records_current = [_]records.Record{testing.fixtureRecord(101, &.{})};
+    const current = testing.fixtureSnapshotWith("4.7.2", &records_current, &.{ "alpha", "bravo", "charlie" });
+    const older = testing.fixtureSnapshotWith("4.6.0", &records_current, &.{"alpha"});
+    const patch = testing.fixtureSnapshotWith("4.6.1", &records_current, &.{ "alpha", "bravo" });
 
     const one = try Manifest.merge(a, current, older, .overwrite, null);
-    try std.testing.expectEqual(@as(usize, 2), one.interfaces[0].not_in_snapshot.len);
+    try std.testing.expectEqual(@as(usize, 2), one.interfaces[0].missing.len);
     const two = try Manifest.merge(a, current, patch, .append, one);
     try std.testing.expectEqual(@as(usize, 2), two.tables.len);
     try std.testing.expectEqual(@as(usize, 2), two.interfaces.len);
     try std.testing.expectEqualStrings("4.6.0", two.interfaces[0].id);
     try std.testing.expectEqualStrings("4.6.1", two.interfaces[1].id);
-    try std.testing.expectEqual(@as(usize, 1), two.interfaces[1].not_in_snapshot.len);
-    try std.testing.expectEqualStrings("charlie", two.interfaces[1].not_in_snapshot[0]);
+    try std.testing.expectEqual(@as(usize, 1), two.interfaces[1].missing.len);
+    try std.testing.expectEqualStrings("charlie", two.interfaces[1].missing[0]);
 }
 
 test "merge rejects missing and dropped interface evidence with named errors" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const items = [_]records.Record{fixtureRecord(101, &.{})};
-    const good_current = fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo" });
+    const items = [_]records.Record{testing.fixtureRecord(101, &.{})};
+    const good_current = testing.fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo" });
     try std.testing.expectError(
         error.UnresolvedInterfaceEvidence,
-        Manifest.merge(a, fixtureSnapshotWith("4.7.2", &items, &.{}), fixtureSnapshotWith("4.6.0", &items, &.{"alpha"}), .overwrite, null),
+        Manifest.merge(a, testing.fixtureSnapshotWith("4.7.2", &items, &.{}), testing.fixtureSnapshotWith("4.6.0", &items, &.{"alpha"}), .overwrite, null),
     );
     try std.testing.expectError(
         error.UnresolvedInterfaceEvidence,
-        Manifest.merge(a, good_current, fixtureSnapshotWith("4.6.0", &items, &.{}), .overwrite, null),
+        Manifest.merge(a, good_current, testing.fixtureSnapshotWith("4.6.0", &items, &.{}), .overwrite, null),
     );
     try std.testing.expectError(
         error.NonMonotonicInterfaceEvidence,
-        Manifest.merge(a, good_current, fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "zulu" }), .overwrite, null),
+        Manifest.merge(a, good_current, testing.fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "zulu" }), .overwrite, null),
     );
 }
 
@@ -840,20 +842,20 @@ test "interface digest mismatch and dangling delta names are named errors" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const items = [_]records.Record{fixtureRecord(101, &.{})};
-    const names = try interface_names.canonicalize(a, &.{ "alpha", "bravo", "charlie" });
-    const current = fixtureSnapshotWith("4.7.2", &items, names);
-    const old = fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo", "charlie" });
+    const items = [_]records.Record{testing.fixtureRecord(101, &.{})};
+    const names = try interfaces.canonicalize(a, &.{ "alpha", "bravo", "charlie" });
+    const current = testing.fixtureSnapshotWith("4.7.2", &items, names);
+    const old = testing.fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo", "charlie" });
     const manifest = try Manifest.merge(a, current, old, .overwrite, null);
 
-    try manifest.validateInterfaces(a, try interface_names.canonicalize(a, &.{ "charlie", "bravo", "alpha" }));
+    try manifest.validateInterfaces(a, try interfaces.canonicalize(a, &.{ "charlie", "bravo", "alpha" }));
     try std.testing.expectError(
         error.StaleCompatibilityInterfaces,
-        manifest.validateInterfaces(a, try interface_names.canonicalize(a, &.{ "alpha", "bravo" })),
+        manifest.validateInterfaces(a, try interfaces.canonicalize(a, &.{ "alpha", "bravo" })),
     );
 
     var dangling = manifest;
-    dangling.interfaces = &.{.{ .id = "4.6.0", .not_in_snapshot = &.{"zulu"} }};
+    dangling.interfaces = &.{.{ .id = "4.6.0", .missing = &.{"zulu"} }};
     try std.testing.expectError(error.InvalidInterfaceEvidence, dangling.validateInterfaces(a, names));
 }
 
@@ -861,19 +863,19 @@ test "interface gates come from measured availability rather than the doc tag" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const items = [_]records.Record{fixtureRecord(101, &.{})};
-    const current = fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo", "zulu" });
+    const items = [_]records.Record{testing.fixtureRecord(101, &.{})};
+    const current = testing.fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo", "zulu" });
     const one = try Manifest.merge(
         a,
         current,
-        fixtureSnapshotWith("4.6.0", &items, &.{"alpha"}),
+        testing.fixtureSnapshotWith("4.6.0", &items, &.{"alpha"}),
         .overwrite,
         null,
     );
     const two = try Manifest.merge(
         a,
         current,
-        fixtureSnapshotWith("4.7.0", &items, &.{ "alpha", "bravo" }),
+        testing.fixtureSnapshotWith("4.7.0", &items, &.{ "alpha", "bravo" }),
         .append,
         one,
     );
@@ -898,19 +900,19 @@ test "since tags are cross-checked against the measured interval" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const items = [_]records.Record{fixtureRecord(101, &.{})};
-    const current = fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo" });
+    const items = [_]records.Record{testing.fixtureRecord(101, &.{})};
+    const current = testing.fixtureSnapshotWith("4.7.2", &items, &.{ "alpha", "bravo" });
     const one = try Manifest.merge(
         a,
         current,
-        fixtureSnapshotWith("4.2.0", &items, &.{"alpha"}),
+        testing.fixtureSnapshotWith("4.2.0", &items, &.{"alpha"}),
         .overwrite,
         null,
     );
     const two = try Manifest.merge(
         a,
         current,
-        fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo" }),
+        testing.fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo" }),
         .append,
         one,
     );
@@ -951,7 +953,7 @@ const Allocator = std.mem.Allocator;
 
 const Version = @import("common").Version;
 
-const interface_names = @import("interfaces.zig");
+const interfaces = @import("interfaces.zig");
 
 const method_layout = @import("method_layout.zig");
 

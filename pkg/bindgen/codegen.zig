@@ -1830,7 +1830,7 @@ fn writeDispatchTable(ctx: *Context) !void {
 
     const functions = ctx.dispatch_table.functions.items;
     try writeDispatchFields(&w, functions);
-    try writeDispatchInit(&w, functions, try findVersionFunction(functions));
+    try writeDispatchInit(&w, functions, try ctx.versionFunction());
 
     try w.writeLine(
         \\const std = @import("std");
@@ -1850,22 +1850,16 @@ fn writeDispatchTable(ctx: *Context) !void {
 
 /// Provisional gate emitter: the measured manifest decides optional interfaces.
 /// Reusing the entrypoint's version probe stays with the #276 refactor.
-fn findVersionFunction(functions: []const Context.DispatchTable.Function) !Context.DispatchTable.Function {
-    for (functions) |function| {
-        if (std.mem.eql(u8, function.api_name, "get_godot_version")) return function;
-    }
-    return error.MissingVersionInterface;
-}
-
+///
 /// Emit one field per measured interface: required fields are non-nullable.
 fn writeDispatchFields(w: *CodeWriter, functions: []const Context.DispatchTable.Function) !void {
+    try w.writeLine("/// Running Godot version discovered before optional interface resolution.");
     try w.writeLine("version: Version,");
     for (functions) |function| {
         try writeDocBlock(w, function.docs);
-        if (function.isRequired()) {
-            try w.printLine("{s}: Child(c.{s}),", .{ function.name, function.ptr_type });
-        } else {
-            try w.printLine("{s}: c.{s},", .{ function.name, function.ptr_type });
+        switch (function.availability) {
+            .required => try w.printLine("{s}: Child(c.{s}),", .{ function.name, function.ptr_type }),
+            .optional => try w.printLine("{s}: c.{s},", .{ function.name, function.ptr_type }),
         }
     }
 }
@@ -1878,6 +1872,8 @@ fn writeDispatchInit(
 ) !void {
     try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
     w.indent += 1;
+    try w.writeLine("// get_godot_version is required by 4.1. get_godot_version2 is optional and");
+    try w.writeLine("// gated, so it cannot discover the version before gates resolve.");
     try w.printLine(
         "const get_godot_version: Child(c.{s}) = @ptrCast(getProcAddress(\"get_godot_version\").?);",
         .{version.ptr_type},
@@ -1893,13 +1889,14 @@ fn writeDispatchInit(
         if (std.mem.eql(u8, function.api_name, version.api_name)) {
             // Reuse the probe pointer instead of requesting the interface twice.
             try w.printLine(".{s} = get_godot_version,", .{function.name});
-        } else if (function.isRequired()) {
-            try w.printLine(
+            continue;
+        }
+        switch (function.availability) {
+            .required => try w.printLine(
                 ".{s} = @ptrCast(getProcAddress(\"{s}\").?),",
                 .{ function.name, function.api_name },
-            );
-        } else {
-            try w.printLine(
+            ),
+            .optional => try w.printLine(
                 ".{s} = if (version.gte(.{{ .major = {d}, .minor = {d}, .patch = {d} }})) @ptrCast(getProcAddress(\"{s}\")) else null,",
                 .{
                     function.name,
@@ -1908,7 +1905,7 @@ fn writeDispatchInit(
                     function.gate.patch,
                     function.api_name,
                 },
-            );
+            ),
         }
     }
     w.indent -= 1;
@@ -2299,6 +2296,23 @@ pub const testing = struct {
         call,
     };
 
+    /// Build one legacy signature from a recorded difference for range tests.
+    fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
+        return .fromRecord(.{
+            .kind = .class,
+            .owner = "Probe",
+            .method = "probe",
+            .hash = 111,
+            .compatibility = &.{},
+            .virtual = false,
+            .is_const = false,
+            .is_static = false,
+            .is_vararg = false,
+            .arguments = &.{},
+            .@"return" = null,
+        }, difference);
+    }
+
     /// Write a standalone class using the real legacy method writer for range tests.
     /// Default builds report `runtime_version`; minimum builds report the minimum.
     pub fn writeLegacyFixture(
@@ -2364,7 +2378,7 @@ pub const testing = struct {
                 .layout = .incompatible,
                 .adapter = "probe_4_6",
                 .available = false,
-                .signature = fixtureSignature("fixture"),
+                .signature = testing.fixtureSignature("fixture"),
             },
         };
         var group = function.legacy_range.?;
@@ -2576,7 +2590,7 @@ test "legacy writer guards runtime ranges and omits declarations above a minimum
             .layout = .return_added,
             .adapter = "probe_4_6",
             .available = false,
-            .signature = fixtureSignature("void -> bool"),
+            .signature = testing.fixtureSignature("void -> bool"),
         },
     };
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
@@ -2612,7 +2626,7 @@ test "dispatch preserves range order patch adapters and above-range omission" {
         .layout = .incompatible,
         .adapter = "probe_4_6",
         .available = true,
-        .signature = fixtureSignature("argument type"),
+        .signature = testing.fixtureSignature("argument type"),
     };
     var later = group;
     later.lower = group.upper;
@@ -2708,7 +2722,7 @@ test "dispatch emission gates optional interfaces on the measured version" {
             .api_name = "get_godot_version",
             .ptr_type = "GDExtensionInterfaceGetGodotVersion",
             .gate = .{ .major = 4, .minor = 1, .patch = 0 },
-            .required = true,
+            .availability = .required,
         },
         .{
             .docs = null,
@@ -2716,14 +2730,20 @@ test "dispatch emission gates optional interfaces on the measured version" {
             .api_name = "variant_get_type_by_name",
             .ptr_type = "GDExtensionInterfaceVariantGetTypeByName",
             .gate = .{ .major = 4, .minor = 7, .patch = 0 },
-            .required = false,
+            .availability = .optional,
         },
     };
+    var context = Context.testing.contextWith(std.testing.allocator, &functions);
+    defer context.dispatch_table.functions.deinit(std.testing.allocator);
     try writeDispatchFields(&w, &functions);
-    try writeDispatchInit(&w, &functions, try findVersionFunction(&functions));
+    try writeDispatchInit(&w, &functions, try context.versionFunction());
 
     const text = output.written();
-    try std.testing.expect(std.mem.indexOf(u8, text, "version: Version,") != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "/// Running Godot version discovered before optional interface resolution.\nversion: Version,",
+    ) != null);
     try std.testing.expect(std.mem.indexOf(
         u8,
         text,
@@ -2733,6 +2753,16 @@ test "dispatch emission gates optional interfaces on the measured version" {
         u8,
         text,
         "variantGetTypeByName: c.GDExtensionInterfaceVariantGetTypeByName,",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "// get_godot_version is required by 4.1. get_godot_version2 is optional and",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "// gated, so it cannot discover the version before gates resolve.",
     ) != null);
     try std.testing.expect(std.mem.indexOf(
         u8,
@@ -2747,20 +2777,6 @@ test "dispatch emission gates optional interfaces on the measured version" {
         ".variantGetTypeByName = if (version.gte(.{ .major = 4, .minor = 7, .patch = 0 })) @ptrCast(getProcAddress(\"variant_get_type_by_name\")) else null,",
     ) != null);
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "getProcAddress(\"get_godot_version\")"));
-}
-
-test "dispatch emission requires the version interface" {
-    const functions = [_]Context.DispatchTable.Function{
-        .{
-            .docs = null,
-            .name = "memAlloc",
-            .api_name = "mem_alloc",
-            .ptr_type = "GDExtensionInterfaceMemAlloc",
-            .gate = .{ .major = 4, .minor = 1, .patch = 0 },
-            .required = true,
-        },
-    };
-    try std.testing.expectError(error.MissingVersionInterface, findVersionFunction(&functions));
 }
 
 const std = @import("std");

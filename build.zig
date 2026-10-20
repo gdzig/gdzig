@@ -51,9 +51,18 @@ pub fn build(b: *Build) !void {
     } else b.path("vendor/gdextension_interface.h");
     const extension_api = b.path("vendor/extension_api.json");
 
-    // Metadata select and attribute registration both consume the resolved header.
-    compat_metadata.add(b, @This(), interface_header);
-    const selection = compat_metadata.select(b, @This(), minimum_text, interface_header) orelse return;
+    // Metadata setup and attribute registration both consume the resolved header.
+    const parsed_minimum: ?Version = if (minimum_text) |text|
+        Version.parseStrict(text) catch std.debug.panic(
+            "invalid stable Godot minimum '{s}': use major.minor[.patch]",
+            .{text},
+        )
+    else
+        null;
+    const selection = compat_metadata.setup(b, @This(), .{
+        .minimum = parsed_minimum,
+        .header = interface_header,
+    }) orelse return;
     const minimum = selection.minimum;
 
     const headers_write = b.addWriteFiles();
@@ -292,3 +301,5 @@ const compatibility_minimum_tests = @import("build/compatibility_minimum_tests.z
 const gdextension = @import("build/gdextension.zig");
 
 const legacy_tests = @import("build/legacy_tests.zig");
+
+const Version = @import("pkg/common/version.zig").Version;
