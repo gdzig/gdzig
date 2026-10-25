@@ -1168,7 +1168,11 @@ fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) 
     var seen: std.AutoArrayHashMapUnmanaged(i64, []const u8) = .empty;
     defer seen.deinit(ctx.rawAllocator());
 
-    const Alias = struct { doc: ?[]const u8, name: []const u8, first_name: []const u8 };
+    const Alias = struct {
+        doc: ?[]const u8,
+        name: []const u8,
+        first_name: []const u8,
+    };
     var aliases: std.ArrayListUnmanaged(Alias) = .empty;
     defer aliases.deinit(ctx.rawAllocator());
 
@@ -2675,7 +2679,11 @@ const casez = @import("casez");
 const common = @import("common");
 
 const CodeWriter = @import("CodeWriter.zig");
-const Context = @import("Context.zig");
+
 const compatibility = @import("compatibility.zig");
+
+const Context = @import("Context.zig");
+
 const util = @import("util.zig");
+
 const version_dispatch = @import("version_dispatch.zig");

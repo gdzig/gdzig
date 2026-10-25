@@ -700,7 +700,10 @@ pub const Variant = extern struct {
         int: i64,
         nil: void,
         node_path: NodePath,
-        object: extern struct { id: ObjectId, object: *Object },
+        object: extern struct {
+            id: ObjectId,
+            object: *Object,
+        },
         packed_byte_array: *PackedArrayRef(PackedByteArray),
         packed_color_array: *PackedArrayRef(PackedColorArray),
         packed_float32_array: *PackedArrayRef(PackedFloat32Array),
@@ -863,12 +866,10 @@ const Atomic = std.atomic.Value;
 const Child = std.meta.Child;
 const mem = std.mem;
 const testing = std.testing;
+
 const precision = @import("build_options").precision;
 
 const c = @import("gdextension");
-
-const slot = @import("../slot.zig");
-const SlotType = slot.Type;
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
@@ -911,3 +912,6 @@ const Vector4i = gdzig.builtin.Vector4i;
 const Object = gdzig.class.Object;
 const RefCounted = gdzig.class.RefCounted;
 const class = gdzig.class;
+
+const slot = @import("../slot.zig");
+const SlotType = slot.Type;

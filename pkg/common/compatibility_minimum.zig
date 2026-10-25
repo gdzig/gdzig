@@ -25,7 +25,9 @@ test "optional minimum rejects older engines but accepts equal and newer engines
 
 test "minimum support is derived from targets and rejects unmeasured versions" {
     const targets = [_]struct {
-        source: struct { version: []const u8 },
+        source: struct {
+            version: []const u8,
+        },
     }{
         .{ .source = .{ .version = "4.6.0" } },
         .{ .source = .{ .version = "4.7.2" } },

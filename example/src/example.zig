@@ -27,6 +27,9 @@ const godot = @import("godot");
 const Registry = godot.extension.Registry;
 
 const ExampleNode = @import("ExampleNode.zig");
+
 const GuiNode = @import("GuiNode.zig");
+
 const SignalNode = @import("SignalNode.zig");
+
 const SpriteNode = @import("SpriteNode.zig");

@@ -111,21 +111,25 @@ pub fn build(b: *Build) !void {
     b.step("test-bindgen", "Run bindgen unit tests").dependOn(&run_tests_bindgen.step);
     test_step.dependOn(legacy_tests.add(b, bindgen_exe));
 
-    const tests_protocol = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/testing/protocol.zig"),
-        .target = b.graph.host,
-        .optimize = optimize,
-    }) });
+    const tests_protocol = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/testing/protocol.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
     const run_tests_protocol = b.addRunArtifact(tests_protocol);
     test_step.dependOn(&run_tests_protocol.step);
     b.step("test-protocol", "Run integration-test IPC unit tests").dependOn(&run_tests_protocol.step);
 
-    const tests_singleton = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/compat/singleton.zig"),
-        .imports = &.{.{ .name = "oopz", .module = oopz.module("oopz") }},
-        .target = b.graph.host,
-        .optimize = optimize,
-    }) });
+    const tests_singleton = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/compat/singleton.zig"),
+            .imports = &.{.{ .name = "oopz", .module = oopz.module("oopz") }},
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
     const run_tests_singleton = b.addRunArtifact(tests_singleton);
     test_step.dependOn(&run_tests_singleton.step);
     b.step("test-singleton", "Run singleton-owner lookup tests").dependOn(&run_tests_singleton.step);
@@ -262,10 +266,10 @@ pub fn build(b: *Build) !void {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Build = std.Build;
 const Io = std.Io;
 const Dir = Io.Dir;
+const builtin = @import("builtin");
 
 const api = @import("build/api.zig");
 pub const addExtension = api.addExtension;
@@ -274,9 +278,15 @@ pub const Extension = api.Extension;
 pub const ExtensionOptions = api.ExtensionOptions;
 pub const TestOptions = api.TestOptions;
 pub const InitializationLevel = api.InitializationLevel;
+
 const bindgen = @import("build/bindgen.zig");
-const compatibility_minimum_tests = @import("build/compatibility_minimum_tests.zig");
-const compat_metadata = @import("build/compat_metadata.zig");
+
 const common = @import("build/common.zig");
+
+const compat_metadata = @import("build/compat_metadata.zig");
+
+const compatibility_minimum_tests = @import("build/compatibility_minimum_tests.zig");
+
 const gdextension = @import("build/gdextension.zig");
+
 const legacy_tests = @import("build/legacy_tests.zig");

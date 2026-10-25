@@ -60,8 +60,9 @@ const std = @import("std");
 pub const engine_allocator = std.testing.allocator;
 
 const runtime = @import("runtime");
-const state = @import("state");
 pub const c = runtime.c;
 pub const Version = runtime.Version;
 pub const initializeVersion = runtime.initializeVersion;
 pub const testing = runtime.testing;
+
+const state = @import("state");

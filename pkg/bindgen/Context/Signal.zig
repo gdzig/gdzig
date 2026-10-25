@@ -69,10 +69,11 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 
 const casez = @import("casez");
 
+const common = @import("common");
+const GodotApi = @import("common").GodotApi;
+const gdzig_case = common.gdzig_case;
+
 const Context = @import("../Context.zig");
 const Type = Context.Type;
 
-const GodotApi = @import("common").GodotApi;
 const docs = @import("docs.zig");
-const common = @import("common");
-const gdzig_case = common.gdzig_case;

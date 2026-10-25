@@ -29,16 +29,18 @@ pub fn Type(comptime T: type) type {
 
         /// Widens `value` to its slot width.
         pub fn widen(value: T) Self {
-            return .{ .raw = switch (@typeInfo(T)) {
-                .int => @intCast(value),
-                .@"enum" => @intCast(@backingInt(value)),
-                .@"struct" => |info| blk: {
-                    const Backing = info.backing_integer orelse break :blk value;
-                    break :blk @as(Raw, @intCast(@as(Backing, @bitCast(value))));
+            return .{
+                .raw = switch (@typeInfo(T)) {
+                    .int => @intCast(value),
+                    .@"enum" => @intCast(@backingInt(value)),
+                    .@"struct" => |info| blk: {
+                        const Backing = info.backing_integer orelse break :blk value;
+                        break :blk @as(Raw, @intCast(@as(Backing, @bitCast(value))));
+                    },
+                    .float => @floatCast(value),
+                    else => value,
                 },
-                .float => @floatCast(value),
-                else => value,
-            } };
+            };
         }
 
         /// Narrows the slot-width value back to `T`.

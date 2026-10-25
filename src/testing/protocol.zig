@@ -142,11 +142,13 @@ pub fn parseResponse(allocator: std.mem.Allocator, line: []const u8) !?Response 
             }
         }
 
-        return .{ .result = .{
-            .index = @intCast(index_val.integer),
-            .outcome = outcome,
-            .message = message,
-        } };
+        return .{
+            .result = .{
+                .index = @intCast(index_val.integer),
+                .outcome = outcome,
+                .message = message,
+            },
+        };
     }
 
     return null;

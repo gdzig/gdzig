@@ -937,8 +937,6 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 
 const casez = @import("casez");
 
-const meta = @import("../meta.zig");
-
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
@@ -953,5 +951,9 @@ const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
 
 const class = @import("class.zig");
-const method = @import("method.zig");
+
 const InitializationLevel = @import("../extension.zig").InitializationLevel;
+
+const meta = @import("../meta.zig");
+
+const method = @import("method.zig");

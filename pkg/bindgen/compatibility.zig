@@ -240,10 +240,12 @@ test "manifest validation rejects malformed schema and dangling tables" {
 
 const std = @import("std");
 
+const GodotApi = @import("common").GodotApi;
+const Version = @import("common").Version;
+
+const compat_manifest = @import("compat").manifest;
+const records = @import("compat").records;
+
 /// Test fixture, including the generated-binding fixture executable.
 /// Production queries receive the parsed input manifest explicitly.
 pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.zon");
-const compat_manifest = @import("compat").manifest;
-const GodotApi = @import("common").GodotApi;
-const records = @import("compat").records;
-const Version = @import("common").Version;

@@ -6,5 +6,7 @@ test {
 const std = @import("std");
 
 pub const manifest = @import("manifest.zig");
-pub const records = @import("records.zig");
+
 pub const method_layout = @import("method_layout.zig");
+
+pub const records = @import("records.zig");

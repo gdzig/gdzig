@@ -111,6 +111,8 @@ const std = @import("std");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
 
-const Version = @import("../pkg/common/version.zig").Version;
 const common = @import("common.zig");
+
 const gdextension = @import("gdextension.zig");
+
+const Version = @import("../pkg/common/version.zig").Version;

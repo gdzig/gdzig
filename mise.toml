@@ -4,7 +4,7 @@ pre-commit = "latest"
 usage = "latest"
 zig = "0.17.0"
 zls = "0.16.0"
-"github:gdzig/gdzig-zlint" = "0.1.0"
+"github:gdzig/gdzig-zlint" = "0.6.0"
 
 [tool_alias]
 godot = "asdf:https://github.com/mkungla/asdf-godot"

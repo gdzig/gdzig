@@ -1,29 +1,47 @@
 {
   "$schema": "https://raw.githubusercontent.com/DonIsaac/zlint/refs/tags/v0.10.0/zlint.schema.json",
   "ignore": [
-    "**/*.mixin.zig",
-    "**/*.replace.zig",
-    "src/class/*",
-    "src/builtin/*",
-    "src/global/*",
+    "src/class/**",
+    "src/builtin/**",
+    "src/global/**",
+    "!src/class/**/*.mixin.zig",
+    "!src/class/**/*.replace.zig",
+    "!src/builtin/**/*.mixin.zig",
+    "!src/builtin/**/*.replace.zig",
+    "!src/global/**/*.mixin.zig",
+    "!src/global/**/*.replace.zig",
     "src/gdzig.zig"
   ],
   "rules": {
-    "gdzig-imports-last": [
+    "gdzig-imports-sorted": [
       "error",
       {
-        "project_packages": [
-          "build_options",
-          "common",
-          "compat",
-          "gdzig",
-          "godot"
+        "skip_fragments": true,
+        "std_modules": [
+          "std",
+          "builtin"
         ]
+      }
+    ],
+    "gdzig-imports-placement": [
+      "error",
+      {
+        "position": "bottom",
+        "skip_fragments": true
       }
     ],
     "gdzig-file-name-case": "error",
     "gdzig-import-alias-case": "error",
-    "gdzig-tests-last": "error",
+    "gdzig-tests-last": [
+      "error",
+      {
+        "skip_fragments": true
+      }
+    ],
+    "gdzig-trailing-comma": "error",
+    "gdzig-public-docs": "warn",
+    "gdzig-inferred-initializers": "error",
+    "gdzig-testing-usage": "error",
     "homeless-try": "error",
     "no-unresolved": "off",
     "unused-decls": "off",
@@ -31,7 +49,12 @@
     "avoid-as": "off",
     "no-print": "off",
     "suppressed-errors": "off",
-    "line-length": "off",
+    "line-length": [
+      "warn",
+      {
+        "max_length": 120
+      }
+    ],
     "empty-file": "off"
   }
 }

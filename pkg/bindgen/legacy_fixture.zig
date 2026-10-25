@@ -137,4 +137,5 @@ pub fn main(init: std.process.Init) void {
 const std = @import("std");
 
 const Version = @import("common").Version;
+
 const codegen = @import("codegen.zig");

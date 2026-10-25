@@ -213,6 +213,7 @@ const casez = @import("casez");
 
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
+const GodotApi = @import("common").GodotApi;
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;
@@ -220,6 +221,7 @@ const Enum = Context.Enum;
 const Field = Context.Field;
 const Function = Context.Function;
 const Imports = Context.Imports;
-const GodotApi = @import("common").GodotApi;
-const Mixin = @import("../Mixin.zig");
+
 const docs = @import("docs.zig");
+
+const Mixin = @import("../Mixin.zig");

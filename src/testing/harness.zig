@@ -179,13 +179,14 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Io = std.Io;
 const File = Io.File;
 const Writer = Io.Writer;
-
-const options = @import("options");
+const builtin = @import("builtin");
 
 const gdzig = @import("gdzig");
 const Os = gdzig.class.Os;
+
+const options = @import("options");
+
 const protocol = @import("protocol.zig");

@@ -53,7 +53,7 @@ pub const DocumentContext = struct {
     verbosity: Config.Verbosity = .verbose,
 
     pub fn init(codegen_ctx: *const Context, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
-        return DocumentContext{
+        return .{
             .base_url = config.base_url,
             .codegen_ctx = codegen_ctx,
             .current_class = current_class,
@@ -320,7 +320,9 @@ const ParserOptions = bbcodez.parser.Options;
 const TokenizerOptions = bbcodez.tokenizer.Options;
 const Token = bbcodez.tokenizer.TokenResult.Token;
 
-const Config = @import("../Config.zig");
 const GodotApi = @import("common").GodotApi;
+
+const Config = @import("../Config.zig");
+
 const Context = @import("../Context.zig");
 const Symbol = Context.Symbol;

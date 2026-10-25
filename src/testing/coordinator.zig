@@ -307,11 +307,11 @@ pub fn main(init: std.process.Init) !void {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const File = Io.File;
 const ZigServer = std.zig.Server;
+const builtin = @import("builtin");
 
 const options = @import("runner_options");
 

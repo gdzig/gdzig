@@ -61,6 +61,7 @@ const std = @import("std");
 const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;
 
-pub const GeneralPurposeAllocator = @import("heap/GeneralPurposeAllocator.zig");
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
+
+pub const GeneralPurposeAllocator = @import("heap/GeneralPurposeAllocator.zig");

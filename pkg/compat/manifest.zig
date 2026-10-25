@@ -10,7 +10,9 @@ pub const Override = struct {
 /// A measured layout with only its corresponding payload.
 pub const Layout = union(enum) {
     identical,
-    trailing_defaults: struct { added_arguments: []const []const u8 },
+    trailing_defaults: struct {
+        added_arguments: []const []const u8,
+    },
     abi_compatible: method_layout.Reason,
     return_added: Legacy,
     incompatible: Legacy,
@@ -24,9 +26,11 @@ pub const Layout = union(enum) {
     ) !Layout {
         return switch (result) {
             .identical => .identical,
-            .trailing_defaults => |details| .{ .trailing_defaults = .{
-                .added_arguments = details.added_arguments,
-            } },
+            .trailing_defaults => |details| .{
+                .trailing_defaults = .{
+                    .added_arguments = details.added_arguments,
+                },
+            },
             .abi_compatible => |reason| .{ .abi_compatible = reason },
             .incompatible => |difference| .{ .incompatible = .fromRecord(previous, difference) },
             .return_added => blk: {
@@ -544,5 +548,6 @@ test "every active layout compares payload contents rather than slice addresses"
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const records = @import("records.zig");
 const method_layout = @import("method_layout.zig");
+
+const records = @import("records.zig");

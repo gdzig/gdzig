@@ -265,5 +265,7 @@ const std = @import("std");
 const Build = std.Build;
 
 const common = @import("common.zig");
-const Version = @import("../pkg/common/version.zig").Version;
+
 const cached = @import("../pkg/bindgen/generated/compatibility.zon");
+
+const Version = @import("../pkg/common/version.zig").Version;

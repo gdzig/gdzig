@@ -48,6 +48,7 @@ fn exit(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(
 const std = @import("std");
 
 const extension = @import("extension");
-const options = @import("options");
 
 const gdzig = @import("gdzig");
+
+const options = @import("options");

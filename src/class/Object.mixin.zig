@@ -11,10 +11,10 @@ pub fn destroy(self: *Self) void {
 
 /// Returns whether this object inherits the named engine class.
 /// Singleton classes accept only the class name, matching their other methods.
-pub const isClass = if (object_is_class_singleton.owner(Self) != null) isClassForSingleton else isClassRaw;
+pub const isClass = if (singleton.owner(Self) != null) isClassForSingleton else isClassRaw;
 
 fn isClassForSingleton(p_class: StringName) bool {
-    const Singleton = comptime object_is_class_singleton.owner(Self).?;
+    const Singleton = comptime singleton.owner(Self).?;
     if (comptime Singleton == Self) {
         // Use the API's exact name, not a lossy conversion from the Zig type
         // name (for example, Os must resolve the engine singleton named OS).
@@ -29,7 +29,7 @@ fn isClassForSingleton(p_class: StringName) bool {
 }
 
 // The generated Raw delegate owns version selection for both calling shapes.
-const isClass_4_6 = if (object_is_class_singleton.owner(Self) != null)
+const isClass_4_6 = if (singleton.owner(Self) != null)
     isClassLegacySingleton
 else
     isClassLegacyInstance;
@@ -202,7 +202,7 @@ const class = gdzig.class;
 const DestroyInstanceBinding = gdzig.extension.DestroyInstanceBinding;
 const meta = @import("../meta.zig");
 
-const object_is_class_singleton = @import("../compat/singleton.zig");
+const singleton = @import("../compat/singleton.zig");
 const instance_binding = @import("instance_binding.zig");
 
 // @mixin stop
