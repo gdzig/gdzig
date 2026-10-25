@@ -31,7 +31,7 @@ jobs:
 
       - name: Install gdzig-zlint
         run: |
-          version=$(sed -n 's/^"github:gdzig\/gdzig-zlint" = "\([^"]*\)"$/\1/p' mise.toml)
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("mise.toml", "rb"))["tools"]["github:gdzig/gdzig-zlint"])')"
           mise install "github:gdzig/gdzig-zlint@${version}"
 
       - name: Lint
