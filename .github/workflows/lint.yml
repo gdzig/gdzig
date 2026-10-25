@@ -29,10 +29,5 @@ jobs:
           cache: true
           cache_save_post: true
 
-      - name: Install gdzig-zlint
-        run: |
-          version="$(python3 -c 'import tomllib; print(tomllib.load(open("mise.toml", "rb"))["tools"]["github:gdzig/gdzig-zlint"])')"
-          mise install "github:gdzig/gdzig-zlint@${version}"
-
       - name: Lint
         run: mise exec -- gdzig-zlint .
