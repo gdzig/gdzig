@@ -348,10 +348,10 @@ const std = @import("std");
 const Io = std.Io;
 const Dir = Io.Dir;
 const File = Io.File;
+const build_options = @import("build_options");
 
 const Version = @import("common").Version;
 const manifest = @import("compat").manifest;
 const compatibility = @import("compatibility.zig");
 
-const build_options = @import("build_options");
 const Args = @import("common").Args;

@@ -2244,6 +2244,22 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
     }
 }
 
+fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
+    return .fromRecord(.{
+        .kind = .class,
+        .owner = "Probe",
+        .method = "probe",
+        .hash = 111,
+        .compatibility = &.{},
+        .virtual = false,
+        .is_const = false,
+        .is_static = false,
+        .is_vararg = false,
+        .arguments = &.{},
+        .@"return" = null,
+    }, difference);
+}
+
 /// Helpers for tests and fixture tools that exercise production emission.
 pub const testing = struct {
     /// How the fixture uses its generated legacy declaration.
@@ -2652,25 +2668,10 @@ test "selected minimum emits one fixed and Alloc class bind" {
     }
 }
 
-fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
-    return .fromRecord(.{
-        .kind = .class,
-        .owner = "Probe",
-        .method = "probe",
-        .hash = 111,
-        .compatibility = &.{},
-        .virtual = false,
-        .is_const = false,
-        .is_static = false,
-        .is_vararg = false,
-        .arguments = &.{},
-        .@"return" = null,
-    }, difference);
-}
-
 const std = @import("std");
 
 const casez = @import("casez");
+
 const common = @import("common");
 
 const CodeWriter = @import("CodeWriter.zig");

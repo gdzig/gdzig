@@ -1,14 +1,17 @@
 [tools]
 godot = "4.7.2-stable"
 pre-commit = "latest"
-zlint = "latest"
 usage = "latest"
 zig = "0.17.0"
 zls = "0.16.0"
+"github:gdzig/gdzig-zlint" = "0.1.0"
 
 [tool_alias]
 godot = "asdf:https://github.com/mkungla/asdf-godot"
-zlint = "ubi:DonIsaac/zlint"
+
+[tasks.lint]
+description = "Run gdzig-zlint with the repository rules"
+run = "gdzig-zlint ."
 
 [tasks."docs:build"]
 run = "zig build docs"

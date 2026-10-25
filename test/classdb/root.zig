@@ -23,6 +23,80 @@ fn ensureRegistered() void {
     }
 }
 
+const TestState = enum(i32) {
+    uninitialized = 0,
+    data_loaded = 2,
+    stepping = 3,
+    err = -1,
+};
+
+const TestNode = struct {
+    base: *Node,
+    counter: i64 = 0,
+    my_property: i64 = 42,
+    indexed_values: [3]i64 = .{ 100, 200, 300 },
+
+    pub fn create() !*TestNode {
+        const self: *TestNode = allocator.create(TestNode) catch @panic("out of memory");
+        self.* = .{ .base = Node.init() };
+        self.base.setInstance(TestNode, self);
+        return self;
+    }
+
+    pub fn destroy(self: *TestNode) void {
+        allocator.destroy(self);
+    }
+
+    pub fn increment(self: *TestNode) void {
+        self.counter += 1;
+    }
+
+    pub fn getCounter(self: *TestNode) i64 {
+        return self.counter;
+    }
+
+    pub fn addValue(self: *TestNode, value: i64) i64 {
+        self.counter += value;
+        return self.counter;
+    }
+
+    pub fn getMyProperty(self: *TestNode) i64 {
+        return self.my_property;
+    }
+
+    pub fn setMyProperty(self: *TestNode, value: i64) void {
+        self.my_property = value;
+    }
+
+    pub fn getIndexedValue(self: *TestNode, index: i64) i64 {
+        if (index >= 0 and index < 3) {
+            return self.indexed_values[@intCast(index)];
+        }
+        return 0;
+    }
+
+    pub fn setIndexedValue(self: *TestNode, index: i64, value: i64) void {
+        if (index >= 0 and index < 3) {
+            self.indexed_values[@intCast(index)] = value;
+        }
+    }
+
+    pub fn getState(self: *TestNode) TestState {
+        _ = self;
+        return .data_loaded;
+    }
+
+    pub fn getStateNegative(self: *TestNode) TestState {
+        _ = self;
+        return .err;
+    }
+
+    pub fn echoState(self: *TestNode, state: TestState) TestState {
+        _ = self;
+        return state;
+    }
+};
+
 test "create custom class and call methods" {
     ensureRegistered();
 
@@ -120,80 +194,6 @@ test "narrow enum argument through varcall roundtrips" {
     result = Object.call(.upcast(node), .fromComptimeLatin1("echo_state"), .{@as(TestState, .err)});
     try testing.expectEqual(@as(i64, -1), result.as(i64).?);
 }
-
-const TestState = enum(i32) {
-    uninitialized = 0,
-    data_loaded = 2,
-    stepping = 3,
-    err = -1,
-};
-
-const TestNode = struct {
-    base: *Node,
-    counter: i64 = 0,
-    my_property: i64 = 42,
-    indexed_values: [3]i64 = .{ 100, 200, 300 },
-
-    pub fn create() !*TestNode {
-        const self: *TestNode = allocator.create(TestNode) catch @panic("out of memory");
-        self.* = .{ .base = Node.init() };
-        self.base.setInstance(TestNode, self);
-        return self;
-    }
-
-    pub fn destroy(self: *TestNode) void {
-        allocator.destroy(self);
-    }
-
-    pub fn increment(self: *TestNode) void {
-        self.counter += 1;
-    }
-
-    pub fn getCounter(self: *TestNode) i64 {
-        return self.counter;
-    }
-
-    pub fn addValue(self: *TestNode, value: i64) i64 {
-        self.counter += value;
-        return self.counter;
-    }
-
-    pub fn getMyProperty(self: *TestNode) i64 {
-        return self.my_property;
-    }
-
-    pub fn setMyProperty(self: *TestNode, value: i64) void {
-        self.my_property = value;
-    }
-
-    pub fn getIndexedValue(self: *TestNode, index: i64) i64 {
-        if (index >= 0 and index < 3) {
-            return self.indexed_values[@intCast(index)];
-        }
-        return 0;
-    }
-
-    pub fn setIndexedValue(self: *TestNode, index: i64, value: i64) void {
-        if (index >= 0 and index < 3) {
-            self.indexed_values[@intCast(index)] = value;
-        }
-    }
-
-    pub fn getState(self: *TestNode) TestState {
-        _ = self;
-        return .data_loaded;
-    }
-
-    pub fn getStateNegative(self: *TestNode) TestState {
-        _ = self;
-        return .err;
-    }
-
-    pub fn echoState(self: *TestNode, state: TestState) TestState {
-        _ = self;
-        return state;
-    }
-};
 
 const std = @import("std");
 const testing = std.testing;

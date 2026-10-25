@@ -1,7 +1,3 @@
-const std = @import("std");
-const testing = std.testing;
-const gdzig = @import("gdzig");
-
 test "1 + 2 = 3" {
     try testing.expectEqual(3, 1 + 2);
 }
@@ -17,3 +13,8 @@ test "3 + 3 = 6" {
 test "godot version is 4.x" {
     try testing.expectEqual(4, gdzig.api_version.major);
 }
+
+const std = @import("std");
+const testing = std.testing;
+
+const gdzig = @import("gdzig");

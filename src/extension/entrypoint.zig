@@ -1,10 +1,5 @@
 //! Root module for GDExtension libraries built with `gdzig.addExtension()`.
 
-const std = @import("std");
-const gdzig = @import("gdzig");
-const extension = @import("extension");
-const options = @import("options");
-
 pub const std_options: std.Options = if (@hasDecl(extension, "std_options")) extension.std_options else .{};
 
 var registry: gdzig.extension.Registry = .init(gdzig.engine_allocator);
@@ -49,3 +44,10 @@ fn exit(_: ?*anyopaque, level: gdzig.c.GDExtensionInitializationLevel) callconv(
         registry.deinit();
     }
 }
+
+const std = @import("std");
+
+const extension = @import("extension");
+const options = @import("options");
+
+const gdzig = @import("gdzig");

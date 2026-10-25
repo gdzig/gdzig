@@ -12,6 +12,40 @@ fn ensureRegistered() void {
     }
 }
 
+fn expectSingleRefAndArrayRoundTrip(resource: *Resource) !void {
+    try testing.expectEqual(@as(i32, 1), resource.getReferenceCount());
+
+    var array: Array = .init();
+    defer array.deinit();
+
+    const boxed = Variant.init(*Resource, resource);
+    array.append(boxed);
+    boxed.deinit();
+    try testing.expectEqual(@as(i32, 2), resource.getReferenceCount());
+
+    array.clear();
+    try testing.expectEqual(@as(i32, 1), resource.getReferenceCount());
+}
+
+const MyMetadata = struct {
+    base: *Resource,
+
+    pub fn create() !*MyMetadata {
+        const self: *MyMetadata = allocator.create(MyMetadata) catch @panic("out of memory");
+        self.* = .{ .base = Resource.init() };
+        self.base.setInstance(MyMetadata, self);
+        return self;
+    }
+
+    pub fn destroy(self: *MyMetadata) void {
+        allocator.destroy(self);
+    }
+};
+
+fn destroyRefCountedIfUnreferenced(object: anytype) void {
+    if (object.unreference()) object.destroy();
+}
+
 test "engine-instantiated Resource subclass starts with one reference and releases array refs" {
     if (!gdzig.api_version.gte(.@"4.7")) return error.SkipZigTest;
 
@@ -56,40 +90,6 @@ test "loaded Resource subclass starts with one reference and releases array refs
     defer destroyRefCountedIfUnreferenced(loaded);
 
     try expectSingleRefAndArrayRoundTrip(loaded);
-}
-
-fn expectSingleRefAndArrayRoundTrip(resource: *Resource) !void {
-    try testing.expectEqual(@as(i32, 1), resource.getReferenceCount());
-
-    var array: Array = .init();
-    defer array.deinit();
-
-    const boxed = Variant.init(*Resource, resource);
-    array.append(boxed);
-    boxed.deinit();
-    try testing.expectEqual(@as(i32, 2), resource.getReferenceCount());
-
-    array.clear();
-    try testing.expectEqual(@as(i32, 1), resource.getReferenceCount());
-}
-
-const MyMetadata = struct {
-    base: *Resource,
-
-    pub fn create() !*MyMetadata {
-        const self: *MyMetadata = allocator.create(MyMetadata) catch @panic("out of memory");
-        self.* = .{ .base = Resource.init() };
-        self.base.setInstance(MyMetadata, self);
-        return self;
-    }
-
-    pub fn destroy(self: *MyMetadata) void {
-        allocator.destroy(self);
-    }
-};
-
-fn destroyRefCountedIfUnreferenced(object: anytype) void {
-    if (object.unreference()) object.destroy();
 }
 
 const std = @import("std");

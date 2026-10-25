@@ -28,8 +28,6 @@ pub const class = struct {
         }
     };
 };
-pub const testing = runtime.testing;
-
 pub const extension = struct {
     pub const Registry = struct {
         /// Construct an empty registry for the real normal entrypoint.
@@ -66,3 +64,4 @@ const state = @import("state");
 pub const c = runtime.c;
 pub const Version = runtime.Version;
 pub const initializeVersion = runtime.initializeVersion;
+pub const testing = runtime.testing;

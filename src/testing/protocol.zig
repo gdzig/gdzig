@@ -14,8 +14,6 @@
 //! - {"__gdzig__":"test_ipc","type":"result","index":5,"outcome":"pass"}
 //! - {"__gdzig__":"test_ipc","type":"result","index":5,"outcome":"fail","message":"error details"}
 
-const std = @import("std");
-
 const MARKER = "test_ipc";
 
 /// Write a JSON-encoded string (with quotes and escaping)
@@ -286,3 +284,5 @@ test "reject godot output" {
 test "accept ipc messages" {
     try std.testing.expect(isIpcMessage("{\"__gdzig__\":\"test_ipc\",\"cmd\":\"exit\"}"));
 }
+
+const std = @import("std");

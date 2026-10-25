@@ -7,16 +7,6 @@
 //!
 //! The coordinator maintains a mapping from global test indices to (folder, local_index) pairs.
 
-const std = @import("std");
-const builtin = @import("builtin");
-const protocol = @import("protocol.zig");
-const options = @import("runner_options");
-
-const Allocator = std.mem.Allocator;
-const Io = std.Io;
-const File = Io.File;
-const ZigServer = std.zig.Server;
-
 /// Mapping from global test index to folder and local index
 const TestMapping = struct {
     folder_index: u32,
@@ -315,3 +305,14 @@ pub fn main(init: std.process.Init) !void {
 
     try runner.run();
 }
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Allocator = std.mem.Allocator;
+const Io = std.Io;
+const File = Io.File;
+const ZigServer = std.zig.Server;
+
+const options = @import("runner_options");
+
+const protocol = @import("protocol.zig");

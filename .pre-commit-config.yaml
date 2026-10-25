@@ -11,12 +11,9 @@ repos:
 
   - repo: local
     hooks:
-      - id: zlint
-        name: Run zlint
-        entry: zlint
-        args:
-          # - --deny-warnings
-          - --fix
+      - id: gdzig-zlint
+        name: Run gdzig-zlint
+        entry: gdzig-zlint
         language: system
         types: [zig]
 

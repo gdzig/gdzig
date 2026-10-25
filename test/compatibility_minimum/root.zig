@@ -71,5 +71,6 @@ test "builtin historical sole compatibility entries keep primary and cached beha
 
 const std = @import("std");
 
-const gdzig = @import("gdzig");
 const fixture_options = @import("fixture_options");
+
+const gdzig = @import("gdzig");

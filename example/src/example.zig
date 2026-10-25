@@ -22,6 +22,7 @@ test "godot version is 4.x" {
 }
 
 const std = @import("std");
+
 const godot = @import("godot");
 const Registry = godot.extension.Registry;
 

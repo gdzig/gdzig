@@ -10,15 +10,15 @@ pub const InitializationLevel = enum(c_int) {
     editor = 3,
 };
 
-pub const Registry = @import("extension/Registry.zig");
-
 /// Low-level registration pieces exposed for binding integration tests.
 pub const testing = struct {
     pub const MethodConfig = @import("extension/method.zig").MethodConfig;
 };
 
+const c = @import("gdextension");
+
 const class = @import("extension/class.zig");
 pub const DestroyInstanceBinding = class.DestroyInstanceBinding;
 pub const PropertyListInstanceBinding = class.PropertyListInstanceBinding;
 
-const c = @import("gdextension");
+pub const Registry = @import("extension/Registry.zig");

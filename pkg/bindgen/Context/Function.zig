@@ -564,6 +564,7 @@ const Node = Ast.Node;
 const NodeIndex = Node.Index;
 
 const casez = @import("casez");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;

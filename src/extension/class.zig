@@ -521,6 +521,7 @@ const MemoryPool = std.heap.MemoryPool;
 const assert = std.debug.assert;
 
 const c = @import("gdextension");
+
 const common = @import("common");
 const gdzig = @import("gdzig");
 const class = gdzig.class;

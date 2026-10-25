@@ -45,6 +45,65 @@ fn ensureRegistered() void {
     }
 }
 
+const PropertyNode = struct {
+    base: *Object,
+
+    // Field-based property
+    field_value: i64 = 42,
+
+    // Read-only property
+    read_only: i64 = 999,
+
+    // Custom getter/setter backing storage
+    custom_backing: i64 = 0,
+
+    // Grouped properties
+    health: i64 = 100,
+    mana: i64 = 50,
+
+    // Subgrouped properties
+    armor: i64 = 10,
+    damage: i64 = 25,
+
+    // Indexed property backing storage
+    inventory: [3]i64 = .{ 100, 200, 300 },
+
+    pub fn create() !*PropertyNode {
+        const self = try allocator.create(PropertyNode);
+        self.* = .{ .base = Object.init() };
+        self.base.setInstance(PropertyNode, self);
+        return self;
+    }
+
+    pub fn destroy(self: *PropertyNode) void {
+        self.base.destroy();
+        allocator.destroy(self);
+    }
+
+    // Custom property getter/setter
+    pub fn getCustom(self: *const PropertyNode) i64 {
+        return self.custom_backing;
+    }
+
+    pub fn setCustom(self: *PropertyNode, value: i64) void {
+        self.custom_backing = value;
+    }
+
+    // Indexed property getter/setter
+    pub fn getInventorySlot(self: *const PropertyNode, index: i64) i64 {
+        if (index >= 0 and index < 3) {
+            return self.inventory[@intCast(index)];
+        }
+        return 0;
+    }
+
+    pub fn setInventorySlot(self: *PropertyNode, index: i64, value: i64) void {
+        if (index >= 0 and index < 3) {
+            self.inventory[@intCast(index)] = value;
+        }
+    }
+};
+
 test "field-based property" {
     ensureRegistered();
 
@@ -152,65 +211,6 @@ test "indexed properties" {
     result = obj.get(.fromComptimeLatin1("slot_2"));
     try testing.expectEqual(@as(i64, 300), result.as(i64).?);
 }
-
-const PropertyNode = struct {
-    base: *Object,
-
-    // Field-based property
-    field_value: i64 = 42,
-
-    // Read-only property
-    read_only: i64 = 999,
-
-    // Custom getter/setter backing storage
-    custom_backing: i64 = 0,
-
-    // Grouped properties
-    health: i64 = 100,
-    mana: i64 = 50,
-
-    // Subgrouped properties
-    armor: i64 = 10,
-    damage: i64 = 25,
-
-    // Indexed property backing storage
-    inventory: [3]i64 = .{ 100, 200, 300 },
-
-    pub fn create() !*PropertyNode {
-        const self = try allocator.create(PropertyNode);
-        self.* = .{ .base = Object.init() };
-        self.base.setInstance(PropertyNode, self);
-        return self;
-    }
-
-    pub fn destroy(self: *PropertyNode) void {
-        self.base.destroy();
-        allocator.destroy(self);
-    }
-
-    // Custom property getter/setter
-    pub fn getCustom(self: *const PropertyNode) i64 {
-        return self.custom_backing;
-    }
-
-    pub fn setCustom(self: *PropertyNode, value: i64) void {
-        self.custom_backing = value;
-    }
-
-    // Indexed property getter/setter
-    pub fn getInventorySlot(self: *const PropertyNode, index: i64) i64 {
-        if (index >= 0 and index < 3) {
-            return self.inventory[@intCast(index)];
-        }
-        return 0;
-    }
-
-    pub fn setInventorySlot(self: *PropertyNode, index: i64, value: i64) void {
-        if (index >= 0 and index < 3) {
-            self.inventory[@intCast(index)] = value;
-        }
-    }
-};
 
 const std = @import("std");
 const testing = std.testing;

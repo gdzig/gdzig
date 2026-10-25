@@ -16,35 +16,6 @@ fn ensureRegistered() void {
     }
 }
 
-test "signal connect and emit" {
-    ensureRegistered();
-
-    const emitter = try SignalEmitter.create();
-    defer emitter.destroy();
-
-    const receiver = try SignalReceiver.create();
-    defer receiver.destroy();
-
-    const callable: Callable = .fromClosure(receiver, &SignalReceiver.onSignal);
-
-    try emitter.base.connect(TestSignal, callable);
-
-    try testing.expectEqual(@as(i64, 0), receiver.count);
-    try testing.expectEqual(@as(i64, 0), receiver.value);
-
-    try emitter.base.emit(TestSignal, .{ .value = 42 });
-
-    try testing.expectEqual(@as(i64, 1), receiver.count);
-    try testing.expectEqual(@as(i64, 42), receiver.value);
-
-    emitter.base.disconnect(TestSignal, callable);
-
-    try emitter.base.emit(TestSignal, .{ .value = 99 });
-
-    try testing.expectEqual(@as(i64, 1), receiver.count);
-    try testing.expectEqual(@as(i64, 42), receiver.value);
-}
-
 const TestSignal = struct {
     value: i64,
 };
@@ -87,6 +58,35 @@ const SignalReceiver = struct {
         self.count += 1;
     }
 };
+
+test "signal connect and emit" {
+    ensureRegistered();
+
+    const emitter = try SignalEmitter.create();
+    defer emitter.destroy();
+
+    const receiver = try SignalReceiver.create();
+    defer receiver.destroy();
+
+    const callable: Callable = .fromClosure(receiver, &SignalReceiver.onSignal);
+
+    try emitter.base.connect(TestSignal, callable);
+
+    try testing.expectEqual(@as(i64, 0), receiver.count);
+    try testing.expectEqual(@as(i64, 0), receiver.value);
+
+    try emitter.base.emit(TestSignal, .{ .value = 42 });
+
+    try testing.expectEqual(@as(i64, 1), receiver.count);
+    try testing.expectEqual(@as(i64, 42), receiver.value);
+
+    emitter.base.disconnect(TestSignal, callable);
+
+    try emitter.base.emit(TestSignal, .{ .value = 99 });
+
+    try testing.expectEqual(@as(i64, 1), receiver.count);
+    try testing.expectEqual(@as(i64, 42), receiver.value);
+}
 
 const std = @import("std");
 const testing = std.testing;

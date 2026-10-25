@@ -1,8 +1,5 @@
 //! Path utilities for build scripts.
 
-const std = @import("std");
-const Build = std.Build;
-
 /// Resolves a `LazyPath` to a filesystem path string during the configure
 /// phase. Only source paths and dependency paths are supported — generated
 /// paths have no configure-time string.
@@ -13,3 +10,6 @@ pub fn lazyPathString(b: *Build, lp: Build.LazyPath) []const u8 {
         else => @panic("unsupported lazy path for configure-time resolution"),
     };
 }
+
+const std = @import("std");
+const Build = std.Build;

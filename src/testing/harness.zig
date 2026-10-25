@@ -5,17 +5,6 @@
 //! 2. Exports the GDExtension entrypoint (so Godot can load it)
 //! 3. Reads commands from stdin, writes JSON responses to stdout
 
-const std = @import("std");
-const builtin = @import("builtin");
-const gdzig = @import("gdzig");
-const options = @import("options");
-const protocol = @import("protocol.zig");
-
-const Io = std.Io;
-const File = Io.File;
-const Writer = Io.Writer;
-const Os = gdzig.class.Os;
-
 // Export the GDExtension entrypoint
 comptime {
     @export(&entrypoint, .{
@@ -188,3 +177,15 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
         return .{ .outcome = .fail, .message = null };
     }
 }
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Io = std.Io;
+const File = Io.File;
+const Writer = Io.Writer;
+
+const options = @import("options");
+
+const gdzig = @import("gdzig");
+const Os = gdzig.class.Os;
+const protocol = @import("protocol.zig");

@@ -23,7 +23,7 @@ pub fn deinit(self: *Registry) void {
 /// If ClassUserdataOf(T) is a pointer, this is the child type.
 /// Otherwise it's the same as ClassUserdataOf(T).
 fn ClassUserdataValue(comptime T: type) type {
-    const Userdata = class_mod.ClassUserdataOf(T);
+    const Userdata = class.ClassUserdataOf(T);
     return switch (@typeInfo(Userdata)) {
         .pointer => |p| p.child,
         else => Userdata,
@@ -38,7 +38,7 @@ pub fn addClass(self: *Registry, comptime T: type, userdata: ClassUserdataValue(
 /// Create a class and return it for further configuration.
 pub fn createClass(self: *Registry, comptime T: type, userdata: ClassUserdataValue(T), options: Class(T).CreateOptions) *Class(T) {
     const alloc = self.arena.allocator();
-    const Userdata = class_mod.ClassUserdataOf(T);
+    const Userdata = class.ClassUserdataOf(T);
 
     // Store userdata in arena and get stable pointer if needed
     const stored_userdata: Userdata = switch (@typeInfo(Userdata)) {
@@ -137,7 +137,7 @@ pub fn Class(comptime T: type) type {
 
         any: AnyClass,
         registry: *Registry,
-        userdata: class_mod.ClassUserdataOf(T),
+        userdata: class.ClassUserdataOf(T),
 
         methods: std.ArrayListUnmanaged(*Method(T)),
         signals: std.ArrayListUnmanaged(*AnySignal),
@@ -158,7 +158,7 @@ pub fn Class(comptime T: type) type {
         /// Custom icon path for the editor. Requires Godot 4.4+.
         icon_path: ?*const String,
 
-        pub fn init(registry: *Registry, userdata: class_mod.ClassUserdataOf(T), options: CreateOptions) Self {
+        pub fn init(registry: *Registry, userdata: class.ClassUserdataOf(T), options: CreateOptions) Self {
             return .{
                 .any = .{
                     .commit = @ptrCast(&commit),
@@ -204,10 +204,10 @@ pub fn Class(comptime T: type) type {
         /// `.copy()` and deinitialize that copy when done.
         pub fn createMethod(self: *Self, comptime name: [:0]const u8, comptime options: Method(T).CreateOptions) *Method(T) {
             const alloc = self.allocator();
-            const method = alloc.create(Method(T)) catch @panic("OOM");
-            method.* = Method(T).fromName(name, options);
-            self.methods.append(alloc, method) catch @panic("OOM");
-            return method;
+            const method_info = alloc.create(Method(T)) catch @panic("OOM");
+            method_info.* = Method(T).fromName(name, options);
+            self.methods.append(alloc, method_info) catch @panic("OOM");
+            return method_info;
         }
 
         /// Add a property by name.
@@ -366,8 +366,8 @@ pub fn Class(comptime T: type) type {
             }
 
             // 3. Register all methods (including auto-generated ones from properties)
-            for (self.methods.items) |method| {
-                method.register();
+            for (self.methods.items) |method_info| {
+                method_info.register();
             }
 
             // 4. Register all signals
@@ -403,8 +403,8 @@ pub fn Class(comptime T: type) type {
         };
 
         fn registerClass(self: *Self) void {
-            const Userdata = class_mod.ClassUserdataOf(T);
-            class_mod.registerClass(T, if (Userdata != void) .{
+            const Userdata = class.ClassUserdataOf(T);
+            class.registerClass(T, if (Userdata != void) .{
                 .userdata = self.userdata,
                 .is_virtual = self.is_virtual,
                 .is_abstract = self.is_abstract,
@@ -458,14 +458,14 @@ pub fn Method(comptime T: type) type {
         /// name: the method name Godot sees (e.g., "get_health")
         /// decl_name: the Zig decl name (e.g., "getHealth")
         pub fn fromDecl(comptime name: [:0]const u8, comptime decl_name: [:0]const u8, comptime options: CreateOptions) Self {
-            const config = method_mod.MethodConfig(T).fromName(name, decl_name, options);
+            const config = method.MethodConfig(T).fromName(name, decl_name, options);
             return .{
                 .name = name,
                 .return_info = if (config.return_value_info) |info| info.* else null,
                 .arg_info = config.argument_info,
                 .register_fn = &struct {
                     fn doRegister() void {
-                        method_mod.registerMethod(T, config);
+                        method.registerMethod(T, config);
                     }
                 }.doRegister,
             };
@@ -473,14 +473,14 @@ pub fn Method(comptime T: type) type {
 
         /// Create a getter method for a field.
         pub fn fieldGetter(comptime name: [:0]const u8, comptime field_name: [:0]const u8) Self {
-            const config = method_mod.MethodConfig(T).getter(name, field_name);
+            const config = method.MethodConfig(T).getter(name, field_name);
             return .{
                 .name = name,
                 .return_info = if (config.return_value_info) |info| info.* else null,
                 .arg_info = config.argument_info,
                 .register_fn = &struct {
                     fn doRegister() void {
-                        method_mod.registerMethod(T, config);
+                        method.registerMethod(T, config);
                     }
                 }.doRegister,
             };
@@ -488,14 +488,14 @@ pub fn Method(comptime T: type) type {
 
         /// Create a setter method for a field.
         pub fn fieldSetter(comptime name: [:0]const u8, comptime field_name: [:0]const u8) Self {
-            const config = method_mod.MethodConfig(T).setter(name, field_name);
+            const config = method.MethodConfig(T).setter(name, field_name);
             return .{
                 .name = name,
                 .return_info = if (config.return_value_info) |info| info.* else null,
                 .arg_info = config.argument_info,
                 .register_fn = &struct {
                     fn doRegister() void {
-                        method_mod.registerMethod(T, config);
+                        method.registerMethod(T, config);
                     }
                 }.doRegister,
             };
@@ -552,13 +552,13 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
         resolved_getter: ?*const Method(T) = null,
         resolved_setter: ?*const Method(T) = null,
 
-        pub fn init(class: *Class(T), options: CreateOptions) Self {
+        pub fn init(owner_class: *Class(T), options: CreateOptions) Self {
             return .{
                 .any = .{
                     .resolve = @ptrCast(&doResolve),
                     .register = @ptrCast(&doRegister),
                 },
-                .class = class,
+                .class = owner_class,
                 .options = options,
             };
         }
@@ -761,9 +761,9 @@ pub fn Group(comptime T: type) type {
         name: [:0]const u8,
         entries: std.ArrayListUnmanaged(Entry),
 
-        pub fn init(class: *Class(T), name: [:0]const u8) Self {
+        pub fn init(owner_class: *Class(T), name: [:0]const u8) Self {
             return .{
-                .class = class,
+                .class = owner_class,
                 .name = name,
                 .entries = .empty,
             };
@@ -835,9 +835,9 @@ pub fn Subgroup(comptime T: type) type {
         name: [:0]const u8,
         properties: std.ArrayListUnmanaged(*AnyProperty),
 
-        pub fn init(class: *Class(T), subgroup_name: [:0]const u8) Self {
+        pub fn init(owner_class: *Class(T), subgroup_name: [:0]const u8) Self {
             return .{
-                .class = class,
+                .class = owner_class,
                 .name = subgroup_name,
                 .properties = .empty,
             };
@@ -932,11 +932,13 @@ fn Callbacks(comptime T: type) type {
 }
 
 const std = @import("std");
-const meta = @import("../meta.zig");
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
 const casez = @import("casez");
+
+const meta = @import("../meta.zig");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
@@ -950,6 +952,6 @@ const String = gdzig.builtin.String;
 const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
 
-const class_mod = @import("class.zig");
-const method_mod = @import("method.zig");
+const class = @import("class.zig");
+const method = @import("method.zig");
 const InitializationLevel = @import("../extension.zig").InitializationLevel;

@@ -42,6 +42,7 @@ fn placeholderModule(b: *Build, options: BuildOptions) *Build.Module {
 const std = @import("std");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
+
 const Translator = @import("translate_c").Translator;
 
 const emsdk = @import("emsdk.zig");
