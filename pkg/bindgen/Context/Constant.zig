@@ -130,15 +130,19 @@ const ArrayList = std.ArrayListUnmanaged;
 const Ast = std.zig.Ast;
 const NodeIndex = Ast.Node.Index;
 const Writer = std.Io.Writer;
+
 const build_options = @import("build_options");
 
 const casez = @import("casez");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
+const GodotApi = @import("common").GodotApi;
 
 const Context = @import("../Context.zig");
 const Type = Context.Type;
 const Builtin = Context.Builtin;
-const GodotApi = @import("common").GodotApi;
+
 const docs = @import("docs.zig");
+
 const Value = @import("value.zig").Value;

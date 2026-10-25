@@ -14,6 +14,33 @@ fn ensureRegistered() void {
     }
 }
 
+const RefReturnNode = struct {
+    base: *Node,
+    resource: *Resource,
+
+    pub fn create() !*RefReturnNode {
+        const self: *RefReturnNode = allocator.create(RefReturnNode) catch @panic("out of memory");
+        self.* = .{
+            .base = Node.init(),
+            .resource = Resource.init(),
+        };
+        self.base.setInstance(RefReturnNode, self);
+        return self;
+    }
+
+    pub fn destroy(self: *RefReturnNode) void {
+        if (!self.resource.unreference()) @panic("resource still has external references");
+        self.resource.destroy();
+        allocator.destroy(self);
+    }
+
+    pub fn getBorrowedResource(self: *RefReturnNode) *Resource {
+        return self.resource;
+    }
+
+    pub fn acceptArray(_: *RefReturnNode, _: Array) void {}
+};
+
 test "Variant return from bound method holds a reference to borrowed RefCounted" {
     ensureRegistered();
 
@@ -99,33 +126,6 @@ test "variant reference counting" {
     try testing.expect(object.unreference());
     object.destroy();
 }
-
-const RefReturnNode = struct {
-    base: *Node,
-    resource: *Resource,
-
-    pub fn create() !*RefReturnNode {
-        const self: *RefReturnNode = allocator.create(RefReturnNode) catch @panic("out of memory");
-        self.* = .{
-            .base = Node.init(),
-            .resource = Resource.init(),
-        };
-        self.base.setInstance(RefReturnNode, self);
-        return self;
-    }
-
-    pub fn destroy(self: *RefReturnNode) void {
-        if (!self.resource.unreference()) @panic("resource still has external references");
-        self.resource.destroy();
-        allocator.destroy(self);
-    }
-
-    pub fn getBorrowedResource(self: *RefReturnNode) *Resource {
-        return self.resource;
-    }
-
-    pub fn acceptArray(_: *RefReturnNode, _: Array) void {}
-};
 
 test "varcall adopts a builtin return value" {
     const Returner = struct {

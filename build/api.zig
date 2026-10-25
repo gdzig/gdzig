@@ -316,11 +316,11 @@ pub const Resolver = struct {
 fn getSelfDependency(b: *Build) *Build.Dependency {
     const build_runner = @import("root");
     const deps = build_runner.dependencies;
-    const build_zig = @import("../build.zig");
+    const build = @import("../build.zig");
 
     inline for (@typeInfo(deps.packages).@"struct".decl_names) |pkg_hash| {
         const pkg = @field(deps.packages, pkg_hash);
-        if (@hasDecl(pkg, "build_zig") and pkg.build_zig == build_zig) {
+        if (@hasDecl(pkg, "build_zig") and pkg.build_zig == build) {
             for (b.available_deps) |available| {
                 if (std.mem.eql(u8, available[1], pkg_hash)) {
                     var it = b.graph.dependency_cache.iterator();
@@ -385,4 +385,5 @@ const Build = std.Build;
 const Step = std.Build.Step;
 
 const emsdk = @import("emsdk.zig");
+
 const paths = @import("paths.zig");

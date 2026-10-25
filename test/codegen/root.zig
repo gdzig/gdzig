@@ -1,3 +1,13 @@
+fn playStreamWithDefaults(playback: *AudioStreamPlaybackPolyphonic, stream: *AudioStream) i64 {
+    return playback.playStream(stream, .{});
+}
+
+noinline fn poisonStack() void {
+    var buf: [8192]u8 = undefined;
+    for (&buf) |*b| b.* = 0xAA;
+    std.mem.doNotOptimizeAway(&buf);
+}
+
 test "call builtin method with void return type" {
     var arr: Array = .init();
     arr.set(0, .init(bool, true));
@@ -31,7 +41,7 @@ test "enums with duplicate values alias the first declared member" {
     // enumerators (e.g. SHADER_STAGE_VERTEX_BIT == SHADER_STAGE_FRAGMENT == 1); only
     // the first-declared name for each value may become an enum tag, later members
     // with the same value must be alias constants equal to it.
-    try std.testing.expectEqual(@as(i32, 4), @intFromEnum(RenderingDevice.ShaderStage.shader_stage_compute));
+    try std.testing.expectEqual(@as(i32, 4), @backingInt(RenderingDevice.ShaderStage.shader_stage_compute));
     try std.testing.expectEqual(RenderingDevice.ShaderStage.shader_stage_fragment, RenderingDevice.ShaderStage.shader_stage_vertex_bit);
     try std.testing.expectEqual(RenderingDevice.ShaderStage.shader_stage_tesselation_control, RenderingDevice.ShaderStage.shader_stage_fragment_bit);
 
@@ -68,10 +78,6 @@ test "Bug A: omitting nullable String optional arg materializes empty default" {
     try testing.expect(parts.size() >= 1);
 }
 
-fn playStreamWithDefaults(playback: *AudioStreamPlaybackPolyphonic, stream: *AudioStream) i64 {
-    return playback.playStream(stream, .{});
-}
-
 test "non-empty StringName optional default compiles" {
     _ = &playStreamWithDefaults;
 }
@@ -99,12 +105,6 @@ test "empty StringName optional default remains valid" {
 
     var buf: [32]u8 = undefined;
     try testing.expectEqualStrings("untranslated", translated.toUtf8Buf(&buf));
-}
-
-noinline fn poisonStack() void {
-    var buf: [8192]u8 = undefined;
-    for (&buf) |*b| b.* = 0xAA;
-    std.mem.doNotOptimizeAway(&buf);
 }
 
 // Bug B: sub-8-byte scalar/enum/flag args and returns must be marshalled through int64

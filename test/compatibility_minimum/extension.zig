@@ -17,5 +17,6 @@ pub export fn gdzig_compatibility_minimum_identity() callconv(.c) [*:0]const u8 
 
 const std = @import("std");
 
-const gdzig = @import("gdzig");
 const fixture_options = @import("fixture_options");
+
+const gdzig = @import("gdzig");

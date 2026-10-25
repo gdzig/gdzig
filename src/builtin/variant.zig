@@ -38,7 +38,7 @@ pub const Variant = extern struct {
                 .tag = .object,
                 .data = .{
                     .object = .{
-                        .id = @enumFromInt(obj.getInstanceId()),
+                        .id = @fromBackingInt(@intCast(obj.getInstanceId())),
                         .object = obj,
                     },
                 },
@@ -118,7 +118,7 @@ pub const Variant = extern struct {
                     const object = Object.upcast(object_value);
                     break :blk .{
                         .object = .{
-                            .id = @enumFromInt(object.getInstanceId()),
+                            .id = @fromBackingInt(@intCast(object.getInstanceId())),
                             .object = object,
                         },
                     };
@@ -218,7 +218,7 @@ pub const Variant = extern struct {
     pub fn callStatic(variant_tag: Tag, method: StringName, args: []const *const Variant) CallError!Variant {
         var ret: Variant = undefined;
         var err: CallResult = undefined;
-        raw.variantCallStatic(@intFromEnum(variant_tag), @ptrCast(&method), @ptrCast(args.ptr), @intCast(args.len), @ptrCast(&ret), @ptrCast(&err));
+        raw.variantCallStatic(@backingInt(variant_tag), @ptrCast(&method), @ptrCast(args.ptr), @intCast(args.len), @ptrCast(&ret), @ptrCast(&err));
         try err.throw();
         return ret;
     }
@@ -227,7 +227,7 @@ pub const Variant = extern struct {
     inline fn evaluate(a: Variant, op: Operator, b: Variant) PropertyError!Variant {
         var result: Variant = undefined;
         var valid: u8 = 0;
-        raw.variantEvaluate(@intFromEnum(op), @ptrCast(&a), @ptrCast(&b), @ptrCast(&result), &valid);
+        raw.variantEvaluate(@backingInt(op), @ptrCast(&a), @ptrCast(&b), @ptrCast(&result), &valid);
         if (valid == 0) return error.InvalidOperation;
         return result;
     }
@@ -469,7 +469,7 @@ pub const Variant = extern struct {
 
     /// Gets the object instance ID from this Variant (if it contains an Object).
     pub fn getObjectInstanceId(self: Variant) ObjectId {
-        return @enumFromInt(raw.variantGetObjectInstanceId(@ptrCast(&self)));
+        return @fromBackingInt(@intCast(raw.variantGetObjectInstanceId(@ptrCast(&self))));
     }
 
     /// Converts this Variant to a boolean.
@@ -627,30 +627,30 @@ pub const Variant = extern struct {
         /// Gets the name of this Variant type.
         pub fn getName(self: Tag) String {
             var result: String = undefined;
-            raw.variantGetTypeName(@intFromEnum(self), result.ptr());
+            raw.variantGetTypeName(@backingInt(self), result.ptr());
             return result;
         }
 
         /// Checks if this Variant type has the given member.
         pub fn hasMember(self: Tag, member: StringName) bool {
-            return raw.variantHasMember(@intFromEnum(self), @ptrCast(&member)) != 0;
+            return raw.variantHasMember(@backingInt(self), @ptrCast(&member)) != 0;
         }
 
         /// Gets the value of a constant from this Variant type.
         pub fn getConstant(self: Tag, constant_name: StringName) Variant {
             var result: Variant = undefined;
-            raw.variantGetConstantValue(@intFromEnum(self), @ptrCast(&constant_name), @ptrCast(&result));
+            raw.variantGetConstantValue(@backingInt(self), @ptrCast(&constant_name), @ptrCast(&result));
             return result;
         }
 
         /// Checks if Variants can be converted from one type to another.
         pub fn canConvert(from: Tag, to: Tag) bool {
-            return raw.variantCanConvert(@intFromEnum(from), @intFromEnum(to)) != 0;
+            return raw.variantCanConvert(@backingInt(from), @backingInt(to)) != 0;
         }
 
         /// Checks if Variants can be converted from one type to another using stricter rules.
         pub fn canConvertStrict(from: Tag, to: Tag) bool {
-            return raw.variantCanConvertStrict(@intFromEnum(from), @intFromEnum(to)) != 0;
+            return raw.variantCanConvertStrict(@backingInt(from), @backingInt(to)) != 0;
         }
 
         /// Returns true if this variant type requires heap allocation when wrapped in a Variant.
@@ -700,7 +700,10 @@ pub const Variant = extern struct {
         int: i64,
         nil: void,
         node_path: NodePath,
-        object: extern struct { id: ObjectId, object: *Object },
+        object: extern struct {
+            id: ObjectId,
+            object: *Object,
+        },
         packed_byte_array: *PackedArrayRef(PackedByteArray),
         packed_color_array: *PackedArrayRef(PackedColorArray),
         packed_float32_array: *PackedArrayRef(PackedFloat32Array),
@@ -768,7 +771,7 @@ inline fn getVariantFromTypeConstructor(comptime tag: Variant.Tag) Child(c.GDExt
     }.function;
 
     if (function.* == null) {
-        function.* = raw.getVariantFromTypeConstructor(@intFromEnum(tag));
+        function.* = raw.getVariantFromTypeConstructor(@backingInt(tag));
     }
 
     return function.*.?;
@@ -781,11 +784,14 @@ inline fn getVariantToTypeConstructor(comptime tag: Variant.Tag) Child(c.GDExten
     }.function;
 
     if (function.* == null) {
-        function.* = raw.getVariantToTypeConstructor(@intFromEnum(tag));
+        function.* = raw.getVariantToTypeConstructor(@backingInt(tag));
     }
 
     return function.*.?;
 }
+
+const has_packed_vector4_array = @hasDecl(gdzig.builtin, "PackedVector4Array");
+const PackedVector4Array = if (has_packed_vector4_array) gdzig.builtin.PackedVector4Array else void;
 
 test "forType" {
     const pairs = .{
@@ -861,9 +867,9 @@ const Child = std.meta.Child;
 const mem = std.mem;
 const testing = std.testing;
 
+const precision = @import("build_options").precision;
+
 const c = @import("gdextension");
-const slot = @import("../slot.zig");
-const SlotType = slot.Type;
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
@@ -886,8 +892,6 @@ const PackedInt64Array = gdzig.builtin.PackedInt64Array;
 const PackedStringArray = gdzig.builtin.PackedStringArray;
 const PackedVector2Array = gdzig.builtin.PackedVector2Array;
 const PackedVector3Array = gdzig.builtin.PackedVector3Array;
-const has_packed_vector4_array = @hasDecl(gdzig.builtin, "PackedVector4Array");
-const PackedVector4Array = if (has_packed_vector4_array) gdzig.builtin.PackedVector4Array else void;
 const Plane = gdzig.builtin.Plane;
 const Projection = gdzig.builtin.Projection;
 const Quaternion = gdzig.builtin.Quaternion;
@@ -909,4 +913,5 @@ const Object = gdzig.class.Object;
 const RefCounted = gdzig.class.RefCounted;
 const class = gdzig.class;
 
-const precision = @import("build_options").precision;
+const slot = @import("../slot.zig");
+const SlotType = slot.Type;

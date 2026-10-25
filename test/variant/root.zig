@@ -1,3 +1,15 @@
+const NarrowEnum = enum(i32) {
+    zero = 0,
+    two = 2,
+    neg = -1,
+};
+
+const NarrowFlags = packed struct(u32) {
+    a: bool = false,
+    b: bool = false,
+    _pad: u30 = 0,
+};
+
 test "basic construction - nil" {
     const nil = Variant.nil;
     try testing.expectEqual(Variant.Tag.nil, nil.tag);
@@ -225,18 +237,6 @@ test "operators - power" {
     const pow_val = power.as(i64) orelse return error.CastFailed;
     try testing.expectEqual(@as(i64, 8), pow_val);
 }
-
-const NarrowEnum = enum(i32) {
-    zero = 0,
-    two = 2,
-    neg = -1,
-};
-
-const NarrowFlags = packed struct(u32) {
-    a: bool = false,
-    b: bool = false,
-    _pad: u30 = 0,
-};
 
 test "narrow enum init/as roundtrip" {
     const v = Variant.init(NarrowEnum, .two);

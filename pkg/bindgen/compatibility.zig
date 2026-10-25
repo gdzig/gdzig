@@ -1,9 +1,5 @@
 //! Validate measured compatibility manifests before emitting method binds.
 
-/// Test fixture, including the generated-binding fixture executable.
-/// Production queries receive the parsed input manifest explicitly.
-pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.zon");
-
 /// Find the exact measured release, including aliases normalized by the parser.
 pub fn findExactTarget(metadata: compat_manifest.Manifest, minimum: Version) !compat_manifest.Target {
     for (metadata.targets) |target| {
@@ -244,7 +240,12 @@ test "manifest validation rejects malformed schema and dangling tables" {
 
 const std = @import("std");
 
-const compat_manifest = @import("compat").manifest;
 const GodotApi = @import("common").GodotApi;
-const records = @import("compat").records;
 const Version = @import("common").Version;
+
+const compat_manifest = @import("compat").manifest;
+const records = @import("compat").records;
+
+/// Test fixture, including the generated-binding fixture executable.
+/// Production queries receive the parsed input manifest explicitly.
+pub const manifest: compat_manifest.Manifest = @import("generated/compatibility.zon");

@@ -139,7 +139,7 @@ pub const Field = struct {
         const name = try casez.allocConvert(allocator, gdzig_case.file, api.name);
         errdefer allocator.free(name);
 
-        return Field{
+        return .{
             .doc = doc,
             .name = name,
             .default = default & api.value == api.value,
@@ -169,7 +169,7 @@ pub const Const = struct {
         const name = try casez.allocConvert(allocator, gdzig_case.file, api.name);
         errdefer allocator.free(name);
 
-        return Const{
+        return .{
             .doc = doc,
             .name = name,
             .value = api.value,
@@ -187,11 +187,13 @@ pub const Const = struct {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
-const Context = @import("../Context.zig");
 
 const casez = @import("casez");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
-
 const GodotApi = @import("common").GodotApi;
+
+const Context = @import("../Context.zig");
+
 const docs = @import("docs.zig");

@@ -36,8 +36,8 @@ pub fn deinit(self: *Property, allocator: Allocator) void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const GodotApi = @import("common").GodotApi;
+
 const Context = @import("../Context.zig");
 const Function = Context.Function;
 const Type = Context.Type;
-
-const GodotApi = @import("common").GodotApi;

@@ -22,8 +22,6 @@
 //! The width rule itself lives in `src/slot.zig`; `wideSlot` in
 //! `pkg/bindgen/codegen.zig` is the emission side, deciding which generated
 //! call sites need a widened slot in the first place.
-const std = @import("std");
-const slot = @import("../slot.zig");
 
 /// Reads a single ptrcall argument slot as `T`, applying the width conventions described
 /// above. `raw_p_arg` accepts both the optional `GDExtensionConstTypePtr` the engine hands us
@@ -35,7 +33,7 @@ pub fn readArg(comptime T: type, raw_p_arg: ?*const anyopaque) T {
         .bool => @as(*const u8, @ptrCast(p_arg)).* != 0,
         .int => @intCast(readIntSlot(T, p_arg)),
         .float => @floatCast(@as(*const f64, @ptrCast(@alignCast(p_arg))).*),
-        .@"enum" => |info| @enumFromInt(@as(info.tag_type, @intCast(readIntSlot(info.tag_type, p_arg)))),
+        .@"enum" => |info| @fromBackingInt(@intCast(@as(info.tag_type, @intCast(readIntSlot(info.tag_type, p_arg))))),
         .@"struct" => |info| blk: {
             if (info.layout != .@"packed") break :blk @as(*const T, @ptrCast(@alignCast(p_arg))).*;
             const Backing = info.backing_integer.?;
@@ -56,7 +54,7 @@ pub fn writeReturn(comptime T: type, raw_p_ret: ?*anyopaque, value: T) void {
         .bool => @as(*u8, @ptrCast(p_ret)).* = @intFromBool(value),
         .int => writeIntSlot(T, p_ret, value),
         .float => @as(*f64, @ptrCast(@alignCast(p_ret))).* = value,
-        .@"enum" => |info| writeIntSlot(info.tag_type, p_ret, @intFromEnum(value)),
+        .@"enum" => |info| writeIntSlot(info.tag_type, p_ret, @backingInt(value)),
         .@"struct" => |info| {
             if (info.layout != .@"packed") {
                 @as(*T, @ptrCast(@alignCast(p_ret))).* = value;
@@ -87,3 +85,7 @@ fn writeIntSlot(comptime Int: type, p_ret: *anyopaque, value: anytype) void {
         @as(*i64, @ptrCast(@alignCast(p_ret))).* = @intCast(value);
     }
 }
+
+const std = @import("std");
+
+const slot = @import("../slot.zig");

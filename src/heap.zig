@@ -1,5 +1,3 @@
-pub const GeneralPurposeAllocator = @import("heap/GeneralPurposeAllocator.zig");
-
 pub const engine_allocator: Allocator = .{
     .ptr = undefined,
     .vtable = &.{
@@ -77,3 +75,5 @@ const Allocator = std.mem.Allocator;
 
 const gdzig = @import("gdzig");
 const raw = &gdzig.raw;
+
+pub const GeneralPurposeAllocator = @import("heap/GeneralPurposeAllocator.zig");

@@ -45,15 +45,15 @@ pub const DocumentContext = struct {
 
     base_url: []const u8,
     symbol_lookup: StringHashMap(Symbol),
-    codegen_ctx: *const CodegenContext,
+    codegen_ctx: *const Context,
     current_class: ?[]const u8 = null,
     write_ctx: ?*const WriteContext = null,
     // SAFETY: will be initialized in fromWriteContext
     writer: *Writer = undefined,
     verbosity: Config.Verbosity = .verbose,
 
-    pub fn init(codegen_ctx: *const CodegenContext, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
-        return DocumentContext{
+    pub fn init(codegen_ctx: *const Context, current_class: ?[]const u8, symbol_lookup: StringHashMap(Symbol), config: DocumentConfig) DocumentContext {
+        return .{
             .base_url = config.base_url,
             .codegen_ctx = codegen_ctx,
             .current_class = current_class,
@@ -234,7 +234,7 @@ pub const Options = struct {
     verbosity: Config.Verbosity = .verbose,
 };
 
-pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const CodegenContext, options: Options) ![]const u8 {
+pub fn convertDocsToMarkdown(allocator: Allocator, input: []const u8, ctx: *const Context, options: Options) ![]const u8 {
     var doc_ctx = DocumentContext.init(ctx, options.current_class, ctx.symbol_lookup, .{
         .base_url = "https://gdzig.github.io/gdzig/",
         .verbosity = options.verbosity,
@@ -304,22 +304,25 @@ const verbatim_tags = &[_][]const u8{
     "codeblock",
 };
 
-const Node = bbcodez.Node;
-const Document = bbcodez.Document;
-const Allocator = std.mem.Allocator;
-const Symbol = CodegenContext.Symbol;
-const Config = @import("../Config.zig");
-const GodotApi = @import("common").GodotApi;
-const WriteContext = bbcodez.fmt.md.WriteContext;
-const ParserOptions = bbcodez.parser.Options;
-const TokenizerOptions = bbcodez.tokenizer.Options;
-const Token = bbcodez.tokenizer.TokenResult.Token;
-const CodegenContext = @import("../Context.zig");
-const StringHashMap = std.StringHashMapUnmanaged;
+const logger = std.log.scoped(.docs);
 
 const std = @import("std");
 const testing = std.testing;
 const Writer = std.Io.Writer;
-const bbcodez = @import("bbcodez");
+const Allocator = std.mem.Allocator;
+const StringHashMap = std.StringHashMapUnmanaged;
 
-const logger = std.log.scoped(.docs);
+const bbcodez = @import("bbcodez");
+const Node = bbcodez.Node;
+const Document = bbcodez.Document;
+const WriteContext = bbcodez.fmt.md.WriteContext;
+const ParserOptions = bbcodez.parser.Options;
+const TokenizerOptions = bbcodez.tokenizer.Options;
+const Token = bbcodez.tokenizer.TokenResult.Token;
+
+const GodotApi = @import("common").GodotApi;
+
+const Config = @import("../Config.zig");
+
+const Context = @import("../Context.zig");
+const Symbol = Context.Symbol;

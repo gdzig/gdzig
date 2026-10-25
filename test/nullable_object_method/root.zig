@@ -17,6 +17,56 @@ fn ensureRegistered() void {
     }
 }
 
+const NullableObjectNode = struct {
+    base: *Node,
+
+    pub fn create() !*NullableObjectNode {
+        const self = try allocator.create(NullableObjectNode);
+        self.* = .{ .base = .init() };
+        self.base.setInstance(NullableObjectNode, self);
+        return self;
+    }
+
+    pub fn destroy(self: *NullableObjectNode) void {
+        allocator.destroy(self);
+    }
+
+    pub fn acceptNode(self: *NullableObjectNode, node: ?*Node) bool {
+        _ = self;
+        return node != null;
+    }
+
+    pub fn nullNode(self: *NullableObjectNode) ?*Node {
+        _ = self;
+        return null;
+    }
+
+    pub fn acceptResource(self: *NullableObjectNode, resource: ?*NullableResource) bool {
+        _ = self;
+        return resource != null;
+    }
+
+    pub fn echoResource(self: *NullableObjectNode, resource: ?*NullableResource) ?*NullableResource {
+        _ = self;
+        return resource;
+    }
+};
+
+const NullableResource = struct {
+    base: *Resource,
+
+    pub fn create() !*NullableResource {
+        const self = try allocator.create(NullableResource);
+        self.* = .{ .base = .init() };
+        self.base.setInstance(NullableResource, self);
+        return self;
+    }
+
+    pub fn destroy(self: *NullableResource) void {
+        allocator.destroy(self);
+    }
+};
+
 test "bound methods accept and return nullable object pointers" {
     ensureRegistered();
 
@@ -120,56 +170,6 @@ test "ptrcall accepts and returns nullable non-RefCounted object pointers" {
     null_config.ptr_call.?(receiver, @ptrCast(&[_]?*const anyopaque{}), @ptrCast(&returned_ptr));
     try testing.expect(returned_ptr == null);
 }
-
-const NullableObjectNode = struct {
-    base: *Node,
-
-    pub fn create() !*NullableObjectNode {
-        const self = try allocator.create(NullableObjectNode);
-        self.* = .{ .base = .init() };
-        self.base.setInstance(NullableObjectNode, self);
-        return self;
-    }
-
-    pub fn destroy(self: *NullableObjectNode) void {
-        allocator.destroy(self);
-    }
-
-    pub fn acceptNode(self: *NullableObjectNode, node: ?*Node) bool {
-        _ = self;
-        return node != null;
-    }
-
-    pub fn nullNode(self: *NullableObjectNode) ?*Node {
-        _ = self;
-        return null;
-    }
-
-    pub fn acceptResource(self: *NullableObjectNode, resource: ?*NullableResource) bool {
-        _ = self;
-        return resource != null;
-    }
-
-    pub fn echoResource(self: *NullableObjectNode, resource: ?*NullableResource) ?*NullableResource {
-        _ = self;
-        return resource;
-    }
-};
-
-const NullableResource = struct {
-    base: *Resource,
-
-    pub fn create() !*NullableResource {
-        const self = try allocator.create(NullableResource);
-        self.* = .{ .base = .init() };
-        self.base.setInstance(NullableResource, self);
-        return self;
-    }
-
-    pub fn destroy(self: *NullableResource) void {
-        allocator.destroy(self);
-    }
-};
 
 const std = @import("std");
 const testing = std.testing;

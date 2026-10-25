@@ -520,8 +520,10 @@ const Allocator = std.mem.Allocator;
 const MemoryPool = std.heap.MemoryPool;
 const assert = std.debug.assert;
 
-const c = @import("gdextension");
 const common = @import("common");
+
+const c = @import("gdextension");
+
 const gdzig = @import("gdzig");
 const class = gdzig.class;
 const classdb = gdzig.class.ClassDb;

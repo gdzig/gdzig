@@ -9,7 +9,10 @@ pub fn VTable(comptime T: type, comptime method_names: anytype) type {
         const CCallVirtual = fn (self: *T, args: [*]const *const anyopaque, ret: *anyopaque) callconv(.c) void;
         const implemented_count = countImplemented();
         const map: std.StaticStringMap(c.GDExtensionClassCallVirtual) = .initComptime(blk: {
-            var kvs: [implemented_count]struct { []const u8, c.GDExtensionClassCallVirtual } = undefined;
+            var kvs: [implemented_count]struct {
+                []const u8,
+                c.GDExtensionClassCallVirtual,
+            } = undefined;
             var idx: usize = 0;
             for (method_names) |method_name| {
                 if (findMethod(method_name)) |wrapper| {
@@ -356,10 +359,14 @@ test "VTable ptrcall marshals virtual returns at engine width" {
 
 const std = @import("std");
 
-const c = @import("gdextension");
 const casez = @import("casez");
-const gdzig = @import("gdzig");
+
 const common = @import("common");
 const godot_case = common.godot_case;
+
+const c = @import("gdextension");
+
+const gdzig = @import("gdzig");
 const class = gdzig.class;
+
 const ptrcall = @import("ptrcall.zig");

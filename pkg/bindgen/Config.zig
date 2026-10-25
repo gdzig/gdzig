@@ -145,7 +145,7 @@ pub fn testConfig(io: Io, output: Dir) !Config {
     };
     defer headers.close(io);
 
-    return Config{
+    return .{
         .arch = .@"32",
         .extension_api = try headers.openFile(io, "extension_api.json", .{}),
         .gdextension_interface = try headers.openFile(io, "gdextension_interface.h", .{}),
@@ -349,9 +349,11 @@ const Io = std.Io;
 const Dir = Io.Dir;
 const File = Io.File;
 
-const Version = @import("common").Version;
-const manifest = @import("compat").manifest;
-const compatibility = @import("compatibility.zig");
-
 const build_options = @import("build_options");
+
+const Version = @import("common").Version;
 const Args = @import("common").Args;
+
+const manifest = @import("compat").manifest;
+
+const compatibility = @import("compatibility.zig");

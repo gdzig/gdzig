@@ -1,20 +1,3 @@
-const std = @import("std");
-const DeclEnum = std.meta.DeclEnum;
-
-const casez = @import("casez");
-const common = @import("common");
-const godot_case = common.godot_case;
-
-const gdzig = @import("gdzig");
-const class = gdzig.class;
-const ptrcall = @import("../class/ptrcall.zig");
-const classdb = gdzig.class.ClassDb;
-const MethodFlags = gdzig.global.MethodFlags;
-const StringName = gdzig.builtin.StringName;
-const Variant = gdzig.builtin.Variant;
-
-const Registry = @import("Registry.zig");
-
 /// Registers a method on a class.
 ///
 /// Example:
@@ -157,7 +140,7 @@ pub fn MethodConfig(comptime Class: type) type {
 
             const Callbacks = struct {
                 fn call(instance: *Class, _: []const *const Variant) gdzig.CallError!Variant {
-                    return Variant.init(FieldType, @field(instance, field_name));
+                    return .init(FieldType, @field(instance, field_name));
                 }
 
                 fn ptrCall(instance: *Class, _: [*]const *const anyopaque, ret: ?*anyopaque) void {
@@ -272,3 +255,22 @@ fn releaseVarValue(comptime T: type, value: T) void {
         owned.deinit();
     }
 }
+
+const std = @import("std");
+const DeclEnum = std.meta.DeclEnum;
+
+const casez = @import("casez");
+
+const common = @import("common");
+const godot_case = common.godot_case;
+
+const gdzig = @import("gdzig");
+const class = gdzig.class;
+const classdb = gdzig.class.ClassDb;
+const MethodFlags = gdzig.global.MethodFlags;
+const StringName = gdzig.builtin.StringName;
+const Variant = gdzig.builtin.Variant;
+
+const ptrcall = @import("../class/ptrcall.zig");
+
+const Registry = @import("Registry.zig");

@@ -5,7 +5,7 @@ functions: []Context.Function = &.{},
 imports: Context.Imports = .empty,
 
 pub fn init(allocator: Allocator, name: []const u8) !Module {
-    return Module{
+    return .{
         .name = try allocator.dupe(u8, name),
         .functions = &.{},
     };

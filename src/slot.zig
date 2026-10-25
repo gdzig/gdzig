@@ -6,7 +6,6 @@
 //! Marshalling code must read and write scalars at this width: writing a
 //! narrow value at its declared width leaks uninitialized bytes into what the
 //! engine reads, and the engine's slot-width writes overflow a narrow local.
-const std = @import("std");
 
 /// The slot-width box for `T` (see module doc): an extern struct wrapping the
 /// raw slot value, so a pointer to it can be handed to the engine directly.
@@ -30,23 +29,25 @@ pub fn Type(comptime T: type) type {
 
         /// Widens `value` to its slot width.
         pub fn widen(value: T) Self {
-            return .{ .raw = switch (@typeInfo(T)) {
-                .int => @intCast(value),
-                .@"enum" => @intCast(@intFromEnum(value)),
-                .@"struct" => |info| blk: {
-                    const Backing = info.backing_integer orelse break :blk value;
-                    break :blk @as(Raw, @intCast(@as(Backing, @bitCast(value))));
+            return .{
+                .raw = switch (@typeInfo(T)) {
+                    .int => @intCast(value),
+                    .@"enum" => @intCast(@backingInt(value)),
+                    .@"struct" => |info| blk: {
+                        const Backing = info.backing_integer orelse break :blk value;
+                        break :blk @as(Raw, @intCast(@as(Backing, @bitCast(value))));
+                    },
+                    .float => @floatCast(value),
+                    else => value,
                 },
-                .float => @floatCast(value),
-                else => value,
-            } };
+            };
         }
 
         /// Narrows the slot-width value back to `T`.
         pub fn narrow(self: Self) T {
             return switch (@typeInfo(T)) {
                 .int => @intCast(self.raw),
-                .@"enum" => |info| @enumFromInt(@as(info.tag_type, @intCast(self.raw))),
+                .@"enum" => |info| @fromBackingInt(@intCast(@as(info.tag_type, @intCast(self.raw)))),
                 .@"struct" => |info| blk: {
                     const Backing = info.backing_integer orelse break :blk self.raw;
                     break :blk @bitCast(@as(Backing, @intCast(self.raw)));
@@ -65,3 +66,5 @@ pub fn isU64Like(comptime Int: type) bool {
     const info = @typeInfo(Int).int;
     return info.bits == 64 and info.signedness == .unsigned;
 }
+
+const std = @import("std");

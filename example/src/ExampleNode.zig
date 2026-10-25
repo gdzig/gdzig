@@ -1,7 +1,10 @@
 const ExampleNode = @This();
 
-const Examples = [_]struct { name: [:0]const u8, T: type }{
-    .{ .name = "Sprites", .T = SpritesNode },
+const Examples = [_]struct {
+    name: [:0]const u8,
+    T: type,
+}{
+    .{ .name = "Sprites", .T = SpriteNode },
     .{ .name = "GUI", .T = GuiNode },
     .{ .name = "Signals", .T = SignalNode },
 };
@@ -210,5 +213,7 @@ const Vector3 = godot.builtin.Vector3;
 const SceneTreeTimer = godot.class.SceneTreeTimer;
 
 const GuiNode = @import("GuiNode.zig");
+
 const SignalNode = @import("SignalNode.zig");
-const SpritesNode = @import("SpriteNode.zig");
+
+const SpriteNode = @import("SpriteNode.zig");

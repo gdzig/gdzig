@@ -20,7 +20,7 @@ pub const Function = struct {
 
 const std = @import("std");
 const ArrayList = std.ArrayListUnmanaged;
+const StringHashMap = std.StringHashMapUnmanaged;
 
 const Context = @import("../Context.zig");
 const Imports = Context.Imports;
-const StringHashMap = std.StringHashMapUnmanaged;

@@ -290,8 +290,10 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const ArrayList = std.ArrayListUnmanaged;
 
 const casez = @import("casez");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
+const GodotApi = @import("common").GodotApi;
 
 const Context = @import("../Context.zig");
 const Constant = Context.Constant;
@@ -301,6 +303,7 @@ const Function = Context.Function;
 const Imports = Context.Imports;
 const Property = Context.Property;
 const Signal = Context.Signal;
-const GodotApi = @import("common").GodotApi;
-const Mixin = @import("../Mixin.zig");
+
 const docs = @import("docs.zig");
+
+const Mixin = @import("../Mixin.zig");

@@ -53,4 +53,5 @@ test "extract arguments reject unknown positional and abbreviated versions befor
 const std = @import("std");
 
 const Args = @import("common").Args;
+
 const records = @import("compat").records;

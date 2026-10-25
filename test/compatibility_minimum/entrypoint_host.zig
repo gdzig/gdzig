@@ -125,8 +125,12 @@ test "real IPC entrypoint queries once and rejects before startup" {
 
 const std = @import("std");
 
-const gdzig = @import("runtime");
-const fixture_options = @import("fixture_options");
-const state = @import("state");
 const entrypoint = @import("entrypoint");
+
+const fixture_options = @import("fixture_options");
+
 const harness = @import("harness");
+
+const gdzig = @import("runtime");
+
+const state = @import("state");

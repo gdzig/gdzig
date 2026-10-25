@@ -1168,7 +1168,11 @@ fn writeEnum(w: *CodeWriter, @"enum": *const Context.Enum, ctx: *const Context) 
     var seen: std.AutoArrayHashMapUnmanaged(i64, []const u8) = .empty;
     defer seen.deinit(ctx.rawAllocator());
 
-    const Alias = struct { doc: ?[]const u8, name: []const u8, first_name: []const u8 };
+    const Alias = struct {
+        doc: ?[]const u8,
+        name: []const u8,
+        first_name: []const u8,
+    };
     var aliases: std.ArrayListUnmanaged(Alias) = .empty;
     defer aliases.deinit(ctx.rawAllocator());
 
@@ -2244,6 +2248,22 @@ fn writeTypeAtOptionalParameterField(w: *CodeWriter, @"type": *const Context.Typ
     }
 }
 
+fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
+    return .fromRecord(.{
+        .kind = .class,
+        .owner = "Probe",
+        .method = "probe",
+        .hash = 111,
+        .compatibility = &.{},
+        .virtual = false,
+        .is_const = false,
+        .is_static = false,
+        .is_vararg = false,
+        .arguments = &.{},
+        .@"return" = null,
+    }, difference);
+}
+
 /// Helpers for tests and fixture tools that exercise production emission.
 pub const testing = struct {
     /// How the fixture uses its generated legacy declaration.
@@ -2652,29 +2672,18 @@ test "selected minimum emits one fixed and Alloc class bind" {
     }
 }
 
-fn fixtureSignature(difference: []const u8) @import("compat").manifest.Legacy {
-    return .fromRecord(.{
-        .kind = .class,
-        .owner = "Probe",
-        .method = "probe",
-        .hash = 111,
-        .compatibility = &.{},
-        .virtual = false,
-        .is_const = false,
-        .is_static = false,
-        .is_vararg = false,
-        .arguments = &.{},
-        .@"return" = null,
-    }, difference);
-}
-
 const std = @import("std");
 
 const casez = @import("casez");
+
 const common = @import("common");
 
 const CodeWriter = @import("CodeWriter.zig");
-const Context = @import("Context.zig");
+
 const compatibility = @import("compatibility.zig");
+
+const Context = @import("Context.zig");
+
 const util = @import("util.zig");
+
 const version_dispatch = @import("version_dispatch.zig");

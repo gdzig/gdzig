@@ -222,7 +222,11 @@ const Allocator = std.mem.Allocator;
 const common = @import("common");
 const Version = common.Version;
 const GodotApi = common.GodotApi;
-const Context = @import("Context.zig");
+
 const manifest = @import("compat").manifest;
+
 const compatibility = @import("compatibility.zig");
+
+const Context = @import("Context.zig");
+
 const version_dispatch = @import("version_dispatch.zig");

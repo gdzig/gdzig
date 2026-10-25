@@ -24,6 +24,7 @@ src/global/*.zig
 !src/**/*.replace.zig
 src/builtin.zig
 src/class.zig
+src/gdzig.zig
 src/DispatchTable.zig
 src/global.zig
 src/general.zig

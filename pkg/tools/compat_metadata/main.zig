@@ -210,5 +210,6 @@ test "merge CLI enforces explicit mode and unread input policy before IO" {
 const std = @import("std");
 
 const Args = @import("common").Args;
+
 const manifest = @import("compat").manifest;
 const records = @import("compat").records;

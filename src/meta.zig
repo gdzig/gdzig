@@ -1,7 +1,5 @@
 //! Type introspection and class hierarchy.
 
-const std = @import("std");
-
 /// Uniform view of a struct field: name and type.
 pub const StructField = struct {
     name: [:0]const u8,
@@ -39,3 +37,5 @@ pub inline fn enumFields(comptime T: type) []const EnumField {
         break :blk &final;
     };
 }
+
+const std = @import("std");

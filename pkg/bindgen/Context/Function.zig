@@ -235,7 +235,10 @@ const MixinType = enum {
     method,
 };
 
-pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct { MixinType, Function } {
+pub fn fromMixin(allocator: Allocator, ast: Ast, index: NodeIndex) !?struct {
+    MixinType,
+    Function,
+} {
     var buffer: [1]NodeIndex = undefined;
     const proto = ast.fullFnProto(&buffer, index) orelse return null;
     const name_token = proto.name_token orelse return null;
@@ -509,7 +512,7 @@ pub const Parameter = struct {
         const @"type" = try Type.from(allocator, api_type, is_meta, ctx);
         errdefer @"type".deinit(allocator);
 
-        return Parameter{
+        return .{
             .name = name,
             .name_api = api_name,
             .type = @"type",
@@ -558,20 +561,24 @@ const ArrayList = std.ArrayListUnmanaged;
 const StaticStringMap = std.StaticStringMap;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const testing = std.testing;
-
 const Ast = std.zig.Ast;
 const Node = Ast.Node;
 const NodeIndex = Node.Index;
 
 const casez = @import("casez");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
+const GodotApi = @import("common").GodotApi;
 
-const version_dispatch = @import("../version_dispatch.zig");
 const Config = @import("../Config.zig");
+
 const Context = @import("../Context.zig");
 const Type = Context.Type;
-const GodotApi = @import("common").GodotApi;
+
 const docs = @import("docs.zig");
+
 const Value = @import("value.zig").Value;
+
+const version_dispatch = @import("../version_dispatch.zig");

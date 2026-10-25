@@ -95,9 +95,14 @@ test {
 const std = @import("std");
 
 const Args = @import("common").Args;
-const codegen = @import("codegen.zig");
-const Config = @import("Config.zig");
-const dispatch_report = @import("dispatch_report.zig");
-const compatibility = @import("compatibility.zig");
-const Context = @import("Context.zig");
 const GodotApi = @import("common").GodotApi;
+
+const codegen = @import("codegen.zig");
+
+const compatibility = @import("compatibility.zig");
+
+const Config = @import("Config.zig");
+
+const Context = @import("Context.zig");
+
+const dispatch_report = @import("dispatch_report.zig");

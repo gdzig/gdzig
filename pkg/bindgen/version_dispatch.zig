@@ -173,16 +173,18 @@ test "numeric ordering separates distinct patch ranges and names later adapters"
         .owner = "Probe",
         .method = "probe",
         .old_hash = 101,
-        .layout = .{ .incompatible = .{
-            .difference = "fixture",
-            .arguments = &.{},
-            .@"return" = null,
-            .flags = .{
-                .is_const = false,
-                .is_static = false,
-                .is_vararg = false,
+        .layout = .{
+            .incompatible = .{
+                .difference = "fixture",
+                .arguments = &.{},
+                .@"return" = null,
+                .flags = .{
+                    .is_const = false,
+                    .is_static = false,
+                    .is_vararg = false,
+                },
             },
-        } },
+        },
     };
     var second = first;
     second.old_hash = 202;
@@ -247,5 +249,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Version = @import("common").Version;
+
 const manifest = @import("compat").manifest;
+
 const cached: manifest.Manifest = @import("generated/compatibility.zon");

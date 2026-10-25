@@ -28,7 +28,13 @@ class_imports: StringHashMap(Imports) = .empty,
 function_imports: StringHashMap(Imports) = .empty,
 
 builtins: StringArrayHashMap(Builtin) = .empty,
-builtin_sizes: StringArrayHashMap(struct { size: usize, members: StringArrayHashMap(struct { offset: usize, meta: []const u8 }) }) = .empty,
+builtin_sizes: StringArrayHashMap(struct {
+    size: usize,
+    members: StringArrayHashMap(struct {
+        offset: usize,
+        meta: []const u8,
+    }),
+}) = .empty,
 classes: StringArrayHashMap(Class) = .empty,
 enums: StringArrayHashMap(Enum) = .empty,
 flags: StringArrayHashMap(Flag) = .empty,
@@ -754,28 +760,50 @@ const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
 const Writer = std.Io.Writer;
 
 const casez = @import("casez");
+
 const common = @import("common");
 const gdzig_case = common.gdzig_case;
 const godot_case = common.godot_case;
-const Config = @import("Config.zig");
-const compatibility = @import("compatibility.zig");
-const manifest = @import("compat").manifest;
-const legacy_binding = @import("legacy_binding.zig");
-const version_dispatch = @import("version_dispatch.zig");
-pub const Builtin = @import("Context/Builtin.zig");
-pub const Class = @import("Context/Class.zig");
-pub const Constant = @import("Context/Constant.zig");
-pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
-pub const Enum = @import("Context/Enum.zig");
-pub const Field = @import("Context/Field.zig");
-pub const Flag = @import("Context/Flag.zig");
-pub const Function = @import("Context/Function.zig");
-pub const Imports = @import("Context/Imports.zig");
-pub const DispatchTable = @import("Context/DispatchTable.zig");
-pub const Module = @import("Context/Module.zig");
-pub const Property = @import("Context/Property.zig");
-pub const Signal = @import("Context/Signal.zig");
-pub const Type = @import("Context/type.zig").Type;
-pub const Value = @import("Context/value.zig").Value;
 const GodotApi = @import("common").GodotApi;
+
+const manifest = @import("compat").manifest;
+
+const compatibility = @import("compatibility.zig");
+
+const Config = @import("Config.zig");
+
+pub const Builtin = @import("Context/Builtin.zig");
+
+pub const Class = @import("Context/Class.zig");
+
+pub const Constant = @import("Context/Constant.zig");
+
+pub const DispatchTable = @import("Context/DispatchTable.zig");
+
+pub const DocumentContext = @import("Context/docs.zig").DocumentContext;
+
+pub const Enum = @import("Context/Enum.zig");
+
+pub const Field = @import("Context/Field.zig");
+
+pub const Flag = @import("Context/Flag.zig");
+
+pub const Function = @import("Context/Function.zig");
+
+pub const Imports = @import("Context/Imports.zig");
+
+pub const Module = @import("Context/Module.zig");
+
+pub const Property = @import("Context/Property.zig");
+
+pub const Signal = @import("Context/Signal.zig");
+
+pub const Type = @import("Context/type.zig").Type;
+
+pub const Value = @import("Context/value.zig").Value;
+
+const legacy_binding = @import("legacy_binding.zig");
+
 const util = @import("util.zig");
+
+const version_dispatch = @import("version_dispatch.zig");

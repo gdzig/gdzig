@@ -3,7 +3,9 @@
 /// ABI classifications produced from a measured old and current signature.
 pub const Result = union(enum) {
     identical,
-    trailing_defaults: struct { added_arguments: []const []const u8 },
+    trailing_defaults: struct {
+        added_arguments: []const []const u8,
+    },
     abi_compatible: Reason,
     return_added,
     incompatible: []const u8,
@@ -236,5 +238,6 @@ test "layout result stores only its active classification payload" {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const records = @import("records.zig");
 const common = @import("common");
+
+const records = @import("records.zig");

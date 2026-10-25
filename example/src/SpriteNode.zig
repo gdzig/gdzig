@@ -109,12 +109,11 @@ pub fn _physicsProcess(self: *SpriteNode, delta: f64) void {
 }
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const builtin = @import("builtin");
 
 const godot = @import("godot");
-
 const Control = godot.class.Control;
 const Engine = godot.class.Engine;
 const Object = godot.class.Object;
