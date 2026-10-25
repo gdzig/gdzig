@@ -1,0 +1,38 @@
+name: Lint
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: gdzig-zlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup mise
+        uses: jdx/mise-action@v2
+        with:
+          install: false
+          cache: true
+          cache_save_post: true
+
+      - name: Install gdzig-zlint
+        run: |
+          version=$(sed -n 's/^"github:gdzig\/gdzig-zlint" = "\([^"]*\)"$/\1/p' mise.toml)
+          mise install "github:gdzig/gdzig-zlint@${version}"
+
+      - name: Lint
+        run: mise exec -- gdzig-zlint .
