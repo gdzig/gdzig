@@ -8,20 +8,38 @@ const Generator = struct {
     b: *Build,
     extractor: *Build.Step.Compile,
     merger: *Build.Step.Compile,
+    /// Vendored or regenerated header for the current snapshot.
+    current_header: Build.LazyPath,
     extracted: std.StringHashMapUnmanaged(Build.LazyPath) = .empty,
+
+    const Paths = struct {
+        api: Build.LazyPath,
+        header: Build.LazyPath,
+    };
+
+    /// Choose the vendored files or the resolved historical release files.
+    fn sourcePaths(self: *Generator, comptime owner: type, version: []const u8) ?Paths {
+        if (std.mem.eql(u8, version, cached.current.version)) {
+            return .{
+                .api = self.b.path("vendor/extension_api.json"),
+                .header = self.current_header,
+            };
+        }
+        const godot_versions = self.b.lazyImport(owner, "godot_versions") orelse return null;
+        const headers = godot_versions.headers(self.b, self.b.graph.host, .{ .version = version });
+        return .{
+            .api = headers.path(self.b, "extension_api.json"),
+            .header = headers.path(self.b, "gdextension_interface.h"),
+        };
+    }
 
     fn extract(self: *Generator, comptime owner: type, version: []const u8) ?Build.LazyPath {
         if (self.extracted.get(version)) |path| return path;
+        const paths = self.sourcePaths(owner, version) orelse return null;
         const b = self.b;
-        const api = if (std.mem.eql(u8, version, cached.current.version))
-            b.path("vendor/extension_api.json")
-        else blk: {
-            const godot_versions = b.lazyImport(owner, "godot_versions") orelse return null;
-            const headers = godot_versions.headers(b, b.graph.host, .{ .version = version });
-            break :blk headers.path(b, "extension_api.json");
-        };
         const run = b.addRunArtifact(self.extractor);
-        run.addPrefixedFileArg("--api=", api);
+        run.addPrefixedFileArg("--api=", paths.api);
+        run.addPrefixedFileArg("--gdextension-interface=", paths.header);
         run.addArg(b.fmt("--version={s}", .{version}));
         const result = run.addPrefixedOutputFileArg("--output=", "records.zon");
         self.extracted.put(b.allocator, version, result) catch @panic("OOM");
@@ -69,41 +87,21 @@ const Generator = struct {
     }
 };
 
-pub const Selection = struct {
+pub const Options = struct {
+    /// Requested stable compatibility minimum, or null for the cached snapshot.
     minimum: ?Version,
+    /// Vendored or regenerated header for the current snapshot.
+    header: Build.LazyPath,
+};
+
+pub const Selection = struct {
     manifest: Build.LazyPath,
 };
 
-/// Use cached metadata without resolving Godot, or append one downloaded release.
-pub fn select(b: *Build, comptime owner: type, text: ?[]const u8) ?Selection {
-    const cached_path = b.path("pkg/bindgen/generated/compatibility.zon");
-    const requested = text orelse return .{ .minimum = null, .manifest = cached_path };
-    const minimum_result: error{InvalidVersion}!Version = .parseStrict(requested);
-    const minimum = minimum_result catch {
-        std.debug.panic("invalid stable Godot minimum '{s}': use major.minor[.patch]", .{requested});
-    };
-    const current_result: error{InvalidVersion}!Version = .parseStrict(cached.current.version);
-    const current = current_result catch {
-        @panic("invalid current version in vendored compatibility cache");
-    };
-    if (minimum.gt(current)) {
-        std.debug.panic("Godot minimum {s} is newer than snapshot {s}", .{
-            requested,
-            cached.current.version,
-        });
-    }
-    inline for (cached.targets) |target| {
-        const measured_result: error{InvalidVersion}!Version = .parseStrict(target.source.version);
-        const measured = measured_result catch {
-            @panic("invalid target version in vendored compatibility cache");
-        };
-        if (minimum.eql(measured)) {
-            return .{ .minimum = minimum, .manifest = cached_path };
-        }
-    }
-
-    // Only this uncached branch can request the optional resolver package.
-    _ = b.lazyImport(owner, "godot_versions") orelse return null;
+/// Register the metadata tooling and maintenance steps, then select the manifest.
+/// Returns null when an on-demand minimum needs the optional `godot_versions`
+/// resolver package, which downloads the target release and dumps its headers.
+pub fn setup(b: *Build, comptime owner: type, options: Options) ?Selection {
     const casez = b.dependency("casez", .{});
     const common_mod = common.build(b, .{
         .target = b.graph.host,
@@ -116,17 +114,61 @@ pub fn select(b: *Build, comptime owner: type, text: ?[]const u8) ?Selection {
         .optimize = .debug,
         .imports = &.{.{ .name = "common", .module = common_mod }},
     });
+    const extract_mod = toolModule(b, "pkg/tools/compat_extract/main.zig", common_mod, compat_mod);
+    const merge_mod = toolModule(b, "pkg/tools/compat_metadata/main.zig", common_mod, compat_mod);
+    const audit_mod = toolModule(b, "pkg/tools/compat_audit/main.zig", common_mod, compat_mod);
+    const test_step = b.step("test-compat-metadata", "Run optional extraction and merge host tests");
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = compat_mod })).step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = extract_mod })).step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = merge_mod })).step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = audit_mod })).step);
     var generator: Generator = .{
         .b = b,
-        .extractor = b.addExecutable(.{
-            .name = "gdzig-compat-extract",
-            .root_module = toolModule(b, "pkg/tools/compat_extract/main.zig", common_mod, compat_mod),
-        }),
-        .merger = b.addExecutable(.{
-            .name = "gdzig-compat-metadata",
-            .root_module = toolModule(b, "pkg/tools/compat_metadata/main.zig", common_mod, compat_mod),
-        }),
+        .current_header = options.header,
+        .extractor = b.addExecutable(.{ .name = "gdzig-compat-extract", .root_module = extract_mod }),
+        .merger = b.addExecutable(.{ .name = "gdzig-compat-metadata", .root_module = merge_mod }),
     };
+
+    // Maintenance steps stay registered even when selection needs a lazy dependency.
+    addMaintenance(b, owner, &generator);
+
+    // The audit reads external headers at runtime, so its argument is a raw path.
+    const audit = b.addExecutable(.{ .name = "gdzig-compat-audit", .root_module = audit_mod });
+    const audit_run = b.addRunArtifact(audit);
+    audit_run.addPrefixedFileArg("--manifest=", b.path("pkg/bindgen/generated/compatibility.zon"));
+    audit_run.addPrefixedFileArg("--current-header=", options.header);
+    if (b.option([]const u8, "engine-header", "Engine gdextension_interface.h to audit")) |path| {
+        audit_run.addArg(b.fmt("--engine-header={s}", .{path}));
+    }
+    const audit_step = b.step("compat-audit", "Audit an engine header against the compatibility evidence");
+    audit_step.dependOn(&audit_run.step);
+
+    const cached_path = b.path("pkg/bindgen/generated/compatibility.zon");
+    const minimum = options.minimum orelse return .{ .manifest = cached_path };
+    const current_result: error{InvalidVersion}!Version = .parseStrict(cached.current.version);
+    const current = current_result catch {
+        @panic("invalid current version in vendored compatibility cache");
+    };
+    if (minimum.gt(current)) {
+        std.debug.panic("Godot minimum {d}.{d}.{d} is newer than snapshot {s}", .{
+            minimum.major,
+            minimum.minor,
+            minimum.patch,
+            cached.current.version,
+        });
+    }
+    inline for (cached.targets) |target| {
+        const measured_result: error{InvalidVersion}!Version = .parseStrict(target.source.version);
+        const measured = measured_result catch {
+            @panic("invalid target version in vendored compatibility cache");
+        };
+        if (minimum.eql(measured)) {
+            return .{ .manifest = cached_path };
+        }
+    }
+
+    // Only this uncached branch can request the optional godot_versions resolver.
+    _ = b.lazyImport(owner, "godot_versions") orelse return null;
     const version = b.fmt("{d}.{d}.{d}", .{ minimum.major, minimum.minor, minimum.patch });
     const current_records = generator.extract(owner, cached.current.version) orelse return null;
     const old_records = generator.extract(owner, version) orelse return null;
@@ -143,34 +185,11 @@ pub fn select(b: *Build, comptime owner: type, text: ?[]const u8) ?Selection {
         report,
         b.fmt("compat/reports/{s}.json", .{version}),
     ).step);
-    return .{ .minimum = minimum, .manifest = candidate };
+    return .{ .manifest = candidate };
 }
 
-/// Add independently cached extraction, canonical merge, preview and maintenance.
-pub fn add(b: *Build, comptime asking_build_zig: type) void {
-    const casez = b.dependency("casez", .{});
-    const common_mod = common.build(b, .{
-        .target = b.graph.host,
-        .optimize = .debug,
-        .casez = casez.module("casez"),
-    });
-    const compat_mod = b.createModule(.{
-        .root_source_file = b.path("pkg/compat/compat.zig"),
-        .target = b.graph.host,
-        .optimize = .debug,
-        .imports = &.{.{ .name = "common", .module = common_mod }},
-    });
-    const extract_mod = toolModule(b, "pkg/tools/compat_extract/main.zig", common_mod, compat_mod);
-    const merge_mod = toolModule(b, "pkg/tools/compat_metadata/main.zig", common_mod, compat_mod);
-    const test_step = b.step("test-compat-metadata", "Run optional extraction and merge host tests");
-    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = compat_mod })).step);
-    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = extract_mod })).step);
-    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = merge_mod })).step);
-    var generator: Generator = .{
-        .b = b,
-        .extractor = b.addExecutable(.{ .name = "gdzig-compat-extract", .root_module = extract_mod }),
-        .merger = b.addExecutable(.{ .name = "gdzig-compat-metadata", .root_module = merge_mod }),
-    };
+/// Register preview, update and check maintenance steps for the requested releases.
+fn addMaintenance(b: *Build, comptime owner: type, generator: *Generator) void {
     const old = b.option([]const u8, "old", "Exact releases: all, a comma list, or all,<extra>");
     const preview = b.step("compat-metadata", "Install cache and per-release reports to zig-out/compat");
     const update = b.step("update-compat-metadata", "Regenerate the full vendored compatibility cache");
@@ -185,7 +204,7 @@ pub fn add(b: *Build, comptime asking_build_zig: type) void {
         for ([_]*Build.Step{ preview, update, check }) |step| step.dependOn(&failure.step);
         return;
     };
-    const generated = generator.generate(asking_build_zig, versions, null) orelse return;
+    const generated = generator.generate(owner, versions, null) orelse return;
     preview.dependOn(&b.addInstallFile(generated.candidate, "compat/compatibility.zon").step);
     for (generated.reports, versions) |report, version| {
         preview.dependOn(&b.addInstallFile(report, b.fmt("compat/reports/{s}.json", .{version})).step);
@@ -195,7 +214,7 @@ pub fn add(b: *Build, comptime asking_build_zig: type) void {
         copy.addCopyFileToSource(generated.candidate, "pkg/bindgen/generated/compatibility.zon");
         update.dependOn(&copy.step);
         const verification = generator.generate(
-            asking_build_zig,
+            owner,
             versions,
             b.path("pkg/bindgen/generated/compatibility.zon"),
         ) orelse return;

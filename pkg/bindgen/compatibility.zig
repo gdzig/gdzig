@@ -32,7 +32,7 @@ pub fn validateSnapshot(metadata: compat_manifest.Manifest, header: GodotApi.Hea
 
 /// Reject malformed provenance and duplicate or dangling target/table identities.
 pub fn validateManifest(metadata: compat_manifest.Manifest) !void {
-    if (metadata.schema_version != 3) return error.UnsupportedCompatibilitySchema;
+    if (metadata.schema_version != 4) return error.UnsupportedCompatibilitySchema;
     try validateSource(metadata.current);
     if (metadata.current.checksum_kind != .raw_sha256) return error.InvalidCompatibilityProvenance;
     const current = try records.exactVersion(metadata.current.version);
@@ -59,6 +59,10 @@ pub fn validateManifest(metadata: compat_manifest.Manifest) !void {
     for (metadata.targets, 0..) |target, index| {
         try validateSource(target.source);
         const version = try records.exactVersion(target.source.version);
+        if (index > 0) {
+            const previous = try records.exactVersion(metadata.targets[index - 1].source.version);
+            if (version.order(previous) != .gt) return error.UnsortedCompatibilityTargets;
+        }
         switch (version.order(current)) {
             .gt => return error.InvalidCompatibilityProvenance,
             .eq => {
@@ -81,6 +85,9 @@ pub fn validateManifest(metadata: compat_manifest.Manifest) !void {
         }
         _ = try tableFor(metadata, target);
     }
+
+    // Interface evidence uses the same shared rules as the metadata merger.
+    try metadata.validateInterfaceShape();
 }
 
 fn validateSource(source: compat_manifest.Provenance) !void {
@@ -236,6 +243,49 @@ test "manifest validation rejects malformed schema and dangling tables" {
     fixture = manifest;
     fixture.tables = &.{};
     try std.testing.expectError(error.MissingCompatibilityTable, validateManifest(fixture));
+}
+
+test "manifest validation requires schema four interface evidence" {
+    try validateManifest(manifest);
+    var fixture = manifest;
+    fixture.schema_version = 3;
+    try std.testing.expectError(error.UnsupportedCompatibilitySchema, validateManifest(fixture));
+    fixture = manifest;
+    fixture.interfaces = &.{};
+    try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
+    fixture = manifest;
+    fixture.current_interfaces_sha256 = "not-a-digest";
+    try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
+    fixture = manifest;
+    fixture.interfaces = &.{
+        .{ .id = "4.6.0", .missing = &.{"not-a-name"} },
+        .{ .id = "4.7.0", .missing = &.{} },
+    };
+    try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
+    fixture = manifest;
+    fixture.interfaces = &.{
+        .{ .id = "4.6.0", .missing = &.{ "variant_get_type_by_name", "classdb_construct_object3" } },
+        .{ .id = "4.7.0", .missing = &.{} },
+    };
+    try std.testing.expectError(error.InvalidInterfaceEvidence, validateManifest(fixture));
+}
+
+test "manifest validation rejects unsorted targets" {
+    const reordered = try std.testing.allocator.dupe(compat_manifest.Target, manifest.targets);
+    defer std.testing.allocator.free(reordered);
+    std.mem.swap(compat_manifest.Target, &reordered[0], &reordered[1]);
+    var fixture = manifest;
+    fixture.targets = reordered;
+    try std.testing.expectError(error.UnsortedCompatibilityTargets, validateManifest(fixture));
+}
+
+test "bindgen metadata rejects a stale header name set before resolving gates" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectError(
+        error.StaleCompatibilityInterfaces,
+        manifest.validateInterfaces(arena.allocator(), &.{"get_godot_version"}),
+    );
 }
 
 const std = @import("std");

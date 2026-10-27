@@ -47,6 +47,15 @@ Minimum selection also checks the current snapshot's header and raw checksum
 against the measured manifest provenance, so stale metadata cannot silently
 select hashes for a changed snapshot.
 
+Interface availability is measured rather than inferred. For every support target
+the metadata tooling reads that release's own `gdextension_interface.h` and stores
+the interface names the release lacks as a per-table delta in the vendored
+manifest, together with a digest of the vendored header's sorted `@name` entries.
+Bindgen gates optional dispatch entries on the first measured release that
+provides the interface and treats the header `@since` tag only as a consistency
+claim, so a tag that contradicts the measured window fails the build instead of
+silently gating a binding.
+
 ## Alternatives rejected
 
 - Multiple vendored API snapshots add ongoing maintenance and split the public API.
