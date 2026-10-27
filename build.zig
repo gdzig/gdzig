@@ -52,7 +52,7 @@ pub fn build(b: *Build) !void {
     const extension_api = b.path("vendor/extension_api.json");
 
     // Metadata setup and attribute registration both consume the resolved header.
-    const parsed_minimum: ?Version = if (minimum_text) |text|
+    const minimum: ?Version = if (minimum_text) |text|
         Version.parseStrict(text) catch std.debug.panic(
             "invalid stable Godot minimum '{s}': use major.minor[.patch]",
             .{text},
@@ -60,10 +60,9 @@ pub fn build(b: *Build) !void {
     else
         null;
     const selection = compat_metadata.setup(b, @This(), .{
-        .minimum = parsed_minimum,
+        .minimum = minimum,
         .header = interface_header,
     }) orelse return;
-    const minimum = selection.minimum;
 
     const headers_write = b.addWriteFiles();
     _ = headers_write.addCopyFile(interface_header, "gdextension_interface.h");

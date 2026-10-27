@@ -261,7 +261,7 @@ pub const Manifest = struct {
         // Measure the interface evidence before touching previous targets.
         const current_interfaces = try requireInterfaces(allocator, current.interfaces);
         const old_interfaces = try requireInterfaces(allocator, old.interfaces);
-        const current_digest = try interfaces.digest(allocator, current_interfaces);
+        const current_digest = try current_interfaces.digest(allocator);
         if (input) |previous| {
             if (!std.mem.eql(u8, previous.current_interfaces_sha256, current_digest)) {
                 return error.InterfaceSnapshotMismatch;
@@ -294,7 +294,7 @@ pub const Manifest = struct {
         try rows.append(allocator, .{
             .source = .fromSnapshot(old, !std.mem.eql(u8, old.version, current.version)),
             .overrides = comparison.overrides,
-            .missing = try interfaces.delta(allocator, current_interfaces, old_interfaces),
+            .missing = try current_interfaces.delta(allocator, old_interfaces),
             .version = old_version,
         });
         std.mem.sort(Row, rows.items, {}, lessRow);
@@ -310,7 +310,7 @@ pub const Manifest = struct {
             var shared: ?usize = null;
             for (tables.items, interface_tables.items, 0..) |table, evidence, index| {
                 if (sameOverrides(table.overrides, row.overrides) and
-                    interfaces.same(evidence.missing, row.missing))
+                    (interfaces.Names{ .items = evidence.missing }).eql(.{ .items = row.missing }))
                 {
                     shared = index;
                     break;
@@ -349,7 +349,7 @@ pub const Manifest = struct {
             const version = try Version.parseStrict(target.source.version);
             const delta = self.tableDelta(target.table_id) orelse
                 return error.InvalidInterfaceEvidence;
-            if (interfaces.contains(delta, name)) {
+            if ((interfaces.Names{ .items = delta }).contains(name)) {
                 last_absent = version;
             } else if (gate == null) {
                 gate = version;
@@ -371,21 +371,29 @@ pub const Manifest = struct {
     ) !InterfaceGate {
         const tag = try parseSinceTag(since_text);
         const availability = try self.interfaceAvailability(name);
+        const tag_version = tag.version();
         if (availability.last_absent) |absent| {
-            if (tag.has_patch) {
-                if (!tag.version.gt(absent)) return error.InterfaceAvailabilityDisagreement;
-            } else if (minorOrder(tag.version, absent) == .lt) {
-                return error.InterfaceAvailabilityDisagreement;
+            switch (tag) {
+                .minor => {
+                    if (minorOrder(tag_version, absent) == .lt) return error.InterfaceAvailabilityDisagreement;
+                },
+                .patch => {
+                    if (!tag_version.gt(absent)) return error.InterfaceAvailabilityDisagreement;
+                },
             }
         }
-        if (tag.has_patch) {
-            if (tag.version.gt(availability.gate)) return error.InterfaceAvailabilityDisagreement;
-        } else if (minorOrder(tag.version, availability.gate) == .gt) {
-            return error.InterfaceAvailabilityDisagreement;
+        switch (tag) {
+            .minor => {
+                if (minorOrder(tag_version, availability.gate) == .gt) return error.InterfaceAvailabilityDisagreement;
+            },
+            .patch => {
+                if (tag_version.gt(availability.gate)) return error.InterfaceAvailabilityDisagreement;
+            },
         }
         return .{
             .gate = availability.gate,
-            .required = availability.present_in_oldest and tag.version.eql(required_interface_version),
+            .availability = if (availability.present_in_oldest and
+                tag_version.eql(required_interface_version)) .required else .optional,
         };
     }
 
@@ -399,7 +407,8 @@ pub const Manifest = struct {
             for (self.tables[0..index]) |previous| {
                 if (std.mem.eql(u8, table.id, previous.id)) return error.InvalidInterfaceEvidence;
             }
-            try validateDelta(evidence.missing);
+            // An empty delta is valid: a release can add no interface over the next target.
+            if (evidence.missing.len > 0) try validateDelta(evidence.missing);
         }
 
         // Availability only ever grows, so a newer target cannot drop a name.
@@ -409,7 +418,7 @@ pub const Manifest = struct {
                 return error.InvalidInterfaceEvidence;
             if (newer) |older| {
                 for (delta) |name| {
-                    if (!interfaces.contains(older, name)) {
+                    if (!(interfaces.Names{ .items = older }).contains(name)) {
                         return error.NonMonotonicInterfaceEvidence;
                     }
                 }
@@ -424,17 +433,17 @@ pub const Manifest = struct {
         allocator: Allocator,
         names: []const []const u8,
     ) !void {
-        const parsed = try interfaces.canonicalize(allocator, names);
-        const digest = try interfaces.digest(allocator, parsed);
+        const parsed = try interfaces.Names.init(allocator, names);
+        const digest = try parsed.digest(allocator);
         if (!std.mem.eql(u8, digest, self.current_interfaces_sha256)) {
             return error.StaleCompatibilityInterfaces;
         }
         for (self.interfaces) |evidence| {
             for (evidence.missing) |name| {
-                if (!interfaces.contains(parsed, name)) return error.InvalidInterfaceEvidence;
+                if (!parsed.contains(name)) return error.InvalidInterfaceEvidence;
             }
         }
-        for (parsed) |name| _ = try self.interfaceAvailability(name);
+        for (parsed.items) |name| _ = try self.interfaceAvailability(name);
     }
 
     /// Return the interface delta stored for one table id.
@@ -458,10 +467,16 @@ pub const Manifest = struct {
     }
 };
 
+/// Measured requirement of one GDExtension interface.
+pub const Availability = enum {
+    required,
+    optional,
+};
+
 /// A measured optional gate and its classification.
 pub const InterfaceGate = struct {
     gate: Version,
-    required: bool,
+    availability: Availability,
 };
 
 /// Where one interface first appears in the measured window.
@@ -473,9 +488,16 @@ pub const InterfaceAvailability = struct {
 
 const required_interface_version: Version = .{ .major = 4, .minor = 1, .patch = 0 };
 
-const SinceTag = struct {
-    version: Version,
-    has_patch: bool,
+const SinceTag = union(enum) {
+    minor: Version,
+    patch: Version,
+
+    fn version(self: SinceTag) Version {
+        return switch (self) {
+            .minor => |value| value,
+            .patch => |value| value,
+        };
+    }
 };
 
 /// Parse a strict `major.minor` or `major.minor.patch` `@since` tag.
@@ -493,16 +515,14 @@ fn parseSinceTag(text: []const u8) !SinceTag {
         count += 1;
     }
     if (count < 2) return error.InvalidInterfaceSinceTag;
-    return .{
-        .version = .{ .major = parts[0], .minor = parts[1], .patch = parts[2] },
-        .has_patch = count == 3,
-    };
+    const version: Version = .{ .major = parts[0], .minor = parts[1], .patch = parts[2] };
+    return if (count == 3) .{ .patch = version } else .{ .minor = version };
 }
 
 /// Require non-empty measured interface names and canonicalize them.
-fn requireInterfaces(allocator: Allocator, names: []const []const u8) ![]const []const u8 {
+fn requireInterfaces(allocator: Allocator, names: []const []const u8) !interfaces.Names {
     if (names.len == 0) return error.UnresolvedInterfaceEvidence;
-    return interfaces.canonicalize(allocator, names);
+    return .init(allocator, names);
 }
 
 fn validateDigest(text: []const u8) !void {
@@ -515,12 +535,7 @@ fn validateDigest(text: []const u8) !void {
 }
 
 fn validateDelta(names: []const []const u8) !void {
-    for (names, 0..) |name, i| {
-        if (!interfaces.isValidName(name)) return error.InvalidInterfaceEvidence;
-        if (i > 0 and !std.mem.lessThan(u8, names[i - 1], name)) {
-            return error.InvalidInterfaceEvidence;
-        }
-    }
+    try (interfaces.Names{ .items = names }).validate();
 }
 
 /// Compare only the major and minor components of two versions.
@@ -843,20 +858,20 @@ test "interface digest mismatch and dangling delta names are named errors" {
     defer arena.deinit();
     const a = arena.allocator();
     const items = [_]records.Record{testing.fixtureRecord(101, &.{})};
-    const names = try interfaces.canonicalize(a, &.{ "alpha", "bravo", "charlie" });
-    const current = testing.fixtureSnapshotWith("4.7.2", &items, names);
+    const names = try interfaces.Names.init(a, &.{ "alpha", "bravo", "charlie" });
+    const current = testing.fixtureSnapshotWith("4.7.2", &items, names.items);
     const old = testing.fixtureSnapshotWith("4.6.0", &items, &.{ "alpha", "bravo", "charlie" });
     const manifest = try Manifest.merge(a, current, old, .overwrite, null);
 
-    try manifest.validateInterfaces(a, try interfaces.canonicalize(a, &.{ "charlie", "bravo", "alpha" }));
+    try manifest.validateInterfaces(a, (try interfaces.Names.init(a, &.{ "charlie", "bravo", "alpha" })).items);
     try std.testing.expectError(
         error.StaleCompatibilityInterfaces,
-        manifest.validateInterfaces(a, try interfaces.canonicalize(a, &.{ "alpha", "bravo" })),
+        manifest.validateInterfaces(a, (try interfaces.Names.init(a, &.{ "alpha", "bravo" })).items),
     );
 
     var dangling = manifest;
     dangling.interfaces = &.{.{ .id = "4.6.0", .missing = &.{"zulu"} }};
-    try std.testing.expectError(error.InvalidInterfaceEvidence, dangling.validateInterfaces(a, names));
+    try std.testing.expectError(error.InvalidInterfaceEvidence, dangling.validateInterfaces(a, names.items));
 }
 
 test "interface gates come from measured availability rather than the doc tag" {
@@ -919,13 +934,13 @@ test "since tags are cross-checked against the measured interval" {
 
     // Present in the oldest measured target: required only at exactly 4.1.
     const required = try two.resolveInterface("alpha", "4.1");
-    try std.testing.expect(required.required);
+    try std.testing.expectEqual(Availability.required, required.availability);
     try std.testing.expect(required.gate.eql(try Version.parseStrict("4.2.0")));
-    try std.testing.expect(!(try two.resolveInterface("alpha", "4.2")).required);
+    try std.testing.expectEqual(Availability.optional, (try two.resolveInterface("alpha", "4.2")).availability);
 
     // Absent from 4.2.0 and provided by 4.6.0: a 4.3 tag is inside the interval.
     const measured = try two.resolveInterface("bravo", "4.3");
-    try std.testing.expect(!measured.required);
+    try std.testing.expectEqual(Availability.optional, measured.availability);
     try std.testing.expect(measured.gate.eql(try Version.parseStrict("4.6.0")));
 
     try std.testing.expectError(
@@ -941,7 +956,7 @@ test "since tags are cross-checked against the measured interval" {
         error.InterfaceAvailabilityDisagreement,
         two.resolveInterface("bravo", "4.2.0"),
     );
-    try std.testing.expect(!(try two.resolveInterface("bravo", "4.2.5")).required);
+    try std.testing.expectEqual(Availability.optional, (try two.resolveInterface("bravo", "4.2.5")).availability);
 
     for ([_][]const u8{ "", "4", "4.x", "4.6.", "4.6.1.2" }) |tag| {
         try std.testing.expectError(error.InvalidInterfaceSinceTag, two.resolveInterface("bravo", tag));

@@ -12,24 +12,31 @@ const Generator = struct {
     current_header: Build.LazyPath,
     extracted: std.StringHashMapUnmanaged(Build.LazyPath) = .empty,
 
+    const Paths = struct {
+        api: Build.LazyPath,
+        header: Build.LazyPath,
+    };
+
+    /// Choose the vendored files or the resolved historical release files.
+    fn sourcePaths(self: *Generator, comptime owner: type, version: []const u8) ?Paths {
+        if (std.mem.eql(u8, version, cached.current.version)) {
+            return .{
+                .api = self.b.path("vendor/extension_api.json"),
+                .header = self.current_header,
+            };
+        }
+        const godot_versions = self.b.lazyImport(owner, "godot_versions") orelse return null;
+        const headers = godot_versions.headers(self.b, self.b.graph.host, .{ .version = version });
+        return .{
+            .api = headers.path(self.b, "extension_api.json"),
+            .header = headers.path(self.b, "gdextension_interface.h"),
+        };
+    }
+
     fn extract(self: *Generator, comptime owner: type, version: []const u8) ?Build.LazyPath {
         if (self.extracted.get(version)) |path| return path;
+        const paths = self.sourcePaths(owner, version) orelse return null;
         const b = self.b;
-        const paths: struct {
-            api: Build.LazyPath,
-            header: Build.LazyPath,
-        } =
-            if (std.mem.eql(u8, version, cached.current.version)) .{
-                .api = b.path("vendor/extension_api.json"),
-                .header = self.current_header,
-            } else blk: {
-                const godot_versions = b.lazyImport(owner, "godot_versions") orelse return null;
-                const headers = godot_versions.headers(b, b.graph.host, .{ .version = version });
-                break :blk .{
-                    .api = headers.path(b, "extension_api.json"),
-                    .header = headers.path(b, "gdextension_interface.h"),
-                };
-            };
         const run = b.addRunArtifact(self.extractor);
         run.addPrefixedFileArg("--api=", paths.api);
         run.addPrefixedFileArg("--gdextension-interface=", paths.header);
@@ -88,12 +95,12 @@ pub const Options = struct {
 };
 
 pub const Selection = struct {
-    minimum: ?Version,
     manifest: Build.LazyPath,
 };
 
 /// Register the metadata tooling and maintenance steps, then select the manifest.
-/// Returns null when an on-demand minimum needs the optional resolver package.
+/// Returns null when an on-demand minimum needs the optional `godot_versions`
+/// resolver package, which downloads the target release and dumps its headers.
 pub fn setup(b: *Build, comptime owner: type, options: Options) ?Selection {
     const casez = b.dependency("casez", .{});
     const common_mod = common.build(b, .{
@@ -109,10 +116,12 @@ pub fn setup(b: *Build, comptime owner: type, options: Options) ?Selection {
     });
     const extract_mod = toolModule(b, "pkg/tools/compat_extract/main.zig", common_mod, compat_mod);
     const merge_mod = toolModule(b, "pkg/tools/compat_metadata/main.zig", common_mod, compat_mod);
+    const audit_mod = toolModule(b, "pkg/tools/compat_audit/main.zig", common_mod, compat_mod);
     const test_step = b.step("test-compat-metadata", "Run optional extraction and merge host tests");
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = compat_mod })).step);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = extract_mod })).step);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = merge_mod })).step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = audit_mod })).step);
     var generator: Generator = .{
         .b = b,
         .current_header = options.header,
@@ -123,8 +132,19 @@ pub fn setup(b: *Build, comptime owner: type, options: Options) ?Selection {
     // Maintenance steps stay registered even when selection needs a lazy dependency.
     addMaintenance(b, owner, &generator);
 
+    // The audit reads external headers at runtime, so its argument is a raw path.
+    const audit = b.addExecutable(.{ .name = "gdzig-compat-audit", .root_module = audit_mod });
+    const audit_run = b.addRunArtifact(audit);
+    audit_run.addPrefixedFileArg("--manifest=", b.path("pkg/bindgen/generated/compatibility.zon"));
+    audit_run.addPrefixedFileArg("--current-header=", options.header);
+    if (b.option([]const u8, "engine-header", "Engine gdextension_interface.h to audit")) |path| {
+        audit_run.addArg(b.fmt("--engine-header={s}", .{path}));
+    }
+    const audit_step = b.step("compat-audit", "Audit an engine header against the compatibility evidence");
+    audit_step.dependOn(&audit_run.step);
+
     const cached_path = b.path("pkg/bindgen/generated/compatibility.zon");
-    const minimum = options.minimum orelse return .{ .minimum = null, .manifest = cached_path };
+    const minimum = options.minimum orelse return .{ .manifest = cached_path };
     const current_result: error{InvalidVersion}!Version = .parseStrict(cached.current.version);
     const current = current_result catch {
         @panic("invalid current version in vendored compatibility cache");
@@ -143,11 +163,11 @@ pub fn setup(b: *Build, comptime owner: type, options: Options) ?Selection {
             @panic("invalid target version in vendored compatibility cache");
         };
         if (minimum.eql(measured)) {
-            return .{ .minimum = minimum, .manifest = cached_path };
+            return .{ .manifest = cached_path };
         }
     }
 
-    // Only this uncached branch can request the optional resolver package.
+    // Only this uncached branch can request the optional godot_versions resolver.
     _ = b.lazyImport(owner, "godot_versions") orelse return null;
     const version = b.fmt("{d}.{d}.{d}", .{ minimum.major, minimum.minor, minimum.patch });
     const current_records = generator.extract(owner, cached.current.version) orelse return null;
@@ -165,7 +185,7 @@ pub fn setup(b: *Build, comptime owner: type, options: Options) ?Selection {
         report,
         b.fmt("compat/reports/{s}.json", .{version}),
     ).step);
-    return .{ .minimum = minimum, .manifest = candidate };
+    return .{ .manifest = candidate };
 }
 
 /// Register preview, update and check maintenance steps for the requested releases.

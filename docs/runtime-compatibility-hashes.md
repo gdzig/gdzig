@@ -90,22 +90,27 @@ mapping.
 
 The generated dispatch table treats the measured manifest, not the header's
 `@since` tag, as the source of optional interface availability. Audit an engine
-header against the vendored header with byte-wise ordering:
+header against the vendored evidence:
 
 ```sh
-names=$(mktemp -d)
-grep -o '@name [A-Za-z0-9_]*' vendor/gdextension_interface.h \
-  | sed 's/^@name //' | LC_ALL=C sort > "$names/vendored.txt"
-grep -o '@name [A-Za-z0-9_]*' "$engine/gdextension_interface.h" \
-  | sed 's/^@name //' | LC_ALL=C sort > "$names/engine.txt"
-LC_ALL=C comm -13 "$names/vendored.txt" "$names/engine.txt"  # engine-only names
-LC_ALL=C comm -23 "$names/vendored.txt" "$names/engine.txt"  # vendored-only names
-shasum -a 256 "$names/vendored.txt"                          # current_interfaces_sha256
+zig build compat-audit -Dengine-header=/path/to/engine/gdextension_interface.h
 ```
 
-`LC_ALL=C` is required. The default UTF-8 collation orders names differently and
-produces false set differences and a digest that does not match the manifest. The
-digest is the SHA-256 of the sorted names, one per line, terminated by a newline.
+The tool reads `pkg/bindgen/generated/compatibility.zon` and
+`vendor/gdextension_interface.h` by default. It checks that the vendored header's
+sorted `@name` set matches `current_interfaces_sha256` and that every measured
+delta name exists in that set. It then prints:
+
+- the manifest digest and the number of current and engine names;
+- `engine-only` names, present in the audited engine header but absent from the
+  vendored header;
+- `vendored-only` names, absent from the audited engine header, with each name's
+  measured `gate`, `last_absent` and `present_in_oldest` classification.
+
+The tool sorts names byte-wise internally, so no shell locale setting matters.
+Exit code 0 means the name sets match, 1 means they differ, and 2 means a usage,
+IO, ZON or validation error occurred. The audit is diagnostic and never rewrites
+the manifest.
 
 Each manifest table carries a `missing` delta for its release. A name in an
 older table's delta and in no newer table's delta was added within the measured

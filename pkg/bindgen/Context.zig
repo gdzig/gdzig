@@ -99,6 +99,8 @@ pub fn rawAllocator(self: *const Context) Allocator {
 }
 
 /// Return the required interface used to discover the running version.
+/// Returns error.MissingVersionInterface when the header has no
+/// `get_godot_version` interface.
 pub fn versionFunction(self: *const Context) !DispatchTable.Function {
     for (self.dispatch_table.functions.items) |function| {
         if (std.mem.eql(u8, function.api_name, "get_godot_version")) return function;
@@ -431,16 +433,20 @@ fn parseGdExtensionHeaders(self: *Context) !void {
     var header_names: ArrayList([]const u8) = .empty;
     for (parsed.items) |entry| try header_names.append(self.allocator(), entry.api_name);
     self.metadata.validateInterfaces(self.allocator(), header_names.items) catch |err| {
-        if (err == error.StaleCompatibilityInterfaces) {
-            logger.err(
+        switch (err) {
+            error.StaleCompatibilityInterfaces => logger.err(
                 "compatibility metadata does not match the vendored GDExtension header: run zig build update-compat-metadata -Dold=all",
                 .{},
-            );
+            ),
+            else => {},
         }
         return err;
     };
 
-    // Every interface gate comes from measured evidence, never from the doc tag.
+    // Every interface gate comes from measured evidence: the per-release `@name`
+    // sets in each target's gdextension_interface.h, reduced to this manifest's
+    // per-table `missing` deltas. The gate is the first measured release that
+    // provides the name; the header @since tag is only a consistency check.
     for (parsed.items) |entry| {
         const gate = self.metadata.resolveInterface(entry.api_name, entry.since_tag) catch |err| {
             switch (err) {
@@ -461,7 +467,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
             .api_name = entry.api_name,
             .ptr_type = entry.ptr_type,
             .gate = gate.gate,
-            .availability = if (gate.required) .required else .optional,
+            .availability = gate.availability,
         });
     }
 }

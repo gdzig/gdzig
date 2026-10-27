@@ -110,8 +110,10 @@ const std = @import("std");
 
 const compatibility_minimum = @import("common").compatibility_minimum;
 
-// `testing` is the public testing module in the generated root, so this
-// test-only fixture uses its own namespace.
+// The generated root exports `pub const testing`, so a file-scope `testing`
+// here would shadow the public test harness for the whole file. This namespace
+// holds the fake engine used by the dispatch-table test: it records which
+// interface names init requests for a given running version.
 const dispatch_testing = struct {
     /// Fake engine for the measured interface gate test. Every interface resolves
     /// to an inert stub, and only the version probe is ever called.

@@ -130,6 +130,8 @@ pub const Snapshot = struct {
             }
         }
 
+        const interface_names = try interfaces.Names.parse(allocator, header_bytes);
+
         // Record both raw and historical-normalized checksums in the extracted snapshot.
         return .{
             .version = version_text,
@@ -140,7 +142,7 @@ pub const Snapshot = struct {
             .classes_sha256 = try digest(allocator, try normalizeHistorical(allocator, bytes)),
             .records = try records.toOwnedSlice(allocator),
             .enums = try enums.toOwnedSlice(allocator),
-            .interfaces = try interfaces.parse(allocator, header_bytes),
+            .interfaces = interface_names.items,
         };
     }
 };

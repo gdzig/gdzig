@@ -6,12 +6,6 @@ functions: ArrayList(Function) = .empty,
 imports: Imports = .empty,
 typedefs: StringHashMap(void) = .empty,
 
-/// Measured requirement of one GDExtension interface.
-pub const Availability = enum {
-    required,
-    optional,
-};
-
 pub const Function = struct {
     /// Header documentation block for this interface.
     docs: ?[]const u8,
@@ -24,7 +18,7 @@ pub const Function = struct {
     /// First measured release that provides this interface.
     gate: Version,
     /// Measured requirement of this interface.
-    availability: Availability,
+    availability: manifest.Availability,
 };
 
 const std = @import("std");
@@ -32,6 +26,8 @@ const ArrayList = std.ArrayListUnmanaged;
 const StringHashMap = std.StringHashMapUnmanaged;
 
 const Version = @import("common").Version;
+
+const manifest = @import("compat").manifest;
 
 const Context = @import("../Context.zig");
 const Imports = Context.Imports;
