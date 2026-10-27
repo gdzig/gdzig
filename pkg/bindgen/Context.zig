@@ -438,7 +438,7 @@ fn parseGdExtensionHeaders(self: *Context) !void {
                 "compatibility metadata does not match the vendored GDExtension header: run zig build update-compat-metadata -Dold=all",
                 .{},
             ),
-            else => {},
+            else => return err,
         }
         return err;
     };
