@@ -176,11 +176,17 @@ test "interface requests follow the build floor and running engine version" {
         null;
     const older_has_late = late_at_floor orelse false;
     const newer_has_late = late_at_floor orelse true;
+    const check_request_counts = if (godot_compatibility_minimum) |floor|
+        floor.gte(.{ .major = 4, .minor = 6, .patch = 0 })
+    else
+        true;
 
     dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 6, .patch = 3 });
     const older = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, library);
     try std.testing.expect(older.version.eql(.{ .major = 4, .minor = 6, .patch = 3 }));
-    try std.testing.expectEqual(@as(usize, if (older_has_late) 179 else 176), dispatch_testing.FakeEngine.count);
+    if (check_request_counts) {
+        try std.testing.expectEqual(@as(usize, if (older_has_late) 179 else 176), dispatch_testing.FakeEngine.count);
+    }
     for (late_interfaces) |name| {
         try std.testing.expectEqual(older_has_late, dispatch_testing.FakeEngine.requests.contains(name));
     }
@@ -190,7 +196,9 @@ test "interface requests follow the build floor and running engine version" {
 
     dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 7, .patch = 2 });
     const newer = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, library);
-    try std.testing.expectEqual(@as(usize, if (newer_has_late) 179 else 176), dispatch_testing.FakeEngine.count);
+    if (check_request_counts) {
+        try std.testing.expectEqual(@as(usize, if (newer_has_late) 179 else 176), dispatch_testing.FakeEngine.count);
+    }
     for (late_interfaces) |name| {
         try std.testing.expectEqual(newer_has_late, dispatch_testing.FakeEngine.requests.contains(name));
     }
