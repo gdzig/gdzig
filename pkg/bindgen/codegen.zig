@@ -1894,11 +1894,11 @@ fn writeDispatchInit(
     try w.writeLine("");
     try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
     w.indent += 1;
-    try w.writeLine("return initWithVersion(getProcAddress, library, probeVersion(getProcAddress));");
+    try w.writeLine("return create(getProcAddress, library, probeVersion(getProcAddress));");
     w.indent -= 1;
     try w.writeLine("}");
     try w.writeLine("");
-    try w.writeLine("pub fn initWithVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {");
+    try w.writeLine("pub fn create(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {");
     w.indent += 1;
     try w.writeLine("");
     try w.writeLine("return .{");
@@ -2829,7 +2829,7 @@ test "dispatch emission gates optional interfaces on the measured version" {
     try std.testing.expect(std.mem.indexOf(
         u8,
         text,
-        "pub fn initWithVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {",
+        "pub fn create(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {",
     ) != null);
     try std.testing.expect(std.mem.indexOf(u8, text, ".getGodotVersion = probe.getGodotVersion,") != null);
     try std.testing.expect(std.mem.indexOf(

@@ -53,14 +53,17 @@ pub const api_version = &ApiVersion.value;
 /// This can be newer than `api_version` when a compatibility minimum is selected.
 pub var engine_version: Version = undefined;
 
-pub const VersionProbe = DispatchTable.VersionProbe;
+pub const InitParams = struct {
+    get_proc_address: Child(c.GDExtensionInterfaceGetProcAddress),
+    library: Child(c.GDExtensionClassLibraryPtr),
+};
 
-/// Query the running engine version once through the required 4.1 interface.
-pub const probeEngineVersion = DispatchTable.probeVersion;
+pub const InitError = error{
+    IncompatibleVersion,
+};
 
-/// Publish the discovered engine version, then reject an unmet floor before startup.
-/// Default builds also set the API version. Minimum builds retain their constant floor.
-pub fn initializeVersion(actual: Version) bool {
+/// Publish the discovered version and reject an unmet floor.
+pub fn applyVersion(actual: Version) InitError!void {
     engine_version = actual;
     if (!compatibility_minimum.accepts(actual, godot_compatibility_minimum)) {
         const minimum = godot_compatibility_minimum.?;
@@ -72,10 +75,16 @@ pub fn initializeVersion(actual: Version) bool {
             actual.minor,
             actual.patch,
         });
-        return false;
+        return error.IncompatibleVersion;
     }
     if (comptime godot_compatibility_minimum == null) api_version.* = actual;
-    return true;
+}
+
+/// Probe the running version, apply the floor, then create dispatch.
+pub fn init(params: InitParams) InitError!void {
+    const probe = DispatchTable.probeVersion(params.get_proc_address);
+    try applyVersion(probe.version);
+    raw = .create(params.get_proc_address, params.library, probe);
 }
 
 pub const CallError = error{
