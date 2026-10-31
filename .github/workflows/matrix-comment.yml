@@ -1,0 +1,44 @@
+name: PR matrix comment
+
+on:
+  workflow_run:
+    workflows: ["Integration Tests"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  comment:
+    name: PR matrix summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion != 'action_required'
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+    concurrency:
+      group: pr-matrix-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Upsert matrix summary comment
+        uses: actions/github-script@v9
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const run = require('./.github/scripts/pr-matrix-comment.js')
+            await run({ github, context, core })
