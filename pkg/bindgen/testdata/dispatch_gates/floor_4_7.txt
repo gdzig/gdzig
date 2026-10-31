@@ -1,0 +1,37 @@
+/// Running Godot version discovered before optional interface resolution.
+version: Version,
+getGodotVersion: Child(c.GDExtensionInterfaceGetGodotVersion),
+getGodotVersion2: c.GDExtensionInterfaceGetGodotVersion2,
+classdbConstructObject3: c.GDExtensionInterfaceClassdbConstructObject3,
+classdbRegisterExtensionClass6: c.GDExtensionInterfaceClassdbRegisterExtensionClass6,
+variantGetTypeByName: c.GDExtensionInterfaceVariantGetTypeByName,
+pub const VersionProbe = struct {
+    version: Version,
+    getGodotVersion: Child(c.GDExtensionInterfaceGetGodotVersion),
+};
+
+pub fn probeVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {
+    // get_godot_version is required by 4.1. get_godot_version2 may be optional,
+    // so interface selection uses get_godot_version first.
+    const get_godot_version: Child(c.GDExtensionInterfaceGetGodotVersion) = @ptrCast(getProcAddress("get_godot_version").?);
+    var version: Version = undefined;
+    get_godot_version(@ptrCast(&version));
+    return .{ .version = version, .getGodotVersion = get_godot_version };
+}
+
+pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {
+    return initWithVersion(getProcAddress, library, probeVersion(getProcAddress));
+}
+
+pub fn initWithVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {
+
+    return .{
+        .library = library,
+        .version = probe.version,
+        .getGodotVersion = probe.getGodotVersion,
+        .getGodotVersion2 = @ptrCast(getProcAddress("get_godot_version2").?),
+        .classdbConstructObject3 = @ptrCast(getProcAddress("classdb_construct_object3").?),
+        .classdbRegisterExtensionClass6 = @ptrCast(getProcAddress("classdb_register_extension_class6").?),
+        .variantGetTypeByName = @ptrCast(getProcAddress("variant_get_type_by_name").?),
+    };
+}
