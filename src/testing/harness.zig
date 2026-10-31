@@ -178,6 +178,20 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
     }
 }
 
+test "testing harness entrypoint consumes the version read during dispatch initialization" {
+    const fake_engine = @import("fake_engine.zig");
+    fake_engine.reset();
+
+    var initialization: gdzig.c.GDExtensionInitialization = undefined;
+    try std.testing.expectEqual(
+        @as(gdzig.c.GDExtensionBool, 1),
+        entrypoint(&fake_engine.getProcAddress, @ptrFromInt(1), &initialization),
+    );
+
+    try fake_engine.expectVersion(gdzig.engine_version);
+    try std.testing.expectEqual(@as(usize, 1), fake_engine.get_godot_version_calls);
+}
+
 const std = @import("std");
 const Io = std.Io;
 const File = Io.File;

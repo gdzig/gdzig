@@ -53,11 +53,10 @@ pub const api_version = &ApiVersion.value;
 /// This can be newer than `api_version` when a compatibility minimum is selected.
 pub var engine_version: Version = undefined;
 
-/// Query and publish the actual engine once, then reject an unmet floor before startup.
+/// Publish the discovered engine version, then reject an unmet floor before startup.
 /// Default builds also set the API version. Minimum builds retain their constant floor.
 pub fn initializeVersion() bool {
-    var actual: Version = undefined;
-    raw.getGodotVersion(@ptrCast(&actual));
+    const actual = raw.version;
     engine_version = actual;
     if (!compatibility_minimum.accepts(actual, godot_compatibility_minimum)) {
         const minimum = godot_compatibility_minimum.?;
