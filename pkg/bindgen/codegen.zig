@@ -2380,61 +2380,6 @@ pub const testing = struct {
         try writeBindingFixture(output, allocator, minimum, .reference, minimum, true, true);
     }
 
-    /// Emit only the dispatch gate surface for the version and late interfaces.
-    pub fn writeDispatchGateFixture(
-        output: *std.Io.Writer,
-        allocator: std.mem.Allocator,
-        minimum: ?common.Version,
-    ) !void {
-        const functions = [_]Context.DispatchTable.Function{
-            .{
-                .docs = null,
-                .name = "getGodotVersion",
-                .api_name = "get_godot_version",
-                .ptr_type = "GDExtensionInterfaceGetGodotVersion",
-                .gate = .{ .major = 4, .minor = 1, .patch = 0 },
-                .availability = .required,
-            },
-            .{
-                .docs = null,
-                .name = "getGodotVersion2",
-                .api_name = "get_godot_version2",
-                .ptr_type = "GDExtensionInterfaceGetGodotVersion2",
-                .gate = .{ .major = 4, .minor = 5, .patch = 0 },
-                .availability = .optional,
-            },
-            .{
-                .docs = null,
-                .name = "classdbConstructObject3",
-                .api_name = "classdb_construct_object3",
-                .ptr_type = "GDExtensionInterfaceClassdbConstructObject3",
-                .gate = .{ .major = 4, .minor = 7, .patch = 0 },
-                .availability = .optional,
-            },
-            .{
-                .docs = null,
-                .name = "classdbRegisterExtensionClass6",
-                .api_name = "classdb_register_extension_class6",
-                .ptr_type = "GDExtensionInterfaceClassdbRegisterExtensionClass6",
-                .gate = .{ .major = 4, .minor = 7, .patch = 0 },
-                .availability = .optional,
-            },
-            .{
-                .docs = null,
-                .name = "variantGetTypeByName",
-                .api_name = "variant_get_type_by_name",
-                .ptr_type = "GDExtensionInterfaceVariantGetTypeByName",
-                .gate = .{ .major = 4, .minor = 7, .patch = 0 },
-                .availability = .optional,
-            },
-        };
-        var context = Context.testing.contextWith(allocator, &functions);
-        defer context.dispatch_table.functions.deinit(allocator);
-        var writer: CodeWriter = .init(output);
-        try writeDispatchFields(&writer, &functions);
-        try writeDispatchInit(&writer, &functions, try context.versionFunction(), minimum);
-    }
-
     /// Extract the gate lines that the real-header integration test compares.
     pub fn extractDispatchGateLines(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
         var output: std.Io.Writer.Allocating = .init(allocator);
@@ -2976,36 +2921,6 @@ test "dispatch emission loads interfaces present at the selected minimum uncondi
     try std.testing.expect(std.mem.indexOf(u8, text, "get_godot_version2\") else null") == null);
     try std.testing.expect(std.mem.indexOf(u8, text, "mem_alloc2\") else null") == null);
     try std.testing.expect(std.mem.indexOf(u8, text, "version.gte") == null);
-}
-
-test "dispatch gate goldens match default and floor builds" {
-    const cases = [_]struct {
-        name: []const u8,
-        minimum: ?common.Version,
-        expected: []const u8,
-    }{
-        .{
-            .name = "default",
-            .minimum = null,
-            .expected = @embedFile("testdata/dispatch_gates/default.txt"),
-        },
-        .{
-            .name = "floor_4_6",
-            .minimum = .@"4.6",
-            .expected = @embedFile("testdata/dispatch_gates/floor_4_6.txt"),
-        },
-        .{
-            .name = "floor_4_7",
-            .minimum = .@"4.7",
-            .expected = @embedFile("testdata/dispatch_gates/floor_4_7.txt"),
-        },
-    };
-    for (cases) |case| {
-        var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
-        defer output.deinit();
-        try testing.writeDispatchGateFixture(&output.writer, std.testing.allocator, case.minimum);
-        try std.testing.expectEqualStrings(case.expected, output.written());
-    }
 }
 
 test "real header dispatch gate lines match goldens" {
