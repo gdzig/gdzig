@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
@@ -71,7 +71,7 @@ jobs:
           - {minimum: "4.7", godot: "4.7.2"}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
@@ -104,7 +104,7 @@ jobs:
         zig: ["0.17.0", master]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
@@ -133,7 +133,7 @@ jobs:
         zig: ["0.17.0", master]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
@@ -189,7 +189,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
@@ -222,20 +222,25 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     continue-on-error: true
     permissions:
+      # Checkout the report script.
       contents: read
+      # Read this run's job conclusions (listJobsForWorkflowRun).
       actions: read
+      # Create, update, and deduplicate the sticky comment.
       pull-requests: write
     concurrency:
       group: pr-matrix-comment-${{ github.event.pull_request.number }}
       cancel-in-progress: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Upsert matrix summary comment
         uses: actions/github-script@v9
         env:
-          # Mirrors `continue-on-error: ${{ matrix.zig == 'master' }}` on test-pr.
+          # The jobs API reports a tolerated cell as `failure` and does not
+          # expose continue-on-error. This names the Zig version that test-pr
+          # tolerates; keep it in sync with the `continue-on-error` line above.
           ALLOWED_FAILURE_ZIG: master
         with:
           script: |
