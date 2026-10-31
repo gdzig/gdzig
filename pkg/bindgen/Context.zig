@@ -857,6 +857,11 @@ pub const testing = struct {
         context.dispatch_table.functions.appendSlice(gpa, functions) catch @panic("OOM");
         return context;
     }
+
+    /// Populate dispatch entries from a configured GDExtension header.
+    pub fn parseDispatchHeader(context: *Context) !void {
+        try context.parseGdExtensionHeaders();
+    }
 };
 
 test "versionFunction requires the measured version interface" {

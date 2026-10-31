@@ -2435,6 +2435,24 @@ pub const testing = struct {
         try writeDispatchInit(&writer, &functions, try context.versionFunction(), minimum);
     }
 
+    /// Extract the gate lines that the real-header integration test compares.
+    pub fn extractDispatchGateLines(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+        var output: std.Io.Writer.Allocating = .init(allocator);
+        errdefer output.deinit();
+        var lines = std.mem.splitScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            const gate = std.mem.trim(u8, line, " \t");
+            if (std.mem.indexOf(u8, gate, ".getGodotVersion2 =") != null or
+                std.mem.indexOf(u8, gate, ".classdbConstructObject3 =") != null or
+                std.mem.indexOf(u8, gate, ".classdbRegisterExtensionClass6 =") != null or
+                std.mem.indexOf(u8, gate, ".variantGetTypeByName =") != null)
+            {
+                try output.writer.print("{s}\n", .{gate});
+            }
+        }
+        return output.toOwnedSlice();
+    }
+
     fn writeBindingFixture(
         output: *std.Io.Writer,
         allocator: std.mem.Allocator,
@@ -2990,6 +3008,69 @@ test "dispatch gate goldens match default and floor builds" {
     }
 }
 
+test "real header dispatch gate lines match goldens" {
+    const cases = [_]struct {
+        name: []const u8,
+        minimum: ?common.Version,
+        expected: []const u8,
+    }{
+        .{
+            .name = "default",
+            .minimum = null,
+            .expected = @embedFile("testdata/dispatch_gates/real_default.txt"),
+        },
+        .{
+            .name = "floor_4_6",
+            .minimum = .@"4.6",
+            .expected = @embedFile("testdata/dispatch_gates/real_floor_4_6.txt"),
+        },
+        .{
+            .name = "floor_4_7",
+            .minimum = .@"4.7",
+            .expected = @embedFile("testdata/dispatch_gates/real_floor_4_7.txt"),
+        },
+    };
+    for (cases) |case| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const io = std.testing.io;
+        var header = try std.Io.Dir.cwd().openFile(io, "vendor/gdextension_interface.h", .{});
+        defer header.close(io);
+        const config: Config = .{
+            .arch = .@"64",
+            .extension_api = undefined,
+            .gdextension_interface = header,
+            .input = tmp.dir,
+            .output = tmp.dir,
+            .precision = .float,
+            .verbosity = .quiet,
+            .io = io,
+            .metadata = compatibility.manifest,
+        };
+        var context: Context = .{
+            .arena = &arena,
+            .api = undefined,
+            .config = config,
+            .metadata = compatibility.manifest,
+            .compatibility_minimum = case.minimum,
+        };
+        try Context.testing.parseDispatchHeader(&context);
+        try writeDispatchTable(&context);
+        const bytes = try tmp.dir.readFileAlloc(
+            io,
+            "DispatchTable.zig",
+            std.testing.allocator,
+            .limited(1024 * 1024),
+        );
+        defer std.testing.allocator.free(bytes);
+        const actual = try testing.extractDispatchGateLines(std.testing.allocator, bytes);
+        defer std.testing.allocator.free(actual);
+        try std.testing.expectEqualStrings(case.expected, actual);
+    }
+}
+
 const std = @import("std");
 
 const casez = @import("casez");
@@ -2999,6 +3080,8 @@ const common = @import("common");
 const CodeWriter = @import("CodeWriter.zig");
 
 const compatibility = @import("compatibility.zig");
+
+const Config = @import("Config.zig");
 
 const Context = @import("Context.zig");
 
