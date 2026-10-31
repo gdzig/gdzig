@@ -3,14 +3,20 @@ name: Lint
 on:
   push:
     branches: [master]
-  pull_request:
+  # `pull_request_target` is used so fork pull requests are linted without the
+  # maintainer approval that `pull_request` requires. It runs the workflow from
+  # the trusted base branch, so a pull request cannot change what this job does.
+  # The pull request tree is checked out separately below and is only ever read
+  # by the linter, never executed.
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: lint-${{ github.ref }}
+  group: lint-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,15 +25,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
+      # Trusted checkout: supplies mise.toml, the toolchain, and the lint setup.
+      - name: Checkout base branch
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Untrusted checkout: lint input only. Nothing from this tree is built or
+      # run, which is why opting into a fork checkout is acceptable here.
+      - name: Checkout pull request code
+        if: github.event_name == 'pull_request_target'
+        uses: actions/checkout@v7
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/head
+          path: pr
+          persist-credentials: false
+          allow-unsafe-pr-checkout: true
 
       - name: Setup mise
         uses: jdx/mise-action@v2
         with:
           install: false
           cache: true
-          cache_save_post: true
+          # pull_request_target runs only have read access to the cache.
+          cache_save: ${{ github.event_name != 'pull_request_target' }}
 
       - name: Lint
-        run: mise exec -- gdzig-zlint .
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "pull_request_target" ]; then
+            # Resolve the toolchain from the trusted checkout, then lint the PR
+            # tree in its own directory so its zlint.json is used.
+            mise exec -- sh -c 'cd pr && gdzig-zlint .'
+          else
+            mise exec -- gdzig-zlint .
+          fi
