@@ -1901,8 +1901,13 @@ fn writeDispatchInit(
                 if (minimum) |floor| {
                     if (function.gate.gt(floor)) {
                         try w.printLine(".{s} = null,", .{function.name});
-                        continue;
+                    } else {
+                        try w.printLine(
+                            ".{s} = @ptrCast(getProcAddress(\"{s}\").?),",
+                            .{ function.name, function.api_name },
+                        );
                     }
+                    continue;
                 }
                 try w.printLine(
                     ".{s} = if (version.gte(.{{ .major = {d}, .minor = {d}, .patch = {d} }})) @ptrCast(getProcAddress(\"{s}\")) else null,",
@@ -2818,6 +2823,42 @@ test "dispatch emission omits interfaces absent at the selected minimum" {
     const text = output.written();
     try std.testing.expect(std.mem.indexOf(u8, text, "getProcAddress(\"variant_get_type_by_name\")") == null);
     try std.testing.expect(std.mem.indexOf(u8, text, ".variantGetTypeByName = null,") != null);
+}
+
+test "dispatch emission loads interfaces present at the selected minimum unconditionally" {
+    var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer output.deinit();
+    var w: CodeWriter = .init(&output.writer);
+    const functions = [_]Context.DispatchTable.Function{
+        .{
+            .docs = null,
+            .name = "getGodotVersion",
+            .api_name = "get_godot_version",
+            .ptr_type = "GDExtensionInterfaceGetGodotVersion",
+            .gate = .{ .major = 4, .minor = 1, .patch = 0 },
+            .availability = .required,
+        },
+        .{
+            .docs = null,
+            .name = "getGodotVersion2",
+            .api_name = "get_godot_version2",
+            .ptr_type = "GDExtensionInterfaceGetGodotVersion2",
+            .gate = .{ .major = 4, .minor = 5, .patch = 0 },
+            .availability = .optional,
+        },
+    };
+    var context = Context.testing.contextWith(std.testing.allocator, &functions);
+    defer context.dispatch_table.functions.deinit(std.testing.allocator);
+    try writeDispatchFields(&w, &functions);
+    try writeDispatchInit(&w, &functions, try context.versionFunction(), .@"4.6");
+
+    const text = output.written();
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        ".getGodotVersion2 = @ptrCast(getProcAddress(\"get_godot_version2\").?),",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "get_godot_version2\") else null") == null);
 }
 
 const std = @import("std");
