@@ -43,11 +43,11 @@ pub fn MethodConfig(comptime Class: type) type {
             const MethodType = @TypeOf(@field(Class, decl_name));
             const Args = @typeInfo(MethodType).@"fn".param_types;
             const ReturnType = @typeInfo(MethodType).@"fn".return_type orelse void;
-            const has_instance = Args.len > 0 and (Args[0] == *Class or Args[0] == *const Class);
-            const arg_offset: usize = if (has_instance) 1 else 0;
+            const receiver_kind: ReceiverKind = .fromParams(Class, Args);
+            const arg_offset: usize = if (receiver_kind == .instance) 1 else 0;
             const arg_count = Args.len - arg_offset;
             var flags = options.flags;
-            if (!has_instance) flags.method_flag_static = true;
+            flags.method_flag_static = receiver_kind == .none;
 
             const return_value: classdb.PropertyInfo = .{
                 .type = .forType(ReturnType),
@@ -75,7 +75,7 @@ pub fn MethodConfig(comptime Class: type) type {
 
                 fn call(instance: ?*Class, args: []const *const Variant) gdzig.CallError!Variant {
                     var call_args: std.meta.ArgsTuple(MethodType) = undefined;
-                    if (has_instance) call_args[0] = instance orelse return error.InstanceIsNull;
+                    if (receiver_kind == .instance) call_args[0] = instance orelse return error.InstanceIsNull;
 
                     var initialized_arg_count: usize = 0;
                     defer inline for (arg_offset..Args.len) |i| {
@@ -105,7 +105,7 @@ pub fn MethodConfig(comptime Class: type) type {
 
                 fn ptrCall(instance: ?*Class, args: ?[*]const *const anyopaque, ret: ?*anyopaque) void {
                     var call_args: std.meta.ArgsTuple(MethodType) = undefined;
-                    if (has_instance) call_args[0] = instance.?;
+                    if (receiver_kind == .instance) call_args[0] = instance.?;
                     inline for (arg_offset..Args.len) |i| {
                         const ArgType = Args[i].?;
                         call_args[i] = ptrToArg(ArgType, args.?[i - arg_offset]);
@@ -199,6 +199,21 @@ pub fn MethodConfig(comptime Class: type) type {
         }
     };
 }
+
+/// Whether a method declaration's first parameter carries the receiver.
+const ReceiverKind = enum {
+    /// Parameter 0 is `*Class` or `*const Class`.
+    instance,
+    /// No receiver. Dispatched with a null instance.
+    none,
+
+    fn fromParams(comptime Class: type, comptime params: []const ?type) ReceiverKind {
+        return if (params.len > 0 and (params[0] == *Class or params[0] == *const Class))
+            .instance
+        else
+            .none;
+    }
+};
 
 /// Decode one extension-method ptrcall argument. RefCounted values travel
 /// through Godot's Ref ABI, including extension classes and nullable Refs;
