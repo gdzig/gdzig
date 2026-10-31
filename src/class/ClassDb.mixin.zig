@@ -844,20 +844,22 @@ pub const MethodArgumentMetadata = enum(c_uint) {
     int_is_char32 = c.GDEXTENSION_METHOD_ARGUMENT_METADATA_INT_IS_CHAR32,
 };
 
+/// Callback type for Variant-based method calls on T, with optional Userdata support.
+/// Static calls may have a null instance; instance callbacks must reject null with InstanceIsNull.
 // @ref GDExtensionClassMethodCall
 // @since 4.1
 pub fn Call(comptime T: type, comptime Userdata: type) type {
     return if (Userdata != void)
-        fn (userdata: *Userdata, instance: *T, args: []const *const Variant) CallError!Variant
+        fn (userdata: *Userdata, instance: ?*T, args: []const *const Variant) CallError!Variant
     else
-        fn (instance: *T, args: []const *const Variant) CallError!Variant;
+        fn (instance: ?*T, args: []const *const Variant) CallError!Variant;
 }
 
 // @ref GDExtensionClassMethodCall
 fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T, Userdata)) Child(c.GDExtensionClassMethodCall) {
     return struct {
         fn wrapped(method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstVariantPtr, p_argument_count: c.GDExtensionInt, r_return: c.GDExtensionVariantPtr, r_error: [*c]c.GDExtensionCallError) callconv(.c) void {
-            const inst = @as(*T, @ptrCast(@alignCast(p_instance)));
+            const inst = @as(?*T, @ptrCast(@alignCast(p_instance)));
             const arg_count: usize = @intCast(p_argument_count);
             const args: []const *const Variant = if (arg_count > 0 and p_args != null)
                 @as([*]const *const Variant, @ptrCast(p_args))[0..arg_count]
@@ -882,26 +884,30 @@ fn wrapCall(comptime T: type, comptime Userdata: type, comptime callback: Call(T
     }.wrapped;
 }
 
+/// Callback type for ptrcalls on T, with optional Userdata support.
+/// Static calls may have a null instance; instance callbacks must unwrap the receiver.
+/// Argument storage may be null for zero-argument calls; callbacks requiring arguments must unwrap it.
 // @ref GDExtensionClassMethodPtrCall
 // @since 4.1
 pub fn PtrCall(comptime T: type, comptime Userdata: type) type {
     return if (Userdata != void)
-        fn (userdata: *Userdata, instance: *T, args: [*]const *const anyopaque, ret: ?*anyopaque) void
+        fn (userdata: *Userdata, instance: ?*T, args: ?[*]const *const anyopaque, ret: ?*anyopaque) void
     else
-        fn (instance: *T, args: [*]const *const anyopaque, ret: ?*anyopaque) void;
+        fn (instance: ?*T, args: ?[*]const *const anyopaque, ret: ?*anyopaque) void;
 }
 
 // @ref GDExtensionClassMethodPtrCall
 fn wrapPtrCall(comptime T: type, comptime Userdata: type, comptime callback: PtrCall(T, Userdata)) Child(c.GDExtensionClassMethodPtrCall) {
     return struct {
         fn wrapped(method_userdata: ?*anyopaque, p_instance: c.GDExtensionClassInstancePtr, p_args: [*c]const c.GDExtensionConstTypePtr, r_ret: c.GDExtensionTypePtr) callconv(.c) void {
-            const inst = @as(*T, @ptrCast(@alignCast(p_instance)));
+            const inst = @as(?*T, @ptrCast(@alignCast(p_instance)));
+            const args: ?[*]const *const anyopaque = @ptrCast(p_args);
 
             if (Userdata != void) {
                 const userdata = @as(*Userdata, @ptrCast(@alignCast(method_userdata)));
-                callback(userdata, inst, @ptrCast(p_args), @ptrCast(r_ret));
+                callback(userdata, inst, args, @ptrCast(r_ret));
             } else {
-                callback(inst, @ptrCast(p_args), @ptrCast(r_ret));
+                callback(inst, args, @ptrCast(r_ret));
             }
         }
     }.wrapped;
@@ -958,7 +964,7 @@ pub const CallResult = extern struct {
     /// extern structs.
     pub fn toCError(self: CallResult) c.GDExtensionCallError {
         return .{
-            .@"error" = @intFromEnum(self.@"error"),
+            .@"error" = @backingInt(self.@"error"),
             .argument = self.argument,
             .expected = self.expected,
         };
@@ -1248,7 +1254,7 @@ pub inline fn registerMethod(
             .method_flags = @bitCast(info.flags),
             .has_return_value = @intFromBool(info.return_value_info != null),
             .return_value_info = @ptrCast(info.return_value_info),
-            .return_value_metadata = @intFromEnum(info.return_value_metadata),
+            .return_value_metadata = @backingInt(info.return_value_metadata),
             .argument_count = @intCast(info.argument_info.len),
             .arguments_info = if (info.argument_info.len > 0) @ptrCast(@constCast(info.argument_info.ptr)) else null,
             .arguments_metadata = if (info.argument_metadata.len > 0) @ptrCast(@constCast(info.argument_metadata.ptr)) else null,
@@ -1360,7 +1366,7 @@ pub inline fn registerVirtualMethod(class_name: *const StringName, info: Virtual
             .name = @ptrCast(@constCast(info.name)),
             .method_flags = @bitCast(info.flags),
             .return_value = @bitCast(info.return_value),
-            .return_value_metadata = @intFromEnum(info.return_value_metadata),
+            .return_value_metadata = @backingInt(info.return_value_metadata),
             .argument_count = @intCast(info.arguments.len),
             .arguments = @ptrCast(@constCast(info.arguments.ptr)),
             .arguments_metadata = @ptrCast(@constCast(info.arguments_metadata.ptr)),
