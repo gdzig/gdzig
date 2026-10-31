@@ -16,8 +16,9 @@ fn entrypoint(
     library: gdzig.c.GDExtensionClassLibraryPtr,
     r_initialization: *gdzig.c.GDExtensionInitialization,
 ) callconv(.c) gdzig.c.GDExtensionBool {
-    gdzig.raw = .init(get_proc_address.?, library.?);
-    if (!gdzig.initializeVersion()) return 0;
+    const probe = gdzig.probeEngineVersion(get_proc_address.?);
+    if (!gdzig.initializeVersion(probe.version)) return 0;
+    gdzig.raw = .initWithVersion(get_proc_address.?, library.?, probe);
     extension.register(&registry);
 
     r_initialization.* = .{

@@ -1,19 +1,28 @@
 //! Isolated fake dispatch for the real entrypoints. Never used by engine tests.
-// SAFETY: The real entrypoint initializes isolated dispatch before publishing its version.
+// SAFETY: The real entrypoint publishes its version and checks the floor before dispatch initialization.
 pub var raw: Raw = undefined;
+
+pub const VersionProbe = struct {
+    version: Version,
+    getGodotVersion: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion),
+};
+
+/// Query the fixture engine version through the required 4.1 interface.
+pub fn probeEngineVersion(proc: std.meta.Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {
+    const query: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion) =
+        @ptrCast(proc("get_godot_version").?);
+    var actual: Version = undefined;
+    query(@ptrCast(&actual));
+    return .{ .version = actual, .getGodotVersion = query };
+}
 
 const Raw = struct {
     version: Version,
 
-    /// Initialize isolated dispatch while retaining the real version initializer.
-    pub fn init(proc: c.GDExtensionInterfaceGetProcAddress, _: *anyopaque) Raw {
-        const query: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion) =
-            @ptrCast(proc.?("get_godot_version").?);
-        var actual: Version = undefined;
-        query(@ptrCast(&actual));
-        // Only this field is read by the real initializeVersion implementation.
-        runtime.raw.version = actual;
-        return .{ .version = actual };
+    /// Initialize isolated dispatch after the entrypoint accepts the floor.
+    pub fn initWithVersion(_: c.GDExtensionInterfaceGetProcAddress, _: *anyopaque, probe: VersionProbe) Raw {
+        state.dispatch_initializations += 1;
+        return .{ .version = probe.version };
     }
 };
 

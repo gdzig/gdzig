@@ -1871,7 +1871,14 @@ fn writeDispatchInit(
     version: Context.DispatchTable.Function,
     minimum: ?common.Version,
 ) !void {
-    try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
+    try w.writeLine("pub const VersionProbe = struct {");
+    w.indent += 1;
+    try w.writeLine("version: Version,");
+    try w.printLine("getGodotVersion: Child(c.{s}),", .{version.ptr_type});
+    w.indent -= 1;
+    try w.writeLine("};");
+    try w.writeLine("");
+    try w.writeLine("pub fn probeVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {");
     w.indent += 1;
     try w.writeLine("// get_godot_version is required by 4.1. get_godot_version2 may be optional,");
     try w.writeLine("// so interface selection uses get_godot_version first.");
@@ -1881,15 +1888,27 @@ fn writeDispatchInit(
     );
     try w.writeLine("var version: Version = undefined;");
     try w.writeLine("get_godot_version(@ptrCast(&version));");
+    try w.writeLine("return .{ .version = version, .getGodotVersion = get_godot_version };");
+    w.indent -= 1;
+    try w.writeLine("}");
+    try w.writeLine("");
+    try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
+    w.indent += 1;
+    try w.writeLine("return initWithVersion(getProcAddress, library, probeVersion(getProcAddress));");
+    w.indent -= 1;
+    try w.writeLine("}");
+    try w.writeLine("");
+    try w.writeLine("pub fn initWithVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {");
+    w.indent += 1;
     try w.writeLine("");
     try w.writeLine("return .{");
     w.indent += 1;
     try w.writeLine(".library = library,");
-    try w.writeLine(".version = version,");
+    try w.writeLine(".version = probe.version,");
     for (functions) |function| {
         if (std.mem.eql(u8, function.api_name, version.api_name)) {
             // Reuse the probe pointer instead of requesting the interface twice.
-            try w.printLine(".{s} = get_godot_version,", .{function.name});
+            try w.printLine(".{s} = probe.getGodotVersion,", .{function.name});
             continue;
         }
         switch (function.availability) {
@@ -1910,7 +1929,7 @@ fn writeDispatchInit(
                     continue;
                 }
                 try w.printLine(
-                    ".{s} = if (version.gte(.{{ .major = {d}, .minor = {d}, .patch = {d} }})) @ptrCast(getProcAddress(\"{s}\")) else null,",
+                    ".{s} = if (probe.version.gte(.{{ .major = {d}, .minor = {d}, .patch = {d} }})) @ptrCast(getProcAddress(\"{s}\")) else null,",
                     .{
                         function.name,
                         function.gate.major,
@@ -2784,11 +2803,21 @@ test "dispatch emission gates optional interfaces on the measured version" {
         "const get_godot_version: Child(c.GDExtensionInterfaceGetGodotVersion) = @ptrCast(getProcAddress(\"get_godot_version\").?);",
     ) != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "get_godot_version(@ptrCast(&version));") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, ".getGodotVersion = get_godot_version,") != null);
     try std.testing.expect(std.mem.indexOf(
         u8,
         text,
-        ".variantGetTypeByName = if (version.gte(.{ .major = 4, .minor = 7, .patch = 0 })) @ptrCast(getProcAddress(\"variant_get_type_by_name\")) else null,",
+        "pub fn probeVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        "pub fn initWithVersion(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr), probe: VersionProbe) DispatchTable {",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, ".getGodotVersion = probe.getGodotVersion,") != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        ".variantGetTypeByName = if (probe.version.gte(.{ .major = 4, .minor = 7, .patch = 0 })) @ptrCast(getProcAddress(\"variant_get_type_by_name\")) else null,",
     ) != null);
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, text, "getProcAddress(\"get_godot_version\")"));
 }

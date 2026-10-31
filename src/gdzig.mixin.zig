@@ -53,10 +53,16 @@ pub const api_version = &ApiVersion.value;
 /// This can be newer than `api_version` when a compatibility minimum is selected.
 pub var engine_version: Version = undefined;
 
+pub const VersionProbe = DispatchTable.VersionProbe;
+
+/// Query the running engine version once through the required 4.1 interface.
+pub fn probeEngineVersion(get_proc_address: Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {
+    return DispatchTable.probeVersion(get_proc_address);
+}
+
 /// Publish the discovered engine version, then reject an unmet floor before startup.
 /// Default builds also set the API version. Minimum builds retain their constant floor.
-pub fn initializeVersion() bool {
-    const actual = raw.version;
+pub fn initializeVersion(actual: Version) bool {
     engine_version = actual;
     if (!compatibility_minimum.accepts(actual, godot_compatibility_minimum)) {
         const minimum = godot_compatibility_minimum.?;
@@ -106,6 +112,7 @@ test {
 }
 
 const std = @import("std");
+const Child = std.meta.Child;
 
 const compatibility_minimum = @import("common").compatibility_minimum;
 
@@ -162,7 +169,6 @@ const dispatch_testing = struct {
 };
 
 test "interface requests follow the build floor and running engine version" {
-    const Child = std.meta.Child;
     defer dispatch_testing.FakeEngine.deinit();
     const library: Child(c.GDExtensionClassLibraryPtr) = @ptrFromInt(0x1000);
     const late_interfaces = [_][]const u8{

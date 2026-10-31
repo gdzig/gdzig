@@ -71,7 +71,9 @@ a null field with no `getProcAddress` call. An optional interface present at the
 floor is requested unconditionally. The runtime `get_godot_version` probe remains
 only for the startup floor check and `gdzig.engine_version`. A 4.6 floor build
 therefore emits no lookups for the three 4.7-only interfaces, while a 4.7 floor
-build loads them.
+build loads them. The entrypoint probes the version and rejects an older engine
+before resolving any dispatch entry, so a 4.7 floor build on 4.6.3 reports the
+floor diagnostic without requesting 4.7 interfaces.
 
 Because the measured window starts at the oldest cached target, an optional
 interface that exists in the current header and in the oldest target is gated at

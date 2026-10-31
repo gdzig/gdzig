@@ -59,6 +59,7 @@ fn reset(actual: gdzig.Version) void {
     state.actual = actual;
     state.queries = 0;
     state.interface_lookups = 0;
+    state.dispatch_initializations = 0;
     state.registrations = 0;
     state.startups = 0;
 }
@@ -85,6 +86,7 @@ test "real normal entrypoint queries once and rejects before registration" {
         const rejected = if (minimum) |floor| actual.lt(floor) else false;
         try std.testing.expectEqual(@as(usize, 1), state.interface_lookups);
         try std.testing.expectEqual(@as(usize, 1), state.queries);
+        try std.testing.expectEqual(@as(usize, if (rejected) 0 else 1), state.dispatch_initializations);
         try std.testing.expect(actual.eql(gdzig.engine_version));
         try std.testing.expectEqual(@as(usize, if (rejected) 1 else 0), rejection_logs);
         try std.testing.expectEqual(@as(usize, if (rejected) 0 else 1), state.registrations);
@@ -109,6 +111,7 @@ test "real IPC entrypoint queries once and rejects before startup" {
         const rejected = if (minimum) |floor| actual.lt(floor) else false;
         try std.testing.expectEqual(@as(usize, 1), state.interface_lookups);
         try std.testing.expectEqual(@as(usize, 1), state.queries);
+        try std.testing.expectEqual(@as(usize, if (rejected) 0 else 1), state.dispatch_initializations);
         try std.testing.expect(actual.eql(gdzig.engine_version));
         try std.testing.expectEqual(@as(usize, if (rejected) 1 else 0), rejection_logs);
         try std.testing.expectEqual(@as(gdzig.c.GDExtensionBool, if (rejected) 0 else 1), result);
