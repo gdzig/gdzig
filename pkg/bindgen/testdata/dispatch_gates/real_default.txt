@@ -1,0 +1,4 @@
+.getGodotVersion2 = if (probe.version.gte(.{ .major = 4, .minor = 6, .patch = 0 })) @ptrCast(getProcAddress("get_godot_version2")) else null,
+.variantGetTypeByName = if (probe.version.gte(.{ .major = 4, .minor = 7, .patch = 0 })) @ptrCast(getProcAddress("variant_get_type_by_name")) else null,
+.classdbConstructObject3 = if (probe.version.gte(.{ .major = 4, .minor = 7, .patch = 0 })) @ptrCast(getProcAddress("classdb_construct_object3")) else null,
+.classdbRegisterExtensionClass6 = if (probe.version.gte(.{ .major = 4, .minor = 7, .patch = 0 })) @ptrCast(getProcAddress("classdb_register_extension_class6")) else null,

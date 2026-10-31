@@ -53,10 +53,17 @@ pub const api_version = &ApiVersion.value;
 /// This can be newer than `api_version` when a compatibility minimum is selected.
 pub var engine_version: Version = undefined;
 
-/// Publish the discovered engine version, then reject an unmet floor before startup.
-/// Default builds also set the API version. Minimum builds retain their constant floor.
-pub fn initializeVersion() bool {
-    const actual = raw.version;
+pub const InitParams = struct {
+    get_proc_address: Child(c.GDExtensionInterfaceGetProcAddress),
+    library: Child(c.GDExtensionClassLibraryPtr),
+};
+
+pub const InitError = error{
+    IncompatibleVersion,
+};
+
+/// Publish the discovered version and reject an unmet floor.
+pub fn applyVersion(actual: Version) InitError!void {
     engine_version = actual;
     if (!compatibility_minimum.accepts(actual, godot_compatibility_minimum)) {
         const minimum = godot_compatibility_minimum.?;
@@ -68,10 +75,16 @@ pub fn initializeVersion() bool {
             actual.minor,
             actual.patch,
         });
-        return false;
+        return error.IncompatibleVersion;
     }
     if (comptime godot_compatibility_minimum == null) api_version.* = actual;
-    return true;
+}
+
+/// Probe the running version, apply the floor, then create dispatch.
+pub fn init(params: InitParams) InitError!void {
+    const probe = DispatchTable.probeVersion(params.get_proc_address);
+    try applyVersion(probe.version);
+    raw = .create(params.get_proc_address, params.library, probe);
 }
 
 pub const CallError = error{
@@ -106,6 +119,7 @@ test {
 }
 
 const std = @import("std");
+const Child = std.meta.Child;
 
 const compatibility_minimum = @import("common").compatibility_minimum;
 
@@ -161,8 +175,7 @@ const dispatch_testing = struct {
     };
 };
 
-test "measured interface gates follow the running engine version" {
-    const Child = std.meta.Child;
+test "interface requests follow the build floor and running engine version" {
     defer dispatch_testing.FakeEngine.deinit();
     const library: Child(c.GDExtensionClassLibraryPtr) = @ptrFromInt(0x1000);
     const late_interfaces = [_][]const u8{
@@ -170,21 +183,39 @@ test "measured interface gates follow the running engine version" {
         "classdb_register_extension_class6",
         "variant_get_type_by_name",
     };
+    const late_at_floor: ?bool = if (godot_compatibility_minimum) |floor|
+        floor.gte(.{ .major = 4, .minor = 7, .patch = 0 })
+    else
+        null;
+    const older_has_late = late_at_floor orelse false;
+    const newer_has_late = late_at_floor orelse true;
+    const check_request_counts = if (godot_compatibility_minimum) |floor|
+        floor.gte(.{ .major = 4, .minor = 6, .patch = 0 })
+    else
+        true;
 
     dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 6, .patch = 3 });
     const older = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, library);
     try std.testing.expect(older.version.eql(.{ .major = 4, .minor = 6, .patch = 3 }));
-    try std.testing.expectEqual(@as(usize, 176), dispatch_testing.FakeEngine.count);
-    for (late_interfaces) |name| try std.testing.expect(!dispatch_testing.FakeEngine.requests.contains(name));
-    try std.testing.expect(older.classdbConstructObject3 == null);
-    try std.testing.expect(older.classdbRegisterExtensionClass6 == null);
-    try std.testing.expect(older.variantGetTypeByName == null);
+    if (check_request_counts) {
+        try std.testing.expectEqual(@as(usize, if (older_has_late) 179 else 176), dispatch_testing.FakeEngine.count);
+    }
+    for (late_interfaces) |name| {
+        try std.testing.expectEqual(older_has_late, dispatch_testing.FakeEngine.requests.contains(name));
+    }
+    try std.testing.expectEqual(older_has_late, older.classdbConstructObject3 != null);
+    try std.testing.expectEqual(older_has_late, older.classdbRegisterExtensionClass6 != null);
+    try std.testing.expectEqual(older_has_late, older.variantGetTypeByName != null);
 
     dispatch_testing.FakeEngine.reset(.{ .major = 4, .minor = 7, .patch = 2 });
     const newer = DispatchTable.init(&dispatch_testing.FakeEngine.getProcAddress, library);
-    try std.testing.expectEqual(@as(usize, 179), dispatch_testing.FakeEngine.count);
-    for (late_interfaces) |name| try std.testing.expect(dispatch_testing.FakeEngine.requests.contains(name));
-    try std.testing.expect(newer.classdbConstructObject3 != null);
-    try std.testing.expect(newer.classdbRegisterExtensionClass6 != null);
-    try std.testing.expect(newer.variantGetTypeByName != null);
+    if (check_request_counts) {
+        try std.testing.expectEqual(@as(usize, if (newer_has_late) 179 else 176), dispatch_testing.FakeEngine.count);
+    }
+    for (late_interfaces) |name| {
+        try std.testing.expectEqual(newer_has_late, dispatch_testing.FakeEngine.requests.contains(name));
+    }
+    try std.testing.expectEqual(newer_has_late, newer.classdbConstructObject3 != null);
+    try std.testing.expectEqual(newer_has_late, newer.classdbRegisterExtensionClass6 != null);
+    try std.testing.expectEqual(newer_has_late, newer.variantGetTypeByName != null);
 }

@@ -57,19 +57,30 @@ std.debug.print("Godot {d}.{d}.{d}\n", .{ actual.major, actual.minor, actual.pat
 
 Optional GDExtension interfaces are gated by measured availability, not by the
 header's `@since` tag. Each measured target records the interface names its own
-`gdextension_interface.h` lacks, as a per-table delta in the manifest. The
-generated dispatch table probes `get_godot_version` once at load time and requests
-an optional interface only when the running engine is at least the first measured
-release that provides it. The generated comparison is a full version check,
-including the patch component, so a future patch release can add an interface
-without widening an earlier gate.
+`gdextension_interface.h` lacks, as a per-table delta in the manifest.
+
+In a default build, the generated dispatch table probes `get_godot_version` once
+at load time and requests an optional interface only when the running engine is
+at least the first measured release that provides it. The generated comparison is
+a full version check, including the patch component, so a future patch release
+can add an interface without widening an earlier gate.
+
+In a build with a compatibility minimum, the floor is known at compile time, so
+the interface gates fold away. An optional interface absent at the floor becomes
+a null field with no `getProcAddress` call. An optional interface present at the
+floor is requested unconditionally. The runtime `get_godot_version` probe remains
+only for the startup floor check and `gdzig.engine_version`. A 4.6 floor build
+therefore emits no lookups for the three 4.7-only interfaces, while a 4.7 floor
+build loads them. The entrypoint probes the version and rejects an older engine
+before resolving any dispatch entry, so a 4.7 floor build on 4.6.3 reports the
+floor diagnostic without requesting 4.7 interfaces.
 
 Because the measured window starts at the oldest cached target, an optional
 interface that exists in the current header and in the oldest target is gated at
 that oldest target. In a default build, optional interfaces introduced in 4.2
 through 4.5 are therefore requested from 4.6.0 onward and not on 4.2 through 4.5
 engines. Selecting an older floor adds that release as a measured target and
-tightens those gates.
+tightens the interfaces available at the floor.
 
 Interfaces whose verified `@since` tag is 4.1 are present in every measured target
 and remain unconditional. They are loaded through `getProcAddress(...).?`, so a

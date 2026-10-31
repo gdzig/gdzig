@@ -2,6 +2,7 @@
 pub var actual: Version = .@"4.7";
 pub var queries: usize = 0;
 pub var interface_lookups: usize = 0;
+pub var dispatch_initializations: usize = 0;
 pub var registrations: usize = 0;
 pub var startups: usize = 0;
 

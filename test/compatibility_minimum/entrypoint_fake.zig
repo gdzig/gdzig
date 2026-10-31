@@ -1,19 +1,38 @@
 //! Isolated fake dispatch for the real entrypoints. Never used by engine tests.
-// SAFETY: The real entrypoint initializes isolated dispatch before publishing its version.
+// SAFETY: The real entrypoint publishes its version and checks the floor before dispatch initialization.
 pub var raw: Raw = undefined;
+
+const VersionProbe = struct {
+    version: Version,
+    getGodotVersion: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion),
+};
+
+fn probeVersion(proc: std.meta.Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {
+    const query: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion) =
+        @ptrCast(proc("get_godot_version").?);
+    var actual: Version = undefined;
+    query(@ptrCast(&actual));
+    return .{ .version = actual, .getGodotVersion = query };
+}
+
+/// Probe, reject an unmet floor, then create isolated dispatch.
+pub fn init(params: InitParams) InitError!void {
+    const probe = probeVersion(params.get_proc_address);
+    try runtime.applyVersion(probe.version);
+    raw = .create(params.get_proc_address, params.library, probe);
+}
 
 const Raw = struct {
     version: Version,
 
-    /// Initialize isolated dispatch while retaining the real version initializer.
-    pub fn init(proc: c.GDExtensionInterfaceGetProcAddress, _: *anyopaque) Raw {
-        const query: std.meta.Child(c.GDExtensionInterfaceGetGodotVersion) =
-            @ptrCast(proc.?("get_godot_version").?);
-        var actual: Version = undefined;
-        query(@ptrCast(&actual));
-        // Only this field is read by the real initializeVersion implementation.
-        runtime.raw.version = actual;
-        return .{ .version = actual };
+    /// Create isolated dispatch after the entrypoint accepts the floor.
+    fn create(
+        _: std.meta.Child(c.GDExtensionInterfaceGetProcAddress),
+        _: std.meta.Child(c.GDExtensionClassLibraryPtr),
+        probe: VersionProbe,
+    ) Raw {
+        state.dispatch_initializations += 1;
+        return .{ .version = probe.version };
     }
 };
 
@@ -63,8 +82,9 @@ pub const engine_allocator = std.testing.allocator;
 
 const runtime = @import("runtime");
 pub const c = runtime.c;
+pub const InitError = runtime.InitError;
+pub const InitParams = runtime.InitParams;
 pub const Version = runtime.Version;
-pub const initializeVersion = runtime.initializeVersion;
 pub const testing = runtime.testing;
 
 const state = @import("state");

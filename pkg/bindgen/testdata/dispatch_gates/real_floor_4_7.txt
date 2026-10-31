@@ -1,0 +1,4 @@
+.getGodotVersion2 = @ptrCast(getProcAddress("get_godot_version2").?),
+.variantGetTypeByName = @ptrCast(getProcAddress("variant_get_type_by_name").?),
+.classdbConstructObject3 = @ptrCast(getProcAddress("classdb_construct_object3").?),
+.classdbRegisterExtensionClass6 = @ptrCast(getProcAddress("classdb_register_extension_class6").?),

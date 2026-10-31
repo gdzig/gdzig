@@ -18,8 +18,10 @@ fn entrypoint(
     library: gdzig.c.GDExtensionClassLibraryPtr,
     r_initialization: *gdzig.c.GDExtensionInitialization,
 ) callconv(.c) gdzig.c.GDExtensionBool {
-    gdzig.raw = .init(get_proc_address.?, library.?);
-    if (!gdzig.initializeVersion()) return 0;
+    gdzig.init(.{
+        .get_proc_address = get_proc_address.?,
+        .library = library.?,
+    }) catch return 0;
 
     r_initialization.* = .{
         .minimum_initialization_level = @backingInt(options.minimum_initialization_level),

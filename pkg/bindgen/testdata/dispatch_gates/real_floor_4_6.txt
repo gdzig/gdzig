@@ -1,0 +1,4 @@
+.getGodotVersion2 = @ptrCast(getProcAddress("get_godot_version2").?),
+.variantGetTypeByName = null,
+.classdbConstructObject3 = null,
+.classdbRegisterExtensionClass6 = null,
