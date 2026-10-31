@@ -12,7 +12,7 @@
  * The comment is found again by its marker, updated in place, and duplicates
  * are deleted, so a pull request ends up with exactly one summary.
  *
- * The report job is non-blocking by design: expected write failures (a fork's
+ * The report job is informational by design: expected write failures (a fork's
  * read-only token returns 403) are downgraded to warnings. Only unexpected
  * errors are re-thrown.
  *
@@ -49,10 +49,8 @@ function parseCell(name) {
 }
 
 /** Human-readable result for one job conclusion. */
-function resultLabel(conclusion, allowed = false) {
-  if (FAILURE_CONCLUSIONS.has(conclusion)) {
-    return allowed ? '⚠️ failure (allowed)' : '❌ failure'
-  }
+function resultLabel(conclusion) {
+  if (FAILURE_CONCLUSIONS.has(conclusion)) return '❌ failure'
 
   if (CONCLUSION_LABELS[conclusion]) return CONCLUSION_LABELS[conclusion]
 
@@ -84,11 +82,10 @@ function compareCells(a, b) {
 }
 
 /**
- * Group cells by Zig version for rendering. Each group knows whether it is the
- * non-blocking (`continue-on-error`) one, and its cells are sorted by
+ * Group cells by Zig version for rendering, with each group's cells sorted by
  * OS, Godot, then target.
  */
-function groupByZig(cells, allowedFailureZig = defaultAllowedFailureZig()) {
+function groupByZig(cells) {
   const byZig = new Map()
   for (const cell of cells) {
     if (!byZig.has(cell.zig)) byZig.set(cell.zig, [])
@@ -99,13 +96,8 @@ function groupByZig(cells, allowedFailureZig = defaultAllowedFailureZig()) {
     .sort(([a], [b]) => compareZigVersions(a, b))
     .map(([zig, members]) => ({
       zig,
-      allowedFailure: zig === allowedFailureZig,
       cells: [...members].sort(compareCells),
     }))
-}
-
-function defaultAllowedFailureZig() {
-  return process.env.ALLOWED_FAILURE_ZIG || 'master'
 }
 
 /**
@@ -141,22 +133,19 @@ function escapeCell(value) {
 
 /** Render the complete comment body. */
 function renderComment(cells, options = {}) {
-  const allowedFailureZig = options.allowedFailureZig || defaultAllowedFailureZig()
-  const groups = groupByZig(cells, allowedFailureZig)
+  const groups = groupByZig(cells)
   const lines = [MARKER, '## Integration test matrix', '']
 
   for (const group of groups) {
     lines.push(
-      group.allowedFailure
-        ? `### Zig ${group.zig} (non-blocking)`
-        : `### Zig ${group.zig}`,
+      `### Zig ${group.zig}`,
       '',
       '| OS | Godot | Target | Result |',
       '| --- | --- | --- | --- |',
     )
 
     for (const cell of group.cells) {
-      const label = resultLabel(cell.conclusion, group.allowedFailure)
+      const label = resultLabel(cell.conclusion)
       const result = cell.url ? `[${label}](${cell.url})` : label
       lines.push(
         `| ${escapeCell(cell.os)} | ${escapeCell(cell.godot)} | ${escapeCell(cell.target)} | ${result} |`,
@@ -176,7 +165,7 @@ function renderComment(cells, options = {}) {
   if (runParts.length > 0) lines.push(runParts.join(' · '), '')
 
   lines.push(
-    `<sub>Updated automatically by the Integration Tests workflow. Only the \`test-pr\` matrix is summarised; see the run for the other jobs. Zig \`${allowedFailureZig}\` failures are non-blocking.</sub>`,
+    '<sub>Updated automatically by the Integration Tests workflow. Only the `test-pr` matrix is summarised; see the run for the other jobs.</sub>',
   )
 
   return `${lines.join('\n')}\n`
@@ -268,7 +257,6 @@ module.exports = async ({ github, context, core }) => {
   const serverUrl = context.serverUrl || 'https://github.com'
   const headSha = String((pullRequest.head && pullRequest.head.sha) || context.sha || '')
   const body = renderComment(cells, {
-    allowedFailureZig: process.env.ALLOWED_FAILURE_ZIG,
     runNumber: context.runNumber,
     runUrl: `${serverUrl}/${owner}/${repo}/actions/runs/${runId}`,
     commitSha: headSha.slice(0, 7),

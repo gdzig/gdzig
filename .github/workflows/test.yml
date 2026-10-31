@@ -237,11 +237,6 @@ jobs:
 
       - name: Upsert matrix summary comment
         uses: actions/github-script@v9
-        env:
-          # The jobs API reports a tolerated cell as `failure` and does not
-          # expose continue-on-error. This names the Zig version that test-pr
-          # tolerates; keep it in sync with the `continue-on-error` line above.
-          ALLOWED_FAILURE_ZIG: master
         with:
           script: |
             const run = require('./.github/scripts/pr-matrix-comment.js')
