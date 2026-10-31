@@ -34,6 +34,9 @@ fn parseEngineVersion(text: []const u8) !Version {
 
 /// Assert exact registration or rejection, independently of process exit code.
 pub fn checkOutput(output: []const u8, actual: Version, minimum: ?Version, harness: bool) !bool {
+    if (std.mem.indexOf(u8, output, "Attempt to get non-existent interface function") != null) {
+        return error.InterfaceResolutionFailed;
+    }
     const effective = minimum orelse actual;
     const rejected = if (minimum) |floor| actual.lt(floor) else false;
     var diagnostic_buffer: [256]u8 = undefined;
@@ -188,6 +191,17 @@ test "rejection needs exact diagnostic and no registration" {
         diagnostic ++ "GDZIG_COMPATIBILITY_MINIMUM_REGISTERED actual=4.6.3",
         actual,
         .@"4.7",
+        false,
+    ));
+}
+
+test "interface resolution errors fail an otherwise valid result" {
+    const marker = "GDZIG_COMPATIBILITY_MINIMUM_REGISTERED actual=4.7.2 effective=4.6.0\n";
+    const actual: Version = .{ .major = 4, .minor = 7, .patch = 2 };
+    try std.testing.expectError(error.InterfaceResolutionFailed, checkOutput(
+        marker ++ "ERROR: Attempt to get non-existent interface function: 'variant_get_type_by_name'.\n",
+        actual,
+        .@"4.6",
         false,
     ));
 }
