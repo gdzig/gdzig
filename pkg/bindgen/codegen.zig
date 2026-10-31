@@ -2846,6 +2846,14 @@ test "dispatch emission loads interfaces present at the selected minimum uncondi
             .gate = .{ .major = 4, .minor = 5, .patch = 0 },
             .availability = .optional,
         },
+        .{
+            .docs = null,
+            .name = "memAlloc2",
+            .api_name = "mem_alloc2",
+            .ptr_type = "GDExtensionInterfaceMemAlloc2",
+            .gate = .{ .major = 4, .minor = 6, .patch = 0 },
+            .availability = .optional,
+        },
     };
     var context = Context.testing.contextWith(std.testing.allocator, &functions);
     defer context.dispatch_table.functions.deinit(std.testing.allocator);
@@ -2858,7 +2866,14 @@ test "dispatch emission loads interfaces present at the selected minimum uncondi
         text,
         ".getGodotVersion2 = @ptrCast(getProcAddress(\"get_godot_version2\").?),",
     ) != null);
+    try std.testing.expect(std.mem.indexOf(
+        u8,
+        text,
+        ".memAlloc2 = @ptrCast(getProcAddress(\"mem_alloc2\").?),",
+    ) != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "get_godot_version2\") else null") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "mem_alloc2\") else null") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "version.gte") == null);
 }
 
 const std = @import("std");
