@@ -50,7 +50,10 @@ test "extension entrypoint consumes the version read during dispatch initializat
     FakeEngine.reset();
 
     var initialization: gdzig.c.GDExtensionInitialization = undefined;
-    try std.testing.expectEqual(@as(gdzig.c.GDExtensionBool, 1), entrypoint(&FakeEngine.getProcAddress, @ptrFromInt(1), &initialization));
+    try std.testing.expectEqual(
+        @as(gdzig.c.GDExtensionBool, 1),
+        entrypoint(&FakeEngine.getProcAddress, @ptrFromInt(1), &initialization),
+    );
 
     try FakeEngine.expectVersion(gdzig.engine_version);
     try std.testing.expectEqual(@as(usize, 1), FakeEngine.get_godot_version_calls);

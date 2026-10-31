@@ -224,26 +224,30 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .imports = &.{.{ .name = "gdzig", .module = gdzig_mod }},
         });
-        const tests_extension_entrypoint = b.addTest(.{ .root_module = b.createModule(.{
-            .root_source_file = b.path("src/extension/entrypoint.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "gdzig", .module = gdzig_mod },
-                .{ .name = "extension", .module = entrypoint_extension },
-                .{ .name = "options", .module = entrypoint_options.createModule() },
-                .{ .name = "fake_engine", .module = fake_engine },
-            },
-        }) });
-        const tests_harness_entrypoint = b.addTest(.{ .root_module = b.createModule(.{
-            .root_source_file = b.path("src/testing/harness.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "gdzig", .module = gdzig_mod },
-                .{ .name = "options", .module = entrypoint_options.createModule() },
-            },
-        }) });
+        const tests_extension_entrypoint = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/extension/entrypoint.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "gdzig", .module = gdzig_mod },
+                    .{ .name = "extension", .module = entrypoint_extension },
+                    .{ .name = "options", .module = entrypoint_options.createModule() },
+                    .{ .name = "fake_engine", .module = fake_engine },
+                },
+            }),
+        });
+        const tests_harness_entrypoint = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/testing/harness.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "gdzig", .module = gdzig_mod },
+                    .{ .name = "options", .module = entrypoint_options.createModule() },
+                },
+            }),
+        });
         const run_tests_extension_entrypoint = b.addRunArtifact(tests_extension_entrypoint);
         const run_tests_harness_entrypoint = b.addRunArtifact(tests_harness_entrypoint);
         const test_entrypoints_step = b.step("test-entrypoints", "Run extension entrypoint unit tests");
