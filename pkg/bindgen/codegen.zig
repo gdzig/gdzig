@@ -1848,9 +1848,6 @@ fn writeDispatchTable(ctx: *Context) !void {
     try file.sync(ctx.config.io);
 }
 
-/// Provisional gate emitter: the measured manifest decides optional interfaces.
-/// Reusing the entrypoint's version probe stays with the #276 refactor.
-///
 /// Emit one field per measured interface: required fields are non-nullable.
 fn writeDispatchFields(w: *CodeWriter, functions: []const Context.DispatchTable.Function) !void {
     try w.writeLine("/// Running Godot version discovered before optional interface resolution.");
@@ -1864,7 +1861,10 @@ fn writeDispatchFields(w: *CodeWriter, functions: []const Context.DispatchTable.
     }
 }
 
-/// Probe the running version once, then gate each optional interface on its gate.
+/// Probe the running version once, then resolve optional interfaces. A selected
+/// minimum folds interfaces absent at the floor to null and loads interfaces
+/// present at the floor unconditionally. Default builds gate on the running
+/// version.
 fn writeDispatchInit(
     w: *CodeWriter,
     functions: []const Context.DispatchTable.Function,
@@ -1873,8 +1873,8 @@ fn writeDispatchInit(
 ) !void {
     try w.writeLine("pub fn init(getProcAddress: Child(c.GDExtensionInterfaceGetProcAddress), library: Child(c.GDExtensionClassLibraryPtr)) DispatchTable {");
     w.indent += 1;
-    try w.writeLine("// get_godot_version is required by 4.1. get_godot_version2 is optional and");
-    try w.writeLine("// gated, so it cannot discover the version before gates resolve.");
+    try w.writeLine("// get_godot_version is required by 4.1. get_godot_version2 may be optional,");
+    try w.writeLine("// so interface selection uses get_godot_version first.");
     try w.printLine(
         "const get_godot_version: Child(c.{s}) = @ptrCast(getProcAddress(\"get_godot_version\").?);",
         .{version.ptr_type},
@@ -2771,12 +2771,12 @@ test "dispatch emission gates optional interfaces on the measured version" {
     try std.testing.expect(std.mem.indexOf(
         u8,
         text,
-        "// get_godot_version is required by 4.1. get_godot_version2 is optional and",
+        "// get_godot_version is required by 4.1. get_godot_version2 may be optional,",
     ) != null);
     try std.testing.expect(std.mem.indexOf(
         u8,
         text,
-        "// gated, so it cannot discover the version before gates resolve.",
+        "// so interface selection uses get_godot_version first.",
     ) != null);
     try std.testing.expect(std.mem.indexOf(
         u8,

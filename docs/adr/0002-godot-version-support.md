@@ -54,7 +54,10 @@ manifest, together with a digest of the vendored header's sorted `@name` entries
 Bindgen gates optional dispatch entries on the first measured release that
 provides the interface and treats the header `@since` tag only as a consistency
 claim, so a tag that contradicts the measured window fails the build instead of
-silently gating a binding.
+silently gating a binding. A selected minimum folds those interface gates at
+compile time: interfaces absent at the floor are not requested, and interfaces
+present at the floor load unconditionally. Default builds keep runtime gates
+based on the running engine.
 
 ## Alternatives rejected
 

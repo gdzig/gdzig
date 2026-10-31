@@ -30,8 +30,9 @@ See the [example](example/) folder for reference.
 
 ### Compile-time Godot compatibility minimum
 
-Default builds discover the running engine version. To fold version gates and
-method-bind selection at compile time, select a measured minimum:
+Default builds discover the running engine version. To fold version gates,
+interface lookups, and method-bind selection at compile time, select a measured
+minimum:
 
 ```sh
 zig build -Dgodot_compatibility_minimum=4.6
