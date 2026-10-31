@@ -56,9 +56,7 @@ pub var engine_version: Version = undefined;
 pub const VersionProbe = DispatchTable.VersionProbe;
 
 /// Query the running engine version once through the required 4.1 interface.
-pub fn probeEngineVersion(get_proc_address: Child(c.GDExtensionInterfaceGetProcAddress)) VersionProbe {
-    return DispatchTable.probeVersion(get_proc_address);
-}
+pub const probeEngineVersion = DispatchTable.probeVersion;
 
 /// Publish the discovered engine version, then reject an unmet floor before startup.
 /// Default builds also set the API version. Minimum builds retain their constant floor.
