@@ -1,6 +1,44 @@
+/// Per-type ClassDB registration data.
+///
+/// `Object.setInstance` and `class.downcast` only receive a type, so they
+/// cannot look up the Registry entry that owns the registration. Store the
+/// resolved name next to the type instead. One name applies per Zig type,
+/// matching the one-token-per-type instance binding.
+const TypeRegistration = struct {
+    class_name: StringName = .empty,
+    registered: bool = false,
+};
+
+/// Returns the mutable registration data for `T`.
+fn registration(comptime T: type) *TypeRegistration {
+    return &struct {
+        var value: TypeRegistration = .{};
+        comptime {
+            _ = T;
+        }
+    }.value;
+}
+
+/// Returns the ClassDB name for `T`.
+///
+/// Falls back to the name derived from the Zig type when `T` was not created
+/// through a Registry.
+pub fn className(comptime T: type) StringName {
+    const reg = registration(T);
+    if (reg.registered) return reg.class_name;
+    return .fromType(T);
+}
+
+/// Sets the ClassDB name for `T`. Called by the Registry before registration.
+pub fn setClassName(comptime T: type, name: StringName) void {
+    const reg = registration(T);
+    reg.class_name = name;
+    reg.registered = true;
+}
+
 pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
-    const class_name: StringName = .fromType(T);
-    const base_name: StringName = .fromType(class.BaseOf(T));
+    const class_name: StringName = className(T);
+    const base_name: StringName = className(class.BaseOf(T));
     const callbacks = comptime makeClassCallbacks(T);
     const Userdata = ClassUserdataOf(T);
 

@@ -70,7 +70,7 @@ pub fn removeModule(self: *Registry, comptime Module: type) void {
 /// Inheritors must be unregistered before their parents.
 pub fn removeClass(self: *Registry, comptime T: type) void {
     _ = self;
-    const class_name: StringName = .fromType(T);
+    const class_name: StringName = class.className(T);
     classdb.unregisterClass(&class_name);
 }
 
@@ -119,6 +119,12 @@ pub fn Class(comptime T: type) type {
         const Self = @This();
 
         pub const CreateOptions = struct {
+            /// ClassDB class name. Defaults to the name derived from the Zig type.
+            ///
+            /// Set this when the Zig type name is not a stable ClassDB name, such
+            /// as a type returned from a generic factory function. The string must
+            /// outlive the extension.
+            name: ?[:0]const u8 = null,
             /// Initialization level for this class.
             level: InitializationLevel = .scene,
             /// Class cannot be instantiated directly.
@@ -159,6 +165,10 @@ pub fn Class(comptime T: type) type {
         icon_path: ?*const String,
 
         pub fn init(registry: *Registry, userdata: class.ClassUserdataOf(T), options: CreateOptions) Self {
+            class.setClassName(T, if (options.name) |name|
+                .fromLatin1(name, true)
+            else
+                .fromType(T));
             return .{
                 .any = .{
                     .commit = @ptrCast(&commit),
@@ -387,7 +397,7 @@ pub fn Class(comptime T: type) type {
             }
 
             // 7. Register constants (enums, flags, standalone constants)
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class.className(T);
             for (self.constants.items) |constant| {
                 var enum_name: StringName = .fromLatin1(constant.enum_name, true);
                 var const_name: StringName = .fromLatin1(constant.name, true);
@@ -598,7 +608,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
                 .nil;
 
             // Register the property
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class.className(T);
             var property_name: StringName = .fromLatin1(name, true);
 
             var getter_name: StringName = if (self.resolved_getter) |g| .fromLatin1(g.name, true) else .empty;
@@ -727,7 +737,7 @@ pub fn Signal(comptime T: type, comptime S: type) type {
         }
 
         fn doRegister(_: *AnySignal) void {
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class.className(T);
             const signal_name: StringName = .fromSignal(S);
 
             const fields = meta.structFields(S);
@@ -793,7 +803,7 @@ pub fn Group(comptime T: type) type {
         }
 
         pub fn register(self: *const Self) void {
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class.className(T);
             const group_string: String = .fromLatin1(self.name);
             const empty_prefix: String = .empty;
 
@@ -858,7 +868,7 @@ pub fn Subgroup(comptime T: type) type {
         }
 
         pub fn register(self: *const Self) void {
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class.className(T);
             const subgroup_string: String = .fromLatin1(self.name);
             const empty_prefix: String = .empty;
 

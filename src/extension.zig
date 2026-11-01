@@ -20,5 +20,6 @@ const c = @import("gdextension");
 const class = @import("extension/class.zig");
 pub const DestroyInstanceBinding = class.DestroyInstanceBinding;
 pub const PropertyListInstanceBinding = class.PropertyListInstanceBinding;
+pub const className = class.className;
 
 pub const Registry = @import("extension/Registry.zig");
