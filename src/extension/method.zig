@@ -5,7 +5,7 @@
 /// godot.registerMethod(MyClass, .decl(.myMethod));
 /// ```
 pub fn registerMethod(comptime Class: type, comptime config: MethodConfig(Class)) void {
-    var class_name: StringName = .fromType(Class);
+    var class_name: StringName = gdzig.extension.className(Class);
     var method_name: StringName = .fromComptimeLatin1(config.name);
 
     classdb.registerMethod(Class, void, &class_name, .{

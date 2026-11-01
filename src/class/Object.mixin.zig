@@ -95,8 +95,9 @@ pub fn setInstance(self: *Self, comptime T: type, instance_: *T) void {
     comptime std.debug.assert(class.isStructClass(T));
 
     const token = comptime instance_binding.typeToken(T);
+    const class_name: StringName = gdzig.extension.className(T);
 
-    raw.objectSetInstance(@ptrCast(self), @ptrCast(&StringName.fromType(T)), @ptrCast(instance_));
+    raw.objectSetInstance(@ptrCast(self), @ptrCast(&class_name), @ptrCast(instance_));
     raw.objectSetInstanceBinding(@ptrCast(self), token, @ptrCast(instance_), &struct {
         const callbacks = c.GDExtensionInstanceBindingCallbacks{
             .create_callback = create_callback,
