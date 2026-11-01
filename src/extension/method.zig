@@ -14,6 +14,7 @@ const StringName = gdzig.builtin.StringName;
 const Variant = gdzig.builtin.Variant;
 
 const Registry = @import("Registry.zig");
+const class_mod = @import("class.zig");
 
 /// Registers a method on a class.
 ///
@@ -22,7 +23,7 @@ const Registry = @import("Registry.zig");
 /// godot.registerMethod(MyClass, .decl(.myMethod));
 /// ```
 pub fn registerMethod(comptime Class: type, comptime config: MethodConfig(Class)) void {
-    var class_name: StringName = .fromType(Class);
+    var class_name: StringName = class_mod.getClassName(Class);
     var method_name: StringName = .fromComptimeLatin1(config.name);
 
     classdb.registerMethod(Class, void, &class_name, .{

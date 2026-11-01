@@ -70,7 +70,7 @@ pub fn removeModule(self: *Registry, comptime Module: type) void {
 /// Inheritors must be unregistered before their parents.
 pub fn removeClass(self: *Registry, comptime T: type) void {
     _ = self;
-    const class_name: StringName = .fromType(T);
+    const class_name: StringName = class_mod.getClassName(T);
     classdb.unregisterClass(&class_name);
 }
 
@@ -387,7 +387,7 @@ pub fn Class(comptime T: type) type {
             }
 
             // 7. Register constants (enums, flags, standalone constants)
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class_mod.getClassName(T);
             for (self.constants.items) |constant| {
                 var enum_name: StringName = .fromLatin1(constant.enum_name, true);
                 var const_name: StringName = .fromLatin1(constant.name, true);
@@ -598,7 +598,7 @@ pub fn Property(comptime T: type, comptime name: [:0]const u8) type {
                 .nil;
 
             // Register the property
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class_mod.getClassName(T);
             var property_name: StringName = .fromLatin1(name, true);
 
             var getter_name: StringName = if (self.resolved_getter) |g| .fromLatin1(g.name, true) else .empty;
@@ -727,7 +727,7 @@ pub fn Signal(comptime T: type, comptime S: type) type {
         }
 
         fn doRegister(_: *AnySignal) void {
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class_mod.getClassName(T);
             const signal_name: StringName = .fromSignal(S);
 
             const fields = meta.structFields(S);
@@ -793,7 +793,7 @@ pub fn Group(comptime T: type) type {
         }
 
         pub fn register(self: *const Self) void {
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class_mod.getClassName(T);
             const group_string: String = .fromLatin1(self.name);
             const empty_prefix: String = .empty;
 
@@ -858,7 +858,7 @@ pub fn Subgroup(comptime T: type) type {
         }
 
         pub fn register(self: *const Self) void {
-            const class_name: StringName = .fromType(T);
+            const class_name: StringName = class_mod.getClassName(T);
             const subgroup_string: String = .fromLatin1(self.name);
             const empty_prefix: String = .empty;
 

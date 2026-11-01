@@ -76,7 +76,7 @@ pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
     else
         value;
     const object: *Object = .upcast(source);
-    const name: StringName = .fromType(Target);
+    const name: StringName = extension_class_mod.getClassName(Target);
     const tag = raw.classdbGetClassTag(@ptrCast(&name));
     const result = raw.objectCastTo(object.ptr(), tag) orelse return null;
 
@@ -90,6 +90,7 @@ pub fn downcast(comptime T: type, value: anytype) ?*std.meta.Child(T) {
 
 const std = @import("std");
 const gdzig = @import("gdzig");
+const extension_class_mod = @import("extension/class.zig");
 const raw = &gdzig.raw;
 const StringName = gdzig.builtin.StringName;
 

@@ -1,5 +1,9 @@
+pub fn getClassName(comptime T: type) StringName {
+    return if (@hasDecl(T, "name")) .fromComptimeLatin1(T.name) else .fromType(T);
+}
+
 pub fn registerClass(comptime T: type, info: ClassInfo4(ClassUserdataOf(T))) void {
-    const class_name: StringName = .fromType(T);
+    const class_name: StringName = getClassName(T);
     const base_name: StringName = .fromType(class.BaseOf(T));
     const callbacks = comptime makeClassCallbacks(T);
     const Userdata = ClassUserdataOf(T);
