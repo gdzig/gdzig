@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         godot: ["4.6.3", "4.7.2"]
-        zig: ["0.17.0", master]
+        zig: ["0.17.1", master]
         target: [native, wasm]
         exclude:
           # wasm is build-only, so one runtime version is sufficient.
@@ -64,7 +64,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        zig: ["0.17.0", master]
+        zig: ["0.17.1", master]
         pair:
           - {minimum: "4.6", godot: "4.6.3"}
           - {minimum: "4.6", godot: "4.7.2"}
@@ -101,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        zig: ["0.17.0", master]
+        zig: ["0.17.1", master]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -130,7 +130,7 @@ jobs:
       fail-fast: false
       matrix:
         minimum: ["4.6", "4.7"]
-        zig: ["0.17.0", master]
+        zig: ["0.17.1", master]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -163,7 +163,7 @@ jobs:
         # Compatibility target on Linux and macOS
         os: [ubuntu-latest]
         godot: ["4.6.3", "4.7.2"]
-        zig: ["0.17.0", master]
+        zig: ["0.17.1", master]
         target: [native, wasm]
         exclude:
           # wasm is build-only, so one runtime version is sufficient.
@@ -172,7 +172,7 @@ jobs:
         include:
           - os: macos-latest
             godot: "4.6.3"
-            zig: "0.17.0"
+            zig: "0.17.1"
             target: native
           - os: macos-latest
             godot: "4.6.3"
@@ -180,7 +180,7 @@ jobs:
             target: native
           - os: macos-latest
             godot: "4.7.2"
-            zig: "0.17.0"
+            zig: "0.17.1"
             target: native
           - os: macos-latest
             godot: "4.7.2"

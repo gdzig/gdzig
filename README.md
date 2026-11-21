@@ -9,7 +9,7 @@ expected until a stable version is released. Issue reports, feature requests, an
 
 ## Prerequisites
 
-1. Zig 0.17.0
+1. Zig 0.17.1
 2. Godot 4.7.2
 
 **Note:** gdzig currently targets these exact Zig and Godot releases.

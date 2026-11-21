@@ -2,8 +2,8 @@
 godot = "4.7.2-stable"
 pre-commit = "latest"
 usage = "latest"
-zig = "0.17.0"
-zls = "0.16.0"
+zig = "0.17.1"
+zls = "0.17.0"
 "github:gdzig/gdzig-zlint" = "0.6.1"
 
 [tool_alias]
