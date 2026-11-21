@@ -57,6 +57,7 @@ pub fn addExtension(b: *Build, options: ExtensionOptions) ?*Extension {
         .root_source_file = dep.path("src/extension/entrypoint.zig"),
         .target = options.target,
         .optimize = options.optimize,
+        .single_threaded = options.root_module.single_threaded,
         .imports = &.{
             .{ .name = "gdzig", .module = dep.module("gdzig") },
             .{ .name = "extension", .module = options.root_module },
