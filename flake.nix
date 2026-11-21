@@ -2,7 +2,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     zig.url = "github:silversquirl/zig-flake/compat";
-    zls.url = "github:zigtools/zls?ref=0.16.0";
+    zls.url = "github:zigtools/zls?ref=0.17.0";
 
     zig.inputs.nixpkgs.follows = "nixpkgs";
     zls.inputs.nixpkgs.follows = "nixpkgs";
@@ -25,7 +25,7 @@
           default = pkgs.mkShell {
             buildInputs = [
               pkgs.lldb
-              zig.packages.${system}."0.17.0"
+              zig.packages.${system}."0.17.1"
               zls.packages.${system}.zls
             ]
             ++ pkgs.lib.optionals (system == "x86_64-linux") [
